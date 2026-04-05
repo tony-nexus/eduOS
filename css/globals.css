@@ -62,6 +62,9 @@
   --nav-border: rgba(255,255,255,0.07);
   --nav-shadow: 0 10px 30px rgba(0,0,0,0.5);
 
+  /* Input sólido — select/option precisam de fundo opaco (browsers ignoram rgba) */
+  --bg-input-solid: #1e1e1e;
+
   --sidebar-width: 240px;
   --topbar-height: 56px;
   --transition: 200ms cubic-bezier(0.4,0,0.2,1);
@@ -118,6 +121,8 @@
   --nav-bg:     #ffffff;
   --nav-border: #e2e4e8;
   --nav-shadow: 0 10px 30px rgba(0,0,0,0.08);
+
+  --bg-input-solid: #f9fafb;
 }
 
 /* ── NEON GLASS (Terminal / Brutalista) ──────────────────── */
@@ -171,6 +176,8 @@
   --nav-bg:     rgba(15,15,15,0.65);
   --nav-border: rgba(255,255,255,0.08);
   --nav-shadow: 0 10px 30px rgba(0,0,0,0.6);
+
+  --bg-input-solid: #0f0f0f;
 }
 
 /* ── OCEAN GLASS (Premium, Arredondado) ──────────────────── */
@@ -227,6 +234,8 @@
   --nav-bg:     rgba(6,18,28,0.7);
   --nav-border: rgba(255,255,255,0.15);
   --nav-shadow: 0 10px 40px rgba(0,0,0,0.5), inset 0 1.5px 0 rgba(255,255,255,0.18);
+
+  --bg-input-solid: #081422;
 }
 
 /* ===== NOISE OVERLAY =====

@@ -47,13 +47,14 @@ function registerEventListeners() {
   // ── Logout ────────────────────────────────────────────────────────────────
   document.getElementById('user-chip-logout')?.addEventListener('click', () => logout());
 
-  // ── Navegação sidebar ─────────────────────────────────────────────────────
+  // ── Navegação sidebar + sheet + bottom nav ────────────────────────────────
   document.querySelectorAll('.nav-item[data-page]').forEach(item => {
     item.addEventListener('click', () => {
       navigate(item.dataset.page);
-      // Fecha drawer mobile após navegar
+      // Fecha drawer mobile e bottom sheet após navegar
       document.getElementById('sidebar')?.classList.remove('open');
       document.getElementById('sidebar-overlay')?.classList.remove('open');
+      _closeSheet();
     });
   });
 
@@ -69,6 +70,18 @@ function registerEventListeners() {
     document.getElementById('sidebar-overlay')?.classList.remove('open');
   });
 
+  // ── Botão "Mais" abre bottom sheet ────────────────────────────────────────
+  document.getElementById('mbn-more-btn')?.addEventListener('click', () => {
+    const isOpen = document.getElementById('mobile-sheet')?.classList.contains('open');
+    isOpen ? _closeSheet() : _openSheet();
+  });
+
+  // ── Overlay fecha bottom sheet ────────────────────────────────────────────
+  document.getElementById('sheet-overlay')?.addEventListener('click', () => _closeSheet());
+
+  // ── Logout no bottom sheet ────────────────────────────────────────────────
+  document.getElementById('sheet-logout-btn')?.addEventListener('click', () => logout());
+
   // ── Modal backdrop ────────────────────────────────────────────────────────
   document.getElementById('modal-backdrop')?.addEventListener('click', e => {
     if (e.target === document.getElementById('modal-backdrop')) closeModal();
@@ -83,6 +96,19 @@ function registerEventListeners() {
 
   // ── Toggle de tema ────────────────────────────────────────────────────────
   document.getElementById('theme-toggle')?.addEventListener('click', () => toggleTheme());
+}
+
+// ── Bottom sheet helpers ──────────────────────────────────────────────────────
+function _openSheet() {
+  document.getElementById('mobile-sheet')?.classList.add('open');
+  document.getElementById('sheet-overlay')?.classList.add('open');
+  document.getElementById('mbn-more-btn')?.classList.add('active');
+}
+
+function _closeSheet() {
+  document.getElementById('mobile-sheet')?.classList.remove('open');
+  document.getElementById('sheet-overlay')?.classList.remove('open');
+  document.getElementById('mbn-more-btn')?.classList.remove('active');
 }
 
 bootstrap();

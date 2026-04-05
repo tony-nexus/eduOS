@@ -388,11 +388,11 @@ async function abrirModalExclusao(aluno) {
       Nenhum registro vinculado encontrado. A exclusão remove apenas o cadastro do aluno.
     </p>`;
 
-  // Bloco de confirmação por documento
-  const confirmHTML = doc ? `
+  // Bloco de confirmação pelo nome do aluno
+  const confirmHTML = `
     <div class="danger-confirm-wrap">
-      <label>Para confirmar, digite o <strong>${doc.label}</strong> do aluno abaixo:</label>
-      <code class="danger-confirm-code">${esc(doc.value)}</code>
+      <label>Para confirmar, digite o <strong>nome</strong> do aluno abaixo:</label>
+      <code class="danger-confirm-code">${esc(aluno.nome)}</code>
       <input
         id="danger-confirm-input"
         class="danger-confirm-input"
@@ -400,16 +400,10 @@ async function abrirModalExclusao(aluno) {
         autocomplete="off"
         autocorrect="off"
         spellcheck="false"
-        placeholder="Digite o ${doc.label} para confirmar...">
-    </div>` : `
-    <div class="danger-confirm-wrap">
-      <label>Para confirmar, digite o <strong>nome</strong> do aluno abaixo:</label>
-      <code class="danger-confirm-code">${esc(aluno.nome)}</code>
-      <input id="danger-confirm-input" class="danger-confirm-input" type="text"
-        autocomplete="off" placeholder="Digite o nome para confirmar...">
+        placeholder="Digite o nome para confirmar...">
     </div>`;
 
-  const expectedValue = doc ? doc.value : aluno.nome;
+  const expectedValue = aluno.nome;
 
   openModal('Excluir aluno permanentemente', `
     <div class="danger-banner">

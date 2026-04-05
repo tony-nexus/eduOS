@@ -145,6 +145,14 @@ function showApp() {
     document.getElementById('user-name-sidebar').textContent   = currentUser.name;
     document.getElementById('user-role-sidebar').textContent   = currentUser.role;
 
+    // Popula info do usuário no bottom sheet mobile
+    const sheetAvatar = document.getElementById('sheet-user-avatar');
+    const sheetName   = document.getElementById('sheet-user-name');
+    const sheetRole   = document.getElementById('sheet-user-role');
+    if (sheetAvatar) sheetAvatar.textContent = currentUser.initials;
+    if (sheetName)   sheetName.textContent   = currentUser.name;
+    if (sheetRole)   sheetRole.textContent   = currentUser.role;
+
     // [FIX CRÍTICO] Filtra nav items pelo perfil
     showNavForPerfil(currentUser.perfil ?? currentUser.role ?? '');
   }

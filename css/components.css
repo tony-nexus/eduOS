@@ -121,12 +121,16 @@
 .search-input::placeholder { color: var(--text-tertiary); }
 
 .select-input {
-  background: var(--bg-elevated); border: 1px solid var(--border-default);
+  background: var(--bg-input-solid); border: 1px solid var(--border-default);
   border-radius: var(--radius-sm); padding: 8px 12px;
   font-family: var(--font-mono); font-size: 12px; color: var(--text-primary);
   outline: none; cursor: pointer; transition: var(--transition);
 }
 .select-input:focus { border-color: var(--accent); }
+.select-input option {
+  background: var(--bg-input-solid);
+  color: var(--text-primary);
+}
 
 table { width: 100%; border-collapse: collapse; }
 thead th {
@@ -225,6 +229,9 @@ tbody td { padding: 12px 16px; font-size: 13px; color: var(--text-primary); }
   font-family: var(--font-sans); font-size: 13px; color: var(--text-primary);
   outline: none; transition: var(--transition); line-height: 1.4;
 }
+/* select/option: browsers ignoram rgba — precisa de fundo sólido */
+.form-group select { background: var(--bg-input-solid); }
+.form-group select option { background: var(--bg-input-solid); color: var(--text-primary); }
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
