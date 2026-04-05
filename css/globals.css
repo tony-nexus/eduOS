@@ -166,7 +166,7 @@
 
   --card-blur:    blur(24px) saturate(120%);
   --card-shadow:  0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
-  --noise-opacity: 0.12;
+  --noise-opacity: 0.35;
 
   --nav-bg:     rgba(15,15,15,0.65);
   --nav-border: rgba(255,255,255,0.08);
@@ -222,20 +222,29 @@
 
   --card-blur:    blur(36px) saturate(190%) brightness(1.04);
   --card-shadow:  0 15px 35px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
-  --noise-opacity: 0.04;
+  --noise-opacity: 0.12;
 
   --nav-bg:     rgba(6,18,28,0.7);
   --nav-border: rgba(255,255,255,0.15);
   --nav-shadow: 0 10px 40px rgba(0,0,0,0.5), inset 0 1.5px 0 rgba(255,255,255,0.18);
 }
 
-/* ===== NOISE OVERLAY ===== */
+/* ===== NOISE OVERLAY =====
+   type="turbulence" → grão nítido e contrastado (vs fractalNoise que é suave)
+   baseFrequency="0.65" → granulação média, visível e definida
+   numOctaves="4" → múltiplas camadas de detalhe
+   animate seed → grain cinematográfico vivo (troca padrão 12×/s)
+   mix-blend-mode: overlay → integra com o fundo sem cobrir
+   background-size: 250px → tile consistente, sem distorção
+   ================================================================ */
 .noise-overlay {
   position: fixed; top: 0; left: 0; right: 0; bottom: 0;
   pointer-events: none; z-index: 9999;
   opacity: var(--noise-opacity);
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-  transition: opacity 0.3s;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.65' numOctaves='4' seed='2' stitchTiles='stitch'%3E%3Canimate attributeName='seed' from='0' to='100' dur='0.08s' repeatCount='indefinite'/%3E%3C/feTurbulence%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 250px 250px;
+  transition: opacity 0.4s;
 }
 
 /* ===== RESET ===== */
