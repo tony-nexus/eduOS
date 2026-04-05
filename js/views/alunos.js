@@ -478,9 +478,9 @@ function maskCNHEstrangeiro(v) {
 
 // Mapa de configuração por tipo de documento
 const DOC_CONFIG = {
-  cpf:             { label: 'CPF',                    placeholder: '000.000.000-00', maxlength: '14', inputmode: 'numeric',   mask: maskCPF,            rule: 'cpf' },
-  rnm:             { label: 'RNM',                    placeholder: 'V123456-J',      maxlength: '9',  inputmode: 'text',       mask: maskRNM,            rule: 'rnm' },
-  cnh_estrangeiro: { label: 'CNH Estrangeiro (11 dígitos)', placeholder: '00000000000', maxlength: '11', inputmode: 'numeric', mask: maskCNHEstrangeiro, rule: 'cnh_estrangeiro' },
+  cpf: { label: 'CPF',  placeholder: '000.000.000-00', maxlength: '14', inputmode: 'numeric', mask: maskCPF,             rule: 'cpf' },
+  rnm: { label: 'RNM',  placeholder: 'V123456-J',      maxlength: '9',  inputmode: 'text',    mask: maskRNM,             rule: 'rnm' },
+  cnh: { label: 'CNH',  placeholder: '00000000000',    maxlength: '11', inputmode: 'numeric', mask: maskCNHEstrangeiro,  rule: 'cnh_estrangeiro' },
 };
 
 function applyDocMask(docEl, tipoDocEl) {
@@ -544,9 +544,14 @@ function modalNovoAluno() {
   openModal('Novo Aluno', `
     <div class="form-grid" role="form" aria-label="Cadastro de aluno">
 
+      <!-- ── Identificação ─────────────────────────────────────── -->
+      <div class="form-group full">
+        <p class="form-section-title">Identificação</p>
+      </div>
+
       <div class="form-group full">
         <label for="f-nome">Nome Completo <span aria-hidden="true" style="color:var(--red)">*</span></label>
-        <input id="f-nome" name="nome" type="text" placeholder="João da Silva"
+        <input id="f-nome" name="nome" type="text" placeholder="Ex: João da Silva"
                autocomplete="name" aria-required="true" spellcheck="false">
       </div>
 
@@ -554,8 +559,8 @@ function modalNovoAluno() {
         <label for="f-tipo-doc">Tipo de Documento <span aria-hidden="true" style="color:var(--red)">*</span></label>
         <select id="f-tipo-doc" name="tipo_documento" aria-required="true">
           <option value="cpf">CPF — Brasileiro</option>
-          <option value="rnm">RNM — Registro Nacional Migratório (Estrangeiro)</option>
-          <option value="cnh_estrangeiro">CNH Estrangeiro (11 dígitos)</option>
+          <option value="rnm">RNM — Registro Nacional Migratório</option>
+          <option value="cnh">CNH — Carteira Nacional de Habilitação</option>
         </select>
       </div>
 
@@ -563,7 +568,7 @@ function modalNovoAluno() {
         <label for="f-cpf" id="f-cpf-label">CPF <span aria-hidden="true" style="color:var(--red)">*</span></label>
         <input id="f-cpf" name="cpf" type="text" placeholder="000.000.000-00"
                aria-required="true" autocomplete="off">
-        <small id="f-cpf-hint" style="font-size:10.5px;color:var(--text-tertiary)"></small>
+        <small id="f-cpf-hint"></small>
       </div>
 
       <div class="form-group">
@@ -583,7 +588,12 @@ function modalNovoAluno() {
                autocomplete="tel">
       </div>
 
-      <div class="form-group full">
+      <!-- ── Vínculo ────────────────────────────────────────────── -->
+      <div class="form-group full" style="margin-top:4px">
+        <p class="form-section-title">Vínculo Empresarial</p>
+      </div>
+
+      <div class="form-group">
         <label for="f-vinculo-empresa">Vinculado a uma empresa?</label>
         <select id="f-vinculo-empresa" aria-controls="f-empresa-wrap">
           <option value="nao">Não</option>
@@ -591,25 +601,22 @@ function modalNovoAluno() {
         </select>
       </div>
 
-      <div class="form-group full" id="f-empresa-wrap" hidden aria-hidden="true">
-        <label for="f-empresa">Empresa</label>
+      <div class="form-group" id="f-empresa-wrap" hidden aria-hidden="true">
+        <label for="f-empresa">Empresa <span aria-hidden="true" style="color:var(--red)">*</span></label>
         <select id="f-empresa" autocomplete="organization">
-          <option value="">— Selecione a empresa —</option>
+          <option value="">— Selecione —</option>
           ${empresaOptions}
         </select>
       </div>
 
-      <div class="form-group full" style="grid-column:1/-1">
-        <hr style="border:0;border-top:1px solid var(--border-color);margin:8px 0">
-        <p style="font-size:11.5px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.4px;margin:0">
-          Endereço
-        </p>
+      <!-- ── Endereço ───────────────────────────────────────────── -->
+      <div class="form-group full" style="margin-top:4px">
+        <p class="form-section-title">Endereço</p>
       </div>
 
       <div class="form-group">
         <label for="f-cep">CEP</label>
-        <input id="f-cep" name="cep" type="text" placeholder="00000-000"
-               autocomplete="postal-code">
+        <input id="f-cep" name="cep" type="text" placeholder="00000-000" autocomplete="postal-code">
       </div>
 
       <div class="form-group full">
@@ -619,12 +626,12 @@ function modalNovoAluno() {
 
       <div class="form-group">
         <label for="f-numero">Número</label>
-        <input id="f-numero" name="numero" type="text" autocomplete="address-line2">
+        <input id="f-numero" name="numero" type="text">
       </div>
 
       <div class="form-group">
         <label for="f-complemento">Complemento</label>
-        <input id="f-complemento" name="complemento" type="text" autocomplete="address-line3">
+        <input id="f-complemento" name="complemento" type="text">
       </div>
 
       <div class="form-group">
@@ -643,8 +650,8 @@ function modalNovoAluno() {
                autocomplete="address-level1" style="text-transform:uppercase">
       </div>
 
-      <div class="form-group full">
-        <hr style="border:0;border-top:1px solid var(--border-color);margin:8px 0">
+      <!-- ── Observações ────────────────────────────────────────── -->
+      <div class="form-group full" style="margin-top:4px">
         <label for="f-obs">Observações</label>
         <textarea id="f-obs" name="observacoes" placeholder="Informações adicionais..." rows="3"></textarea>
       </div>
@@ -652,12 +659,12 @@ function modalNovoAluno() {
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modal-cancel" type="button">Cancelar</button>
-      <button class="btn btn-primary" id="modal-save" type="submit" aria-live="polite">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+      <button class="btn btn-primary" id="modal-save" type="submit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
         Salvar Aluno
       </button>
     </div>
-  `);
+  `, true);
 
   applyMasks('f-');
 
@@ -666,9 +673,9 @@ function modalNovoAluno() {
   const cpfLabelEl = document.getElementById('f-cpf-label');
   const cpfHintEl  = document.getElementById('f-cpf-hint');
   const DOC_HINTS = {
-    cpf:             '',
-    rnm:             'Formato: A000000-A  (ex: V123456-J)',
-    cnh_estrangeiro: 'Estrangeiros amparados pela Convenção de Viena podem usar CNH de origem por 180 dias.',
+    cpf: '',
+    rnm: 'Formato: A000000-A  (ex: V123456-J) — 1 letra + 6 dígitos + traço + 1 letra/dígito.',
+    cnh: 'Estrangeiros amparados pela Convenção de Viena podem usar CNH do país de origem por 180 dias. Após esse prazo, emite-se a CNH brasileira (mesmo padrão de 11 dígitos).',
   };
   function updateDocLabel() {
     const cfg = DOC_CONFIG[tipoDocEl?.value] ?? DOC_CONFIG.cpf;

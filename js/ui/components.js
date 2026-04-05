@@ -15,9 +15,11 @@ export function esc(str) {
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
 export function openModal(title, bodyHTML, wide = false) {
-  document.getElementById('modal-title').textContent      = title;
-  document.getElementById('modal-body').innerHTML         = bodyHTML;
-  document.getElementById('modal-content').style.maxWidth = wide ? '700px' : '520px';
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML    = bodyHTML;
+  const modal = document.getElementById('modal-content');
+  modal.style.width    = wide ? '760px' : '600px';
+  modal.style.maxWidth = 'calc(100vw - 32px)';
   document.getElementById('modal-backdrop').classList.add('open');
 }
 

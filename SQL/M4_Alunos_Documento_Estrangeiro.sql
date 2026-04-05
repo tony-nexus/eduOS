@@ -14,7 +14,7 @@
 ALTER TABLE public.alunos
   ADD COLUMN IF NOT EXISTS tipo_documento VARCHAR(20)
   NOT NULL DEFAULT 'cpf'
-  CHECK (tipo_documento IN ('cpf', 'rnm', 'cnh_estrangeiro'));
+  CHECK (tipo_documento IN ('cpf', 'rnm', 'cnh'));
 
 -- 2. Amplia coluna para suportar todos os formatos:
 --    CPF:             000.000.000-00  → 14 chars

@@ -115,8 +115,8 @@ export function validateForm(rules) {
       fieldError(id, 'RNM inválido. Formato: A000000-A (ex: V123456-J).');
       valid = false; continue;
     }
-    if (checks.includes('cnh_estrangeiro') && !isValidCNHEstrangeiro(v)) {
-      fieldError(id, 'CNH Estrangeiro deve ter 11 dígitos numéricos.');
+    if ((checks.includes('cnh_estrangeiro') || checks.includes('cnh')) && !isValidCNHEstrangeiro(v)) {
+      fieldError(id, 'CNH deve ter 11 dígitos numéricos.');
       valid = false; continue;
     }
     if (checks.includes('email') && !isValidEmail(v)) {
