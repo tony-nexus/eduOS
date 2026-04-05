@@ -294,40 +294,55 @@ function esc(str) {
 }
 
 // ─── Masks ────────────────────────────────────────────────────────────────────
-function maskCPF(v) { return v.replace(/\D/g,'').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2').slice(0,14); }
-function maskCNPJ(v) { return v.replace(/\D/g,'').replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3').replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2').slice(0,18); }
-function maskTel(v) { 
-  let r = v.replace(/\D/g, '');
-  if (r.length <= 10) return r.replace(/^(\d{2})(\d{4})(\d{0,4}).*/, '($1) $2-$3').trim();
-  return r.replace(/^(\d{2})(\d{5})(\d{0,4}).*/, '($1) $2-$3').trim();
+function maskCPF(v) {
+  const d = v.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 3)  return d;
+  if (d.length <= 6)  return d.replace(/(\d{3})(\d+)/, '$1.$2');
+  if (d.length <= 9)  return d.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
+  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
 }
-function maskCEP(v) { return v.replace(/\D/g,'').replace(/^(\d{5})(\d)/,'$1-$2').slice(0,9); }
+function maskCNPJ(v) {
+  const d = v.replace(/\D/g, '').slice(0, 14);
+  if (d.length <= 2)  return d;
+  if (d.length <= 5)  return d.replace(/(\d{2})(\d+)/, '$1.$2');
+  if (d.length <= 8)  return d.replace(/(\d{2})(\d{3})(\d+)/, '$1.$2.$3');
+  if (d.length <= 12) return d.replace(/(\d{2})(\d{3})(\d{3})(\d+)/, '$1.$2.$3/$4');
+  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{1,2})/, '$1.$2.$3/$4-$5');
+}
+function maskTel(v) {
+  const d = v.replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 2)  return d.length ? `(${d}` : d;
+  if (d.length <= 6)  return d.replace(/(\d{2})(\d+)/, '($1) $2');
+  if (d.length <= 10) return d.replace(/(\d{2})(\d{4})(\d+)/, '($1) $2-$3');
+  return d.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+}
+function maskCEP(v) {
+  const d = v.replace(/\D/g, '').slice(0, 8);
+  return d.length > 5 ? d.replace(/(\d{5})(\d+)/, '$1-$2') : d;
+}
 
 function applyMasks(prefix) {
   const cpfEl = document.getElementById(prefix + 'cpf');
   const telEl = document.getElementById(prefix + 'tel');
   const cepEl = document.getElementById(prefix + 'cep');
-  const tipoEl = document.getElementById(prefix + 'tipo');
-
-  const updateCpfMask = (el) => {
-    if(!el) return;
-    const isPessoaFisica = !tipoEl || tipoEl.value === 'pessoa_fisica';
-    el.value = isPessoaFisica ? maskCPF(el.value) : maskCNPJ(el.value);
-  };
 
   if (cpfEl) {
-    cpfEl.addEventListener('input', (e) => updateCpfMask(e.target));
-    if(tipoEl) tipoEl.addEventListener('change', () => { 
-      // Update label
-      const label = cpfEl.previousElementSibling;
-      if (label && label.tagName === 'LABEL') {
-        label.textContent = tipoEl.value === 'pessoa_fisica' ? 'CPF *' : 'CNPJ *';
-      }
-      cpfEl.value = ''; // Limpa ao trocar pra não ter formatação misturada
+    cpfEl.addEventListener('input', (e) => {
+      e.target.value = maskCPF(e.target.value);
     });
+    cpfEl.setAttribute('maxlength', '14');
+    cpfEl.setAttribute('inputmode', 'numeric');
   }
-  if (telEl) telEl.addEventListener('input', (e) => e.target.value = maskTel(e.target.value));
-  if (cepEl) cepEl.addEventListener('input', (e) => e.target.value = maskCEP(e.target.value));
+  if (telEl) {
+    telEl.addEventListener('input', (e) => { e.target.value = maskTel(e.target.value); });
+    telEl.setAttribute('maxlength', '15');
+    telEl.setAttribute('inputmode', 'tel');
+  }
+  if (cepEl) {
+    cepEl.addEventListener('input', (e) => { e.target.value = maskCEP(e.target.value); });
+    cepEl.setAttribute('maxlength', '9');
+    cepEl.setAttribute('inputmode', 'numeric');
+  }
 }
 
 async function buscarCEP(cep, prefix) {
@@ -351,93 +366,131 @@ async function buscarCEP(cep, prefix) {
 // ─── Modal: Novo Aluno ────────────────────────────────────────────────────────
 function modalNovoAluno() {
   const empresaOptions = _empresasCache.map(e =>
-    `<option value="${e.id}">${e.nome}</option>`
+    `<option value="${e.id}">${esc(e.nome)}</option>`
   ).join('');
 
   openModal('Novo Aluno', `
-    <div class="form-grid">
+    <div class="form-grid" role="form" aria-label="Cadastro de aluno">
+
       <div class="form-group full">
-        <label>Nome Completo *</label>
-        <input id="f-nome" type="text" placeholder="João da Silva" autocomplete="off">
+        <label for="f-nome">Nome Completo <span aria-hidden="true" style="color:var(--red)">*</span></label>
+        <input id="f-nome" name="nome" type="text" placeholder="João da Silva"
+               autocomplete="name" aria-required="true" spellcheck="false">
       </div>
+
       <div class="form-group">
-        <label>CPF *</label>
-        <input id="f-cpf" type="text" placeholder="000.000.000-00">
+        <label for="f-cpf">CPF <span aria-hidden="true" style="color:var(--red)">*</span></label>
+        <input id="f-cpf" name="cpf" type="text" placeholder="000.000.000-00"
+               aria-required="true" autocomplete="off">
       </div>
+
       <div class="form-group">
-        <label>Data de Nascimento</label>
-        <input id="f-nasc" type="date">
+        <label for="f-nasc">Data de Nascimento</label>
+        <input id="f-nasc" name="data_nascimento" type="date" autocomplete="bday">
       </div>
+
       <div class="form-group">
-        <label>E-mail</label>
-        <input id="f-email" type="email" placeholder="joao@email.com">
+        <label for="f-email">E-mail</label>
+        <input id="f-email" name="email" type="email" placeholder="joao@email.com"
+               autocomplete="email" inputmode="email">
       </div>
+
       <div class="form-group">
-        <label>Telefone / WhatsApp</label>
-        <input id="f-tel" type="text" placeholder="(11) 99999-9999">
+        <label for="f-tel">Telefone / WhatsApp</label>
+        <input id="f-tel" name="telefone" type="text" placeholder="(11) 99999-9999"
+               autocomplete="tel">
       </div>
-      <div class="form-group">
-        <label>Tipo</label>
-        <select id="f-tipo">
-          <option value="pessoa_fisica">Pessoa Física</option>
-          <option value="empresa">Via Empresa</option>
+
+      <div class="form-group full">
+        <label for="f-vinculo-empresa">Vinculado a uma empresa?</label>
+        <select id="f-vinculo-empresa" aria-controls="f-empresa-wrap">
+          <option value="nao">Não</option>
+          <option value="sim">Sim</option>
         </select>
       </div>
-      <div class="form-group">
-        <label>Empresa (opcional)</label>
-        <select id="f-empresa">
-          <option value="">— Nenhuma —</option>
+
+      <div class="form-group full" id="f-empresa-wrap" hidden aria-hidden="true">
+        <label for="f-empresa">Empresa</label>
+        <select id="f-empresa" autocomplete="organization">
+          <option value="">— Selecione a empresa —</option>
           ${empresaOptions}
         </select>
       </div>
-      <div class="form-group full" style="grid-column: 1 / -1">
-        <hr style="border:0;border-top:1px solid var(--border-color);margin:10px 0"/>
-        <label style="color:var(--accent);margin-bottom:8px">Endereço (Auto-CEP)</label>
+
+      <div class="form-group full" style="grid-column:1/-1">
+        <hr style="border:0;border-top:1px solid var(--border-color);margin:8px 0">
+        <p style="font-size:11.5px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.4px;margin:0">
+          Endereço
+        </p>
       </div>
+
       <div class="form-group">
-        <label>CEP</label>
-        <input id="f-cep" type="text" placeholder="00000-000">
+        <label for="f-cep">CEP</label>
+        <input id="f-cep" name="cep" type="text" placeholder="00000-000"
+               autocomplete="postal-code">
       </div>
+
       <div class="form-group full">
-        <label>Rua/Logradouro</label>
-        <input id="f-rua" type="text">
+        <label for="f-rua">Logradouro</label>
+        <input id="f-rua" name="rua" type="text" autocomplete="street-address">
       </div>
+
       <div class="form-group">
-        <label>Número *</label>
-        <input id="f-numero" type="text">
+        <label for="f-numero">Número</label>
+        <input id="f-numero" name="numero" type="text" autocomplete="address-line2">
       </div>
+
       <div class="form-group">
-        <label>Complemento</label>
-        <input id="f-complemento" type="text">
+        <label for="f-complemento">Complemento</label>
+        <input id="f-complemento" name="complemento" type="text" autocomplete="address-line3">
       </div>
+
       <div class="form-group">
-        <label>Bairro</label>
-        <input id="f-bairro" type="text">
+        <label for="f-bairro">Bairro</label>
+        <input id="f-bairro" name="bairro" type="text">
       </div>
+
       <div class="form-group">
-        <label>Cidade</label>
-        <input id="f-cidade" type="text">
+        <label for="f-cidade">Cidade</label>
+        <input id="f-cidade" name="cidade" type="text" autocomplete="address-level2">
       </div>
+
       <div class="form-group">
-        <label>UF</label>
-        <input id="f-uf" type="text" maxlength="2">
+        <label for="f-uf">UF</label>
+        <input id="f-uf" name="uf" type="text" maxlength="2"
+               autocomplete="address-level1" style="text-transform:uppercase">
       </div>
+
       <div class="form-group full">
-        <hr style="border:0;border-top:1px solid var(--border-color);margin:10px 0"/>
-        <label>Observações</label>
-        <textarea id="f-obs" placeholder="Informações adicionais..."></textarea>
+        <hr style="border:0;border-top:1px solid var(--border-color);margin:8px 0">
+        <label for="f-obs">Observações</label>
+        <textarea id="f-obs" name="observacoes" placeholder="Informações adicionais..." rows="3"></textarea>
       </div>
+
     </div>
     <div class="modal-footer">
-      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-      <button class="btn btn-primary" id="modal-save">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg>
+      <button class="btn btn-secondary" id="modal-cancel" type="button">Cancelar</button>
+      <button class="btn btn-primary" id="modal-save" type="submit" aria-live="polite">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
         Salvar Aluno
       </button>
     </div>
   `);
 
   applyMasks('f-');
+  document.getElementById('f-uf').addEventListener('input', e => {
+    e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+  });
+
+  // Mostra/oculta seletor de empresa
+  document.getElementById('f-vinculo-empresa')?.addEventListener('change', function () {
+    const wrap = document.getElementById('f-empresa-wrap');
+    const hidden = this.value === 'nao';
+    wrap.hidden = hidden;
+    wrap.setAttribute('aria-hidden', String(hidden));
+    if (hidden) document.getElementById('f-empresa').value = '';
+  });
+
   document.getElementById('f-cep')?.addEventListener('blur', (e) => buscarCEP(e.target.value, 'f-'));
   bindBlur('f-nome',  'Nome',     ['required']);
   bindBlur('f-email', 'E-mail',   ['email']);
@@ -453,11 +506,11 @@ async function salvarNovoAluno() {
   const email      = document.getElementById('f-email')?.value.trim();
   const telefone   = document.getElementById('f-tel')?.value.trim();
   const nascimento = document.getElementById('f-nasc')?.value;
-  const tipo       = document.getElementById('f-tipo')?.value;
-  const empresaId  = document.getElementById('f-empresa')?.value || null;
+  const vinculo    = document.getElementById('f-vinculo-empresa')?.value;
+  const empresaId  = vinculo === 'sim' ? (document.getElementById('f-empresa')?.value || null) : null;
+  const tipo       = empresaId ? 'empresa' : 'pessoa_fisica';
   const obs        = document.getElementById('f-obs')?.value.trim();
 
-  // Endereço
   const cep         = document.getElementById('f-cep')?.value.trim() || null;
   const rua         = document.getElementById('f-rua')?.value.trim() || null;
   const numero      = document.getElementById('f-numero')?.value.trim() || null;
@@ -466,22 +519,22 @@ async function salvarNovoAluno() {
   const cidade      = document.getElementById('f-cidade')?.value.trim() || null;
   const uf          = document.getElementById('f-uf')?.value.trim() || null;
 
-  // Validação inline
-  const cpfRules = tipo === 'pessoa_fisica'
-    ? ['required', 'cpf']
-    : ['required', 'cnpj'];
-
   const ok = validateForm([
     { id: 'f-nome',  value: nome,     rules: ['required'],        label: 'Nome' },
-    { id: 'f-cpf',   value: cpf,      rules: cpfRules,            label: tipo === 'pessoa_fisica' ? 'CPF' : 'CNPJ' },
+    { id: 'f-cpf',   value: cpf,      rules: ['required', 'cpf'], label: 'CPF' },
     { id: 'f-email', value: email,    rules: ['email'],           label: 'E-mail' },
     { id: 'f-tel',   value: telefone, rules: ['phone'],           label: 'Telefone' },
   ]);
   if (!ok) return;
 
+  if (vinculo === 'sim' && !empresaId) {
+    fieldError('f-empresa', 'Selecione a empresa.'); return;
+  }
+  fieldOk('f-empresa');
+
   const rawCep = (cep || '').replace(/\D/g, '');
   if (rawCep && rawCep.length !== 8) {
-    fieldError('f-cep', 'CEP inválido.'); return;
+    fieldError('f-cep', 'CEP deve ter 8 dígitos.'); return;
   }
   fieldOk('f-cep');
 
@@ -493,7 +546,7 @@ async function salvarNovoAluno() {
 
   const saveBtn = document.getElementById('modal-save');
   saveBtn.disabled = true;
-  saveBtn.innerHTML = 'Salvando...';
+  saveBtn.innerHTML = '<span aria-live="assertive">Salvando...</span>';
 
   try {
     const client = await getClient();
@@ -514,19 +567,18 @@ async function salvarNovoAluno() {
       });
 
     if (error) {
-      // Erro de CPF duplicado (unique constraint)
       if (error.code === '23505') throw new Error('Já existe um aluno cadastrado com este CPF.');
       throw error;
     }
 
     closeModal();
     toast(`Aluno "${nome.split(' ')[0]}" cadastrado com sucesso!`, 'success');
-    await loadAlunos(); // re-fetch para mostrar o novo registro
+    await loadAlunos();
 
   } catch (err) {
     toast(`Erro ao salvar: ${err.message}`, 'error');
     saveBtn.disabled = false;
-    saveBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="20 6 9 17 4 12"/></svg> Salvar Aluno`;
+    saveBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg> Salvar Aluno`;
   }
 }
 

@@ -10,20 +10,27 @@ export function fieldError(id, msg) {
   const el = document.getElementById(id);
   if (!el) return false;
   el.classList.add('has-error');
+  el.setAttribute('aria-invalid', 'true');
+  const errId = id + '-err';
+  el.setAttribute('aria-describedby', errId);
   let span = el.parentElement.querySelector('.field-error-msg');
   if (!span) {
     span = document.createElement('span');
     span.className = 'field-error-msg';
+    span.setAttribute('role', 'alert');
     el.parentElement.appendChild(span);
   }
+  span.id = errId;
   span.textContent = msg;
-  return false; // sempre retorna false para poder usar em expressões
+  return false;
 }
 
 export function fieldOk(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.classList.remove('has-error');
+  el.removeAttribute('aria-invalid');
+  el.removeAttribute('aria-describedby');
   el.parentElement.querySelector('.field-error-msg')?.remove();
 }
 
@@ -59,7 +66,7 @@ export function isValidCNPJ(cnpj) {
 }
 
 export function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+  return email.trim().includes('@') && email.trim().length >= 3;
 }
 
 export function isValidPhone(tel) {
