@@ -5,6 +5,7 @@
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtMoney } from '../ui/components.js';
+import { validateForm, bindBlur } from '../ui/validate.js';
 
 let _cache = [];
 
@@ -137,6 +138,10 @@ function modalCurso(curso = null) {
     </div>
   `);
 
+  bindBlur('f-nome',  'Nome',          ['required']);
+  bindBlur('f-cod',   'Código',        ['required']);
+  bindBlur('f-ch',    'Carga horária', ['required', 'int_positive']);
+  bindBlur('f-valor', 'Valor',         ['required', 'positive']);
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => saveCurso(curso?.id));
 }
@@ -149,17 +154,20 @@ async function saveCurso(id) {
   const valor = parseFloat(document.getElementById('f-valor').value) || null;
   const ativo = document.getElementById('f-ativo').value === 'true';
 
-  if (!nome) {
-    toast('O nome do curso é obrigatório.', 'warning');
-    return;
-  }
+  const ok = validateForm([
+    { id: 'f-nome',  value: nome,  rules: ['required'],       label: 'Nome' },
+    { id: 'f-cod',   value: cod,   rules: ['required'],       label: 'Código' },
+    { id: 'f-ch',    value: ch,    rules: ['required', 'int_positive'], label: 'Carga horária' },
+    { id: 'f-valor', value: valor, rules: ['required', 'positive'],    label: 'Valor' },
+  ]);
+  if (!ok) return;
 
   const payload = {
     tenant_id: getTenantId(),
     nome,
-    codigo: cod || null,
+    codigo: cod,
     carga_horaria: ch,
-    validade_meses: validade,
+    validade_meses: validade || null,
     valor_padrao: valor,
     ativo
   };

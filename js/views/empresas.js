@@ -5,6 +5,7 @@
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, esc } from '../ui/components.js';
+import { validateForm, bindBlur } from '../ui/validate.js';
 
 let _empresas = [];
 
@@ -157,6 +158,24 @@ function modalEmpresa(emp = null) {
     </div>
   `);
 
+  // Máscara CNPJ
+  document.getElementById('f-cnpj')?.addEventListener('input', e => {
+    let v = e.target.value.replace(/\D/g,'');
+    v = v.replace(/^(\d{2})(\d)/,'$1.$2').replace(/^(\d{2})\.(\d{3})(\d)/,'$1.$2.$3')
+         .replace(/\.(\d{3})(\d)/,'.$1/$2').replace(/(\d{4})(\d)/,'$1-$2').slice(0,18);
+    e.target.value = v;
+  });
+  // Máscara telefone
+  document.getElementById('f-tel')?.addEventListener('input', e => {
+    let r = e.target.value.replace(/\D/g,'');
+    e.target.value = r.length <= 10
+      ? r.replace(/^(\d{2})(\d{4})(\d{0,4}).*/,'($1) $2-$3').trim()
+      : r.replace(/^(\d{2})(\d{5})(\d{0,4}).*/,'($1) $2-$3').trim();
+  });
+  bindBlur('f-nome',  'Nome',     ['required']);
+  bindBlur('f-cnpj',  'CNPJ',    ['cnpj']);
+  bindBlur('f-email', 'E-mail',  ['email']);
+  bindBlur('f-tel',   'Telefone',['phone']);
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => saveEmpresa(emp?.id));
 }
@@ -169,18 +188,21 @@ async function saveEmpresa(id) {
   const email = document.getElementById('f-email').value.trim() || null;
   const status = document.getElementById('f-status').value;
 
-  if (!nome) {
-    toast('O nome da empresa é obrigatório.', 'warning');
-    return;
-  }
+  const ok = validateForm([
+    { id: 'f-nome',  value: nome,     rules: ['required'], label: 'Nome' },
+    { id: 'f-cnpj',  value: cnpj||'', rules: ['cnpj'],     label: 'CNPJ' },
+    { id: 'f-email', value: email||'',rules: ['email'],    label: 'E-mail' },
+    { id: 'f-tel',   value: telefone||'', rules: ['phone'],label: 'Telefone' },
+  ]);
+  if (!ok) return;
 
   const payload = {
     tenant_id: getTenantId(),
     nome,
-    cnpj,
-    responsavel,
-    telefone,
-    email,
+    cnpj:        cnpj        || null,
+    responsavel: responsavel || null,
+    telefone:    telefone    || null,
+    email:       email       || null,
     status
   };
 

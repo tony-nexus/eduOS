@@ -12,6 +12,7 @@
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
+import { validateForm, fieldError, fieldOk } from '../ui/validate.js';
 
 let _turmas     = [];
 let _cursos     = [];
@@ -374,10 +375,19 @@ async function saveTurma(id) {
   const local       = document.getElementById('f-local')?.value.trim() || null;
   const status      = document.getElementById('f-status')?.value;
 
-  if (!codigo)   { toast('Código da turma é obrigatório.', 'warning'); return; }
-  if (!curso_id) { toast('Selecione um curso.', 'warning'); return; }
-  if (!inicio)   { toast('Data de início é obrigatória.', 'warning'); return; }
-  if (vagas < 1) { toast('Número de vagas deve ser maior que zero.', 'warning'); return; }
+  const ok = validateForm([
+    { id: 'f-codigo', value: codigo,         rules: ['required'],       label: 'Código' },
+    { id: 'f-curso',  value: curso_id,        rules: ['required'],       label: 'Curso' },
+    { id: 'f-inicio', value: inicio,          rules: ['required'],       label: 'Data de início' },
+    { id: 'f-vagas',  value: vagas.toString(),rules: ['required','int_positive'], label: 'Vagas' },
+  ]);
+  if (!ok) return;
+
+  if (fim && inicio && fim < inicio) {
+    fieldError('f-fim', 'Data de fim deve ser posterior à data de início.');
+    return;
+  }
+  fieldOk('f-fim');
 
   const payload = { tenant_id: getTenantId(), codigo, curso_id, instrutor_id, data_inicio: inicio, data_fim: fim, vagas, local, status };
 

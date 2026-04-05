@@ -8,6 +8,7 @@
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtMoney, fmtDate, esc } from '../ui/components.js';
+import { validateForm } from '../ui/validate.js';
 
 let _pagamentos = [];
 let _matriculas = [];
@@ -291,10 +292,12 @@ async function savePagamento(id) {
   const status = document.getElementById('f-status').value;
   const recibo = document.getElementById('f-recibo').value.trim() || null;
 
-  if (!matricula_id) {
-    toast('Matrícula é obrigatória.', 'warning');
-    return;
-  }
+  const ok = validateForm([
+    { id: 'f-matricula', value: matricula_id,          rules: ['required'], label: 'Matrícula' },
+    { id: 'f-valor',     value: String(valor ?? ''),   rules: ['required', 'positive'], label: 'Valor' },
+    { id: 'f-venc',      value: data_vencimento ?? '', rules: ['required'], label: 'Data de vencimento' },
+  ]);
+  if (!ok) return;
 
   const payload = {
     tenant_id: getTenantId(),

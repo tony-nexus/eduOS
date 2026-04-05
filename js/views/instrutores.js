@@ -5,6 +5,7 @@
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast } from '../ui/components.js';
+import { validateForm, bindBlur } from '../ui/validate.js';
 
 let _cache = [];
 
@@ -117,6 +118,14 @@ function modalInstrutor(inst = null) {
         <label>Nome Completo *</label>
         <input id="f-nome" type="text" value="${inst?.nome || ''}" placeholder="Ex: Carlos Eduardo Lima">
       </div>
+      <div class="form-group">
+        <label>E-mail</label>
+        <input id="f-email" type="email" value="${inst?.email || ''}" placeholder="instrutor@email.com">
+      </div>
+      <div class="form-group">
+        <label>Telefone</label>
+        <input id="f-tel" type="text" value="${inst?.telefone || ''}" placeholder="(11) 99999-9999">
+      </div>
       <div class="form-group full">
         <label>Especialidades (separadas por vírgula)</label>
         <input id="f-esp" type="text" value="${espString}" placeholder="Ex: NR-35, NR-33, Primeiros Socorros">
@@ -128,26 +137,34 @@ function modalInstrutor(inst = null) {
     </div>
   `);
 
+  bindBlur('f-nome',  'Nome',     ['required']);
+  bindBlur('f-email', 'E-mail',   ['email']);
+  bindBlur('f-tel',   'Telefone', ['phone']);
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => saveInstrutor(inst?.id));
 }
 
 async function saveInstrutor(id) {
-  const nome = document.getElementById('f-nome').value.trim();
+  const nome   = document.getElementById('f-nome').value.trim();
+  const email  = document.getElementById('f-email').value.trim();
+  const tel    = document.getElementById('f-tel').value.trim();
   const espRaw = document.getElementById('f-esp').value;
-  
-  if (!nome) {
-    toast('O nome é obrigatório.', 'warning');
-    return;
-  }
 
-  // Usamos JSON array compatility
+  const ok = validateForm([
+    { id: 'f-nome',  value: nome,  rules: ['required'], label: 'Nome' },
+    { id: 'f-email', value: email, rules: ['email'],    label: 'E-mail' },
+    { id: 'f-tel',   value: tel,   rules: ['phone'],    label: 'Telefone' },
+  ]);
+  if (!ok) return;
+
   const especialidades = espRaw.split(',').map(s => s.trim()).filter(Boolean);
 
   const payload = {
     tenant_id: getTenantId(),
     nome,
-    especialidades // envia como array jsonb ou text[]
+    email:    email || null,
+    telefone: tel   || null,
+    especialidades,
   };
 
   const btn = document.getElementById('modal-save');

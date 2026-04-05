@@ -15,6 +15,7 @@
 import { getClient, getTenantId } from '../core/supabase.js';
 import { currentUser } from '../core/auth.js';
 import { setContent, openModal, closeModal, toast } from '../ui/components.js';
+import { validateForm, fieldOk, clearErrors, isValidCPF, isValidCNPJ, bindBlur } from '../ui/validate.js';
 
 // Cache local — evita re-fetch desnecessário ao filtrar
 let _alunosCache = [];
@@ -438,6 +439,9 @@ function modalNovoAluno() {
 
   applyMasks('f-');
   document.getElementById('f-cep')?.addEventListener('blur', (e) => buscarCEP(e.target.value, 'f-'));
+  bindBlur('f-nome',  'Nome',     ['required']);
+  bindBlur('f-email', 'E-mail',   ['email']);
+  bindBlur('f-tel',   'Telefone', ['phone']);
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => salvarNovoAluno());
 }
@@ -462,23 +466,29 @@ async function salvarNovoAluno() {
   const cidade      = document.getElementById('f-cidade')?.value.trim() || null;
   const uf          = document.getElementById('f-uf')?.value.trim() || null;
 
-  // Validação mínima
-  if (!nome) { toast('O campo Nome é obrigatório.', 'warning'); return; }
-  if (!cpf)  { toast('O campo CPF/CNPJ é obrigatório.', 'warning'); return; }
-  
-  const rawCpf = cpf.replace(/\D/g, '');
-  if (tipo === 'pessoa_fisica' && rawCpf.length !== 11) { toast('CPF deve conter 11 dígitos.', 'warning'); return; }
-  if (tipo === 'empresa' && rawCpf.length !== 14) { toast('CNPJ deve conter 14 dígitos.', 'warning'); return; }
+  // Validação inline
+  const cpfRules = tipo === 'pessoa_fisica'
+    ? ['required', 'cpf']
+    : ['required', 'cnpj'];
 
-  const rawTel = (telefone || '').replace(/\D/g, '');
-  if (rawTel && rawTel.length < 10) { toast('Telefone inválido. Deve ter pelo menos 10 dígitos com DDD.', 'warning'); return; }
+  const ok = validateForm([
+    { id: 'f-nome',  value: nome,     rules: ['required'],        label: 'Nome' },
+    { id: 'f-cpf',   value: cpf,      rules: cpfRules,            label: tipo === 'pessoa_fisica' ? 'CPF' : 'CNPJ' },
+    { id: 'f-email', value: email,    rules: ['email'],           label: 'E-mail' },
+    { id: 'f-tel',   value: telefone, rules: ['phone'],           label: 'Telefone' },
+  ]);
+  if (!ok) return;
 
   const rawCep = (cep || '').replace(/\D/g, '');
-  if (rawCep && rawCep.length !== 8) { toast('CEP inválido.', 'warning'); return; }
+  if (rawCep && rawCep.length !== 8) {
+    fieldError('f-cep', 'CEP inválido.'); return;
+  }
+  fieldOk('f-cep');
 
   if (nascimento) {
     const age = (new Date() - new Date(nascimento)) / (1000 * 60 * 60 * 24 * 365.25);
-    if (age < 18) { toast('O aluno deve ser maior de 18 anos.', 'warning'); return; }
+    if (age < 16) { fieldError('f-nasc', 'Idade mínima: 16 anos.'); return; }
+    fieldOk('f-nasc');
   }
 
   const saveBtn = document.getElementById('modal-save');
