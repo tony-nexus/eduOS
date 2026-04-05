@@ -1,12 +1,13 @@
 /**
  * /js/views/alunos.js
  * CRUD real via Supabase — sem dados mockados.
+ * v3 — Múltiplos documentos (CPF + RNM + CNH simultâneos)
  *
  * Operações:
  *  - READ:   loadAlunos() — busca com join em empresas
  *  - CREATE: salvarNovoAluno() — insert + re-fetch
- *  - UPDATE: abrirModalEditar() — update + re-fetch
- *  - DELETE: (via botão "Inativar" no modal de edição)
+ *  - UPDATE: modalEditarAluno() — update + re-fetch
+ *  - DELETE: excluirAluno() / excluirSelecionados()
  *
  * Segurança: tenant_id vem de currentUser (preenchido no login real).
  * As políticas RLS do banco garantem isolamento — o JS só filtra por UX.
@@ -15,18 +16,17 @@
 import { getClient, getTenantId } from '../core/supabase.js';
 import { currentUser } from '../core/auth.js';
 import { setContent, openModal, closeModal, toast } from '../ui/components.js';
-import { validateForm, fieldOk, bindBlur, isValidRNM, isValidCNHEstrangeiro } from '../ui/validate.js';
+import { validateForm, fieldError, fieldOk, bindBlur } from '../ui/validate.js';
 
 // Cache local — evita re-fetch desnecessário ao filtrar
-let _alunosCache = [];
+let _alunosCache  = [];
 // Cache de empresas para o select do modal
 let _empresasCache = [];
 // IDs selecionados para delete em massa
-let _selectedIds = new Set();
+let _selectedIds  = new Set();
 
 // ─── Render principal ─────────────────────────────────────────────────────────
 export async function render() {
-  // Renderiza o shell da página imediatamente (esqueleto)
   setContent(`
     <div class="page-header">
       <div><h1>Alunos</h1><p>Cadastro e gestão de discentes</p></div>
@@ -42,7 +42,6 @@ export async function render() {
       </div>
     </div>
 
-    <!-- KPIs com skeleton enquanto carrega -->
     <div class="stats-row" id="alunos-kpis">
       ${['','','',''].map(() => `<div class="stat-card"><div class="skeleton" style="height:14px;width:80px;margin-bottom:10px"></div><div class="skeleton" style="height:32px;width:60px"></div></div>`).join('')}
     </div>
@@ -51,7 +50,7 @@ export async function render() {
       <div class="table-toolbar">
         <div class="search-input-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input class="search-input" id="search-alunos" placeholder="Nome, CPF, CNPJ, telefone ou e-mail...">
+          <input class="search-input" id="search-alunos" placeholder="Nome, CPF, RNM, CNH, telefone ou e-mail...">
         </div>
         <select class="select-input" id="filtro-tipo">
           <option value="">Todos os tipos</option>
@@ -76,7 +75,7 @@ export async function render() {
             <input type="checkbox" id="check-all" aria-label="Selecionar todos"
               style="width:15px;height:15px;cursor:pointer;accent-color:var(--red)">
           </th>
-          <th>Aluno</th><th>Documento</th><th>Contato</th><th>Tipo</th><th>Empresa</th><th>Status</th><th>Ações</th>
+          <th>Aluno</th><th>Documentos</th><th>Contato</th><th>Tipo</th><th>Empresa</th><th>Status</th><th>Ações</th>
         </tr></thead>
         <tbody id="alunos-tbody">
           <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-tertiary)">
@@ -95,12 +94,10 @@ export async function render() {
     </div>
   `);
 
-  // Registra listeners que não dependem dos dados
   document.getElementById('btn-novo-aluno')?.addEventListener('click', () => modalNovoAluno());
   document.getElementById('btn-exportar')?.addEventListener('click', () => exportarCSV());
   document.getElementById('btn-excluir-selecionados')?.addEventListener('click', () => excluirSelecionados());
 
-  // Carrega dados do Supabase em paralelo
   await Promise.all([loadAlunos(), loadEmpresas()]);
 }
 
@@ -110,7 +107,7 @@ async function loadAlunos() {
     const client = await getClient();
     const { data, error } = await client
       .from('alunos')
-      .select('id, nome, cpf, tipo_documento, email, telefone, data_nascimento, tipo_pessoa, status, cep, rua, numero, complemento, bairro, cidade, uf, empresa:empresa_id(id, nome)')
+      .select('id, nome, cpf, rnm, cnh_num, email, telefone, data_nascimento, tipo_pessoa, status, cep, rua, numero, complemento, bairro, cidade, uf, empresa:empresa_id(id, nome)')
       .eq('tenant_id', getTenantId())
       .order('nome')
       .limit(200);
@@ -133,7 +130,7 @@ async function loadAlunos() {
   bindFiltros();
 }
 
-// ─── Fetch de empresas (para o select do modal) ───────────────────────────────
+// ─── Fetch de empresas ────────────────────────────────────────────────────────
 async function loadEmpresas() {
   try {
     const client = await getClient();
@@ -180,7 +177,15 @@ function renderTabela(alunos) {
     return;
   }
 
-  tbody.innerHTML = alunos.map(a => `
+  tbody.innerHTML = alunos.map(a => {
+    // Monta coluna de documentos
+    const docs = [];
+    if (a.cpf)     docs.push(`<div><span class="badge badge-blue" style="font-size:9px;margin-right:4px">CPF</span><span style="font-family:var(--font-mono);font-size:12px">${esc(a.cpf)}</span></div>`);
+    if (a.rnm)     docs.push(`<div><span class="badge badge-purple" style="font-size:9px;margin-right:4px">RNM</span><span style="font-family:var(--font-mono);font-size:12px">${esc(a.rnm)}</span></div>`);
+    if (a.cnh_num) docs.push(`<div><span class="badge badge-amber" style="font-size:9px;margin-right:4px">CNH</span><span style="font-family:var(--font-mono);font-size:12px">${esc(a.cnh_num)}</span></div>`);
+    const docsHtml = docs.length ? docs.join('') : '<span style="color:var(--text-tertiary)">—</span>';
+
+    return `
     <tr data-id="${a.id}">
       <td style="padding:10px 8px">
         <input type="checkbox" class="row-check" data-id="${a.id}"
@@ -197,12 +202,7 @@ function renderTabela(alunos) {
           </div>
         </div>
       </td>
-      <td>
-        <div style="font-family:var(--font-mono);font-size:12px">${esc(a.cpf ?? '—')}</div>
-        ${a.tipo_documento && a.tipo_documento !== 'cpf'
-          ? `<div style="font-size:10px;color:var(--text-tertiary);margin-top:2px">${a.tipo_documento === 'rnm' ? 'RNM' : 'CNH Est.'}</div>`
-          : ''}
-      </td>
+      <td style="line-height:1.8">${docsHtml}</td>
       <td style="font-size:12.5px">${esc(a.telefone ?? '—')}</td>
       <td><span class="badge ${a.tipo_pessoa === 'pessoa_fisica' ? 'badge-blue' : 'badge-amber'}">${a.tipo_pessoa === 'pessoa_fisica' ? 'PF' : 'Empresa'}</span></td>
       <td style="font-size:12.5px;color:var(--text-secondary)">${esc(a.empresa_nome)}</td>
@@ -221,14 +221,14 @@ function renderTabela(alunos) {
         </div>
       </td>
     </tr>
-  `).join('');
+  `}).join('');
 
   if (countEl) countEl.textContent = `${alunos.length} aluno${alunos.length !== 1 ? 's' : ''}`;
   bindRowActions();
   bindCheckboxes();
 }
 
-// ─── Filtros em tempo real (client-side sobre o cache) ─────────────────────────
+// ─── Filtros em tempo real ────────────────────────────────────────────────────
 function bindFiltros() {
   const search   = document.getElementById('search-alunos');
   const filtTipo = document.getElementById('filtro-tipo');
@@ -238,26 +238,21 @@ function bindFiltros() {
   function applyFilter() {
     const raw = search.value.trim();
     const q   = raw.toLowerCase();
-    // Versão só com dígitos — para buscar CPF/CNPJ/telefone sem separadores
     const qDigits = raw.replace(/\D/g, '');
     const tp  = filtTipo.value;
     const st  = filtSt.value;
 
     const filtered = _alunosCache.filter(a => {
       if (q) {
-        const cpfDigits  = (a.cpf  ?? '').replace(/\D/g, '');
-        const telDigits  = (a.telefone ?? '').replace(/\D/g, '');
         const nomeMatch  = a.nome.toLowerCase().includes(q);
         const emailMatch = (a.email ?? '').toLowerCase().includes(q);
-        // Se a busca for só dígitos, compara sem formatação
-        const cpfMatch   = qDigits
-          ? cpfDigits.includes(qDigits)
-          : (a.cpf ?? '').includes(q);
-        const telMatch   = qDigits
-          ? telDigits.includes(qDigits)
-          : (a.telefone ?? '').includes(q);
-
-        if (!nomeMatch && !emailMatch && !cpfMatch && !telMatch) return false;
+        const cpfDigits  = (a.cpf  ?? '').replace(/\D/g, '');
+        const rnmMatch   = (a.rnm  ?? '').toLowerCase().includes(q);
+        const cnhMatch   = (a.cnh_num ?? '').includes(q);
+        const telDigits  = (a.telefone ?? '').replace(/\D/g, '');
+        const cpfMatch   = qDigits ? cpfDigits.includes(qDigits) : (a.cpf ?? '').includes(q);
+        const telMatch   = qDigits ? telDigits.includes(qDigits) : (a.telefone ?? '').includes(q);
+        if (!nomeMatch && !emailMatch && !cpfMatch && !rnmMatch && !cnhMatch && !telMatch) return false;
       }
       if (tp && a.tipo_pessoa !== tp) return false;
       if (st && a.status !== st) return false;
@@ -295,7 +290,6 @@ function bindRowActions() {
 
 // ─── Checkboxes de seleção ────────────────────────────────────────────────────
 function bindCheckboxes() {
-  // Checkboxes individuais
   document.querySelectorAll('.row-check').forEach(cb => {
     cb.addEventListener('change', () => {
       if (cb.checked) _selectedIds.add(cb.dataset.id);
@@ -304,10 +298,8 @@ function bindCheckboxes() {
     });
   });
 
-  // Selecionar todos
   const checkAll = document.getElementById('check-all');
   if (checkAll) {
-    // Sincroniza estado inicial
     const visibleIds = [...document.querySelectorAll('.row-check')].map(c => c.dataset.id);
     checkAll.checked = visibleIds.length > 0 && visibleIds.every(id => _selectedIds.has(id));
     checkAll.indeterminate = !checkAll.checked && visibleIds.some(id => _selectedIds.has(id));
@@ -336,7 +328,6 @@ function updateSelecaoUI() {
     btn.hidden = true;
     btn.style.display = 'none';
   }
-  // Atualiza checkbox de cabeçalho
   const checkAll = document.getElementById('check-all');
   if (checkAll) {
     const allCbs = [...document.querySelectorAll('.row-check')];
@@ -397,26 +388,31 @@ async function toggleStatus(id, statusAtual) {
       .update({ status: novoStatus })
       .eq('id', id)
       .eq('tenant_id', getTenantId());
-
     if (error) throw error;
     toast(`Aluno ${novoStatus === 'ativo' ? 'ativado' : 'inativado'} com sucesso`, 'success');
-    await loadAlunos(); // re-fetch para atualizar a tabela
+    await loadAlunos();
   } catch (err) {
     toast(`Erro: ${err.message}`, 'error');
   }
 }
 
-// ─── Modal: Ver Ficha ────────────────────────────────────────────────────────
+// ─── Modal: Ver Ficha ─────────────────────────────────────────────────────────
 function modalVerFicha(aluno) {
+  const docsLinhas = [];
+  if (aluno.cpf)     docsLinhas.push(`<div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">CPF:</strong><span style="font-family:var(--font-mono)">${esc(aluno.cpf)}</span></div>`);
+  if (aluno.rnm)     docsLinhas.push(`<div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">RNM:</strong><span style="font-family:var(--font-mono)">${esc(aluno.rnm)}</span></div>`);
+  if (aluno.cnh_num) docsLinhas.push(`<div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">CNH:</strong><span style="font-family:var(--font-mono)">${esc(aluno.cnh_num)}</span></div>`);
+  if (!docsLinhas.length) docsLinhas.push(`<div style="color:var(--text-tertiary)">Nenhum documento cadastrado</div>`);
+
   openModal(`Ficha do Aluno — ${aluno.nome.split(' ')[0]}`, `
     <div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">Nome:</strong><span>${esc(aluno.nome)}</span></div>
-      <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">${(DOC_CONFIG[aluno.tipo_documento] ?? DOC_CONFIG.cpf).label}:</strong><span>${esc(aluno.cpf || '—')}</span></div>
+      ${docsLinhas.join('')}
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">E-mail:</strong><span>${esc(aluno.email || '—')}</span></div>
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">Telefone:</strong><span>${esc(aluno.telefone || '—')}</span></div>
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">Nascimento:</strong><span>${aluno.data_nascimento || '—'}</span></div>
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">Situação:</strong><span><span class="badge ${aluno.status === 'ativo' ? 'badge-green' : 'badge-gray'}">${aluno.status === 'ativo' ? 'Ativo' : 'Inativo'}</span></span></div>
-      <hr style="border:0;border-top:1px solid var(--border-color);margin:10px 0"/>
+      <hr style="border:0;border-top:1px solid var(--border-subtle);margin:6px 0"/>
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">CEP:</strong><span>${esc(aluno.cep || '—')}</span></div>
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">Endereço:</strong><span>${aluno.rua ? esc(aluno.rua)+', '+esc(aluno.numero) + (aluno.complemento ? ' - '+esc(aluno.complemento) : '') : '—'}</span></div>
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">Bairro/Cidade:</strong><span>${aluno.bairro ? esc(aluno.bairro)+' - '+esc(aluno.cidade)+'/'+esc(aluno.uf) : '—'}</span></div>
@@ -428,13 +424,11 @@ function modalVerFicha(aluno) {
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
 }
 
-// ─── Utils: Escapar HTML e Auto-CEP ───────────────────────────────────────────
+// ─── Utils: Escapar HTML ──────────────────────────────────────────────────────
 function esc(str) {
   if (!str) return '';
-  return String(str).replace(/[&<>'"]/g, 
-    tag => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-    }[tag] || tag)
+  return String(str).replace(/[&<>'"]/g,
+    tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
   );
 }
 
@@ -457,80 +451,86 @@ function maskCEP(v) {
   const d = v.replace(/\D/g, '').slice(0, 8);
   return d.length > 5 ? d.replace(/(\d{5})(\d+)/, '$1-$2') : d;
 }
-
 // RNM: 1 letra + 6 dígitos + traço + 1 letra/dígito  →  V123456-J
 function maskRNM(v) {
   const raw = v.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (raw.length === 0) return '';
+  if (!raw.length) return '';
   const letra1 = /[A-Z]/.test(raw[0]) ? raw[0] : '';
   const resto  = letra1 ? raw.slice(1) : raw;
-  const digitos = resto.replace(/[^0-9]/g, '').slice(0, 6);
+  const digitos = resto.replace(/\D/g, '').slice(0, 6);
   const verif   = resto.replace(/[^A-Z0-9]/g, '').slice(6, 7);
   let result = letra1 + digitos;
   if (digitos.length === 6 && verif) result += '-' + verif;
   return result;
 }
-
-// CNH Estrangeiro: apenas 11 dígitos numéricos
-function maskCNHEstrangeiro(v) {
+// CNH: apenas 11 dígitos numéricos
+function maskCNH(v) {
   return v.replace(/\D/g, '').slice(0, 11);
 }
 
-// Mapa de configuração por tipo de documento
-const DOC_CONFIG = {
-  cpf: { label: 'CPF',  placeholder: '000.000.000-00', maxlength: '14', inputmode: 'numeric', mask: maskCPF,             rule: 'cpf' },
-  rnm: { label: 'RNM',  placeholder: 'V123456-J',      maxlength: '9',  inputmode: 'text',    mask: maskRNM,             rule: 'rnm' },
-  cnh: { label: 'CNH',  placeholder: '00000000000',    maxlength: '11', inputmode: 'numeric', mask: maskCNHEstrangeiro,  rule: 'cnh_estrangeiro' },
-};
+// ─── Bind masks para novo aluno ───────────────────────────────────────────────
+function bindMasksNovoAluno() {
+  const cpfEl = document.getElementById('f-cpf');
+  const rnmEl = document.getElementById('f-rnm');
+  const cnhEl = document.getElementById('f-cnh-num');
+  const telEl = document.getElementById('f-tel');
+  const cepEl = document.getElementById('f-cep');
+  const ufEl  = document.getElementById('f-uf');
 
-function applyDocMask(docEl, tipoDocEl) {
-  if (!docEl || !tipoDocEl) return;
-  const update = () => {
-    const cfg = DOC_CONFIG[tipoDocEl.value] ?? DOC_CONFIG.cpf;
-    docEl.value       = cfg.mask(docEl.value);
-    docEl.placeholder = cfg.placeholder;
-    docEl.maxLength   = cfg.maxlength;
-    docEl.inputMode   = cfg.inputmode;
-  };
-  docEl.addEventListener('input', update);
-  tipoDocEl.addEventListener('change', () => { docEl.value = ''; update(); fieldOk(docEl.id); });
-  update(); // estado inicial
-}
-
-function applyMasks(prefix) {
-  const docEl     = document.getElementById(prefix + 'cpf');
-  const tipoDocEl = document.getElementById(prefix + 'tipo-doc');
-  const telEl     = document.getElementById(prefix + 'tel');
-  const cepEl     = document.getElementById(prefix + 'cep');
-
-  applyDocMask(docEl, tipoDocEl);
-
-  if (telEl) {
-    telEl.addEventListener('input', (e) => { e.target.value = maskTel(e.target.value); });
-    telEl.setAttribute('maxlength', '15');
-    telEl.setAttribute('inputmode', 'tel');
-  }
+  if (cpfEl) { cpfEl.addEventListener('input', e => { e.target.value = maskCPF(e.target.value); }); cpfEl.setAttribute('maxlength','14'); cpfEl.setAttribute('inputmode','numeric'); }
+  if (rnmEl) { rnmEl.addEventListener('input', e => { e.target.value = maskRNM(e.target.value); }); rnmEl.setAttribute('maxlength','9'); }
+  if (cnhEl) { cnhEl.addEventListener('input', e => { e.target.value = maskCNH(e.target.value); }); cnhEl.setAttribute('maxlength','11'); cnhEl.setAttribute('inputmode','numeric'); }
+  if (telEl) { telEl.addEventListener('input', e => { e.target.value = maskTel(e.target.value); }); telEl.setAttribute('maxlength','15'); telEl.setAttribute('inputmode','tel'); }
   if (cepEl) {
-    cepEl.addEventListener('input', (e) => { e.target.value = maskCEP(e.target.value); });
-    cepEl.setAttribute('maxlength', '9');
-    cepEl.setAttribute('inputmode', 'numeric');
+    cepEl.addEventListener('input', e => { e.target.value = maskCEP(e.target.value); });
+    cepEl.addEventListener('blur',  e => buscarCEP(e.target.value, 'f-'));
+    cepEl.setAttribute('maxlength','9'); cepEl.setAttribute('inputmode','numeric');
+  }
+  if (ufEl) {
+    ufEl.addEventListener('input', e => {
+      e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+    });
   }
 }
 
+// ─── Bind masks para editar aluno ─────────────────────────────────────────────
+function bindMasksEditarAluno() {
+  const cpfEl = document.getElementById('e-cpf');
+  const rnmEl = document.getElementById('e-rnm');
+  const cnhEl = document.getElementById('e-cnh-num');
+  const telEl = document.getElementById('e-tel');
+  const cepEl = document.getElementById('e-cep');
+  const ufEl  = document.getElementById('e-uf');
+
+  if (cpfEl) cpfEl.addEventListener('input', e => { e.target.value = maskCPF(e.target.value); });
+  if (rnmEl) rnmEl.addEventListener('input', e => { e.target.value = maskRNM(e.target.value); });
+  if (cnhEl) cnhEl.addEventListener('input', e => { e.target.value = maskCNH(e.target.value); });
+  if (telEl) { telEl.addEventListener('input', e => { e.target.value = maskTel(e.target.value); }); telEl.setAttribute('maxlength','15'); }
+  if (cepEl) {
+    cepEl.addEventListener('input', e => { e.target.value = maskCEP(e.target.value); });
+    cepEl.addEventListener('blur',  e => buscarCEP(e.target.value, 'e-'));
+    cepEl.setAttribute('maxlength','9');
+  }
+  if (ufEl) ufEl.addEventListener('input', e => {
+    e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
+  });
+}
+
+// ─── ViaCEP ───────────────────────────────────────────────────────────────────
 async function buscarCEP(cep, prefix) {
   const c = cep.replace(/\D/g, '');
   if (c.length !== 8) return;
   try {
-    const res = await fetch(`https://viacep.com.br/ws/${c}/json/`);
+    const res  = await fetch(`https://viacep.com.br/ws/${c}/json/`);
     const data = await res.json();
     if (data.erro) { toast('CEP não encontrado', 'warning'); return; }
-    document.getElementById(prefix + 'rua').value = data.logradouro || '';
-    document.getElementById(prefix + 'bairro').value = data.bairro || '';
+    document.getElementById(prefix + 'rua').value    = data.logradouro || '';
+    document.getElementById(prefix + 'bairro').value = data.bairro    || '';
     document.getElementById(prefix + 'cidade').value = data.localidade || '';
-    document.getElementById(prefix + 'uf').value = data.uf || '';
+    document.getElementById(prefix + 'uf').value     = data.uf        || '';
     document.getElementById(prefix + 'numero').focus();
     toast('Endereço preenchido via ViaCEP', 'success');
-  } catch (err) {
+  } catch (_) {
     toast('Erro ao buscar CEP', 'error');
   }
 }
@@ -542,121 +542,160 @@ function modalNovoAluno() {
   ).join('');
 
   openModal('Novo Aluno', `
-    <div class="form-grid" role="form" aria-label="Cadastro de aluno">
+    <form id="form-novo-aluno" novalidate role="form" aria-label="Cadastro de aluno">
 
-      <!-- ── Identificação ─────────────────────────────────────── -->
-      <div class="form-group full">
-        <p class="form-section-title">Identificação</p>
-      </div>
+      <!-- ── Identificação ───────────────────────────────────────────── -->
+      <fieldset class="form-fieldset">
+        <legend>Identificação</legend>
 
-      <div class="form-group full">
-        <label for="f-nome">Nome Completo <span aria-hidden="true" style="color:var(--red)">*</span></label>
-        <input id="f-nome" name="nome" type="text" placeholder="Ex: João da Silva"
-               autocomplete="name" aria-required="true" spellcheck="false">
-      </div>
+        <div class="input-row">
+          <div class="form-group flex-2">
+            <label for="f-nome">Nome Completo <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="f-nome" name="nome" type="text" placeholder="Ex: João da Silva"
+                   autocomplete="name" aria-required="true" spellcheck="false">
+          </div>
+          <div class="form-group">
+            <label for="f-nasc">Data de Nascimento</label>
+            <input id="f-nasc" name="data_nascimento" type="date" autocomplete="bday">
+          </div>
+        </div>
 
-      <div class="form-group">
-        <label for="f-tipo-doc">Tipo de Documento <span aria-hidden="true" style="color:var(--red)">*</span></label>
-        <select id="f-tipo-doc" name="tipo_documento" aria-required="true">
-          <option value="cpf">CPF — Brasileiro</option>
-          <option value="rnm">RNM — Registro Nacional Migratório</option>
-          <option value="cnh">CNH — Carteira Nacional de Habilitação</option>
-        </select>
-      </div>
+        <div class="input-row">
+          <div class="form-group">
+            <label for="f-email">E-mail</label>
+            <input id="f-email" name="email" type="email" placeholder="joao@email.com"
+                   autocomplete="email" inputmode="email">
+          </div>
+          <div class="form-group">
+            <label for="f-tel">Telefone / WhatsApp</label>
+            <input id="f-tel" name="telefone" type="text" placeholder="(11) 99999-9999"
+                   autocomplete="tel">
+          </div>
+        </div>
+      </fieldset>
 
-      <div class="form-group">
-        <label for="f-cpf" id="f-cpf-label">CPF <span aria-hidden="true" style="color:var(--red)">*</span></label>
-        <input id="f-cpf" name="cpf" type="text" placeholder="000.000.000-00"
-               aria-required="true" autocomplete="off">
-        <small id="f-cpf-hint"></small>
-      </div>
+      <!-- ── Documentos ──────────────────────────────────────────────── -->
+      <fieldset class="form-fieldset">
+        <legend>Documentos</legend>
 
-      <div class="form-group">
-        <label for="f-nasc">Data de Nascimento</label>
-        <input id="f-nasc" name="data_nascimento" type="date" autocomplete="bday">
-      </div>
+        <div class="doc-check-row" role="group" aria-label="Tipos de documento">
+          <label class="doc-check-item active" id="label-check-cpf">
+            <input type="checkbox" id="check-cpf" value="cpf" checked aria-controls="doc-cpf-field">
+            CPF
+          </label>
+          <label class="doc-check-item" id="label-check-rnm">
+            <input type="checkbox" id="check-rnm" value="rnm" aria-controls="doc-rnm-field">
+            RNM
+          </label>
+          <label class="doc-check-item" id="label-check-cnh">
+            <input type="checkbox" id="check-cnh" value="cnh" aria-controls="doc-cnh-field">
+            CNH
+          </label>
+        </div>
 
-      <div class="form-group">
-        <label for="f-email">E-mail</label>
-        <input id="f-email" name="email" type="email" placeholder="joao@email.com"
-               autocomplete="email" inputmode="email">
-      </div>
+        <div class="doc-fields">
+          <div id="doc-cpf-field" class="doc-field-row visible">
+            <div class="form-group">
+              <label for="f-cpf">CPF <span aria-hidden="true" style="color:var(--red)">*</span></label>
+              <input id="f-cpf" name="cpf" type="text" placeholder="000.000.000-00"
+                     aria-required="true" autocomplete="off">
+            </div>
+          </div>
 
-      <div class="form-group">
-        <label for="f-tel">Telefone / WhatsApp</label>
-        <input id="f-tel" name="telefone" type="text" placeholder="(11) 99999-9999"
-               autocomplete="tel">
-      </div>
+          <div id="doc-rnm-field" class="doc-field-row">
+            <div class="form-group">
+              <label for="f-rnm">RNM — Registro Nacional Migratório <span aria-hidden="true" style="color:var(--red)">*</span></label>
+              <input id="f-rnm" name="rnm" type="text" placeholder="V123456-J"
+                     autocomplete="off">
+              <small style="color:var(--text-tertiary)">Formato: A000000-A — 1 letra + 6 dígitos + traço + 1 dígito/letra (ex: V123456-J)</small>
+            </div>
+          </div>
 
-      <!-- ── Vínculo ────────────────────────────────────────────── -->
-      <div class="form-group full" style="margin-top:4px">
-        <p class="form-section-title">Vínculo Empresarial</p>
-      </div>
+          <div id="doc-cnh-field" class="doc-field-row">
+            <div class="form-group">
+              <label for="f-cnh-num">CNH — Carteira Nacional de Habilitação <span aria-hidden="true" style="color:var(--red)">*</span></label>
+              <input id="f-cnh-num" name="cnh_num" type="text" placeholder="00000000000"
+                     autocomplete="off">
+              <small style="color:var(--text-tertiary)">11 dígitos numéricos (padrão brasileiro e estrangeiros amparados pela Convenção de Viena)</small>
+            </div>
+          </div>
+        </div>
+      </fieldset>
 
-      <div class="form-group">
-        <label for="f-vinculo-empresa">Vinculado a uma empresa?</label>
-        <select id="f-vinculo-empresa" aria-controls="f-empresa-wrap">
-          <option value="nao">Não</option>
-          <option value="sim">Sim</option>
-        </select>
-      </div>
+      <!-- ── Vínculo Empresarial ─────────────────────────────────────── -->
+      <fieldset class="form-fieldset">
+        <legend>Vínculo Empresarial</legend>
 
-      <div class="form-group" id="f-empresa-wrap" hidden aria-hidden="true">
-        <label for="f-empresa">Empresa <span aria-hidden="true" style="color:var(--red)">*</span></label>
-        <select id="f-empresa" autocomplete="organization">
-          <option value="">— Selecione —</option>
-          ${empresaOptions}
-        </select>
-      </div>
+        <div class="radio-row" role="radiogroup" aria-label="Vínculo com empresa">
+          <label class="radio-item">
+            <input type="radio" name="f-vinculo" value="nao" checked> Não vinculado
+          </label>
+          <label class="radio-item">
+            <input type="radio" name="f-vinculo" value="sim"> Vinculado a empresa
+          </label>
+        </div>
 
-      <!-- ── Endereço ───────────────────────────────────────────── -->
-      <div class="form-group full" style="margin-top:4px">
-        <p class="form-section-title">Endereço</p>
-      </div>
+        <div id="f-empresa-wrap" hidden aria-hidden="true" style="margin-top:14px">
+          <div class="form-group">
+            <label for="f-empresa">Empresa <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <select id="f-empresa" autocomplete="organization">
+              <option value="">— Selecione —</option>
+              ${empresaOptions}
+            </select>
+          </div>
+        </div>
+      </fieldset>
 
-      <div class="form-group">
-        <label for="f-cep">CEP</label>
-        <input id="f-cep" name="cep" type="text" placeholder="00000-000" autocomplete="postal-code">
-      </div>
+      <!-- ── Endereço ────────────────────────────────────────────────── -->
+      <fieldset class="form-fieldset">
+        <legend>Endereço</legend>
 
-      <div class="form-group full">
-        <label for="f-rua">Logradouro</label>
-        <input id="f-rua" name="rua" type="text" autocomplete="street-address">
-      </div>
+        <div class="input-row">
+          <div class="form-group">
+            <label for="f-cep">CEP</label>
+            <input id="f-cep" name="cep" type="text" placeholder="00000-000" autocomplete="postal-code">
+          </div>
+          <div class="form-group flex-2">
+            <label for="f-rua">Logradouro</label>
+            <input id="f-rua" name="rua" type="text" autocomplete="street-address">
+          </div>
+        </div>
 
-      <div class="form-group">
-        <label for="f-numero">Número</label>
-        <input id="f-numero" name="numero" type="text">
-      </div>
+        <div class="input-row">
+          <div class="form-group">
+            <label for="f-numero">Número</label>
+            <input id="f-numero" name="numero" type="text">
+          </div>
+          <div class="form-group">
+            <label for="f-complemento">Complemento</label>
+            <input id="f-complemento" name="complemento" type="text">
+          </div>
+          <div class="form-group">
+            <label for="f-bairro">Bairro</label>
+            <input id="f-bairro" name="bairro" type="text">
+          </div>
+        </div>
 
-      <div class="form-group">
-        <label for="f-complemento">Complemento</label>
-        <input id="f-complemento" name="complemento" type="text">
-      </div>
+        <div class="input-row">
+          <div class="form-group flex-2">
+            <label for="f-cidade">Cidade</label>
+            <input id="f-cidade" name="cidade" type="text" autocomplete="address-level2">
+          </div>
+          <div class="form-group">
+            <label for="f-uf">UF</label>
+            <input id="f-uf" name="uf" type="text" maxlength="2"
+                   autocomplete="address-level1" style="text-transform:uppercase">
+          </div>
+        </div>
+      </fieldset>
 
-      <div class="form-group">
-        <label for="f-bairro">Bairro</label>
-        <input id="f-bairro" name="bairro" type="text">
-      </div>
-
-      <div class="form-group">
-        <label for="f-cidade">Cidade</label>
-        <input id="f-cidade" name="cidade" type="text" autocomplete="address-level2">
-      </div>
-
-      <div class="form-group">
-        <label for="f-uf">UF</label>
-        <input id="f-uf" name="uf" type="text" maxlength="2"
-               autocomplete="address-level1" style="text-transform:uppercase">
-      </div>
-
-      <!-- ── Observações ────────────────────────────────────────── -->
-      <div class="form-group full" style="margin-top:4px">
+      <!-- ── Observações ─────────────────────────────────────────────── -->
+      <div class="form-group" style="margin-bottom:4px">
         <label for="f-obs">Observações</label>
         <textarea id="f-obs" name="observacoes" placeholder="Informações adicionais..." rows="3"></textarea>
       </div>
 
-    </div>
+    </form>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modal-cancel" type="button">Cancelar</button>
       <button class="btn btn-primary" id="modal-save" type="submit">
@@ -666,42 +705,38 @@ function modalNovoAluno() {
     </div>
   `, true);
 
-  applyMasks('f-');
+  // Masks
+  bindMasksNovoAluno();
 
-  // Atualiza label e hint ao trocar tipo de documento
-  const tipoDocEl = document.getElementById('f-tipo-doc');
-  const cpfLabelEl = document.getElementById('f-cpf-label');
-  const cpfHintEl  = document.getElementById('f-cpf-hint');
-  const DOC_HINTS = {
-    cpf: '',
-    rnm: 'Formato: A000000-A  (ex: V123456-J) — 1 letra + 6 dígitos + traço + 1 letra/dígito.',
-    cnh: 'Estrangeiros amparados pela Convenção de Viena podem usar CNH do país de origem por 180 dias. Após esse prazo, emite-se a CNH brasileira (mesmo padrão de 11 dígitos).',
-  };
-  function updateDocLabel() {
-    const cfg = DOC_CONFIG[tipoDocEl?.value] ?? DOC_CONFIG.cpf;
-    if (cpfLabelEl) cpfLabelEl.firstChild.textContent = cfg.label + ' ';
-    if (cpfHintEl)  cpfHintEl.textContent = DOC_HINTS[tipoDocEl?.value] ?? '';
-  }
-  tipoDocEl?.addEventListener('change', updateDocLabel);
-  updateDocLabel();
-
-  document.getElementById('f-uf').addEventListener('input', e => {
-    e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
-  });
-
-  // Mostra/oculta seletor de empresa
-  document.getElementById('f-vinculo-empresa')?.addEventListener('change', function () {
-    const wrap = document.getElementById('f-empresa-wrap');
-    const hidden = this.value === 'nao';
-    wrap.hidden = hidden;
-    wrap.setAttribute('aria-hidden', String(hidden));
-    if (hidden) document.getElementById('f-empresa').value = '';
-  });
-
-  document.getElementById('f-cep')?.addEventListener('blur', (e) => buscarCEP(e.target.value, 'f-'));
+  // Validação em tempo real
   bindBlur('f-nome',  'Nome',     ['required']);
   bindBlur('f-email', 'E-mail',   ['email']);
   bindBlur('f-tel',   'Telefone', ['phone']);
+
+  // Toggle de campos de documento (checkboxes)
+  ['cpf', 'rnm', 'cnh'].forEach(tipo => {
+    const cb    = document.getElementById(`check-${tipo}`);
+    const field = document.getElementById(`doc-${tipo}-field`);
+    const label = document.getElementById(`label-check-${tipo}`);
+    if (!cb || !field || !label) return;
+
+    cb.addEventListener('change', () => {
+      field.classList.toggle('visible', cb.checked);
+      label.classList.toggle('active', cb.checked);
+    });
+  });
+
+  // Toggle empresa (radio buttons)
+  document.querySelectorAll('input[name="f-vinculo"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const wrap   = document.getElementById('f-empresa-wrap');
+      const hidden = radio.value === 'nao';
+      wrap.hidden = hidden;
+      wrap.setAttribute('aria-hidden', String(hidden));
+      if (hidden) document.getElementById('f-empresa').value = '';
+    });
+  });
+
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => salvarNovoAluno());
 }
@@ -709,33 +744,48 @@ function modalNovoAluno() {
 // ─── INSERT real ──────────────────────────────────────────────────────────────
 async function salvarNovoAluno() {
   const nome       = document.getElementById('f-nome')?.value.trim();
-  const tipoDoc    = document.getElementById('f-tipo-doc')?.value || 'cpf';
-  const cpf        = document.getElementById('f-cpf')?.value.trim();
   const email      = document.getElementById('f-email')?.value.trim();
   const telefone   = document.getElementById('f-tel')?.value.trim();
   const nascimento = document.getElementById('f-nasc')?.value;
-  const vinculo    = document.getElementById('f-vinculo-empresa')?.value;
-  const empresaId  = vinculo === 'sim' ? (document.getElementById('f-empresa')?.value || null) : null;
-  const tipo       = empresaId ? 'empresa' : 'pessoa_fisica';
   const obs        = document.getElementById('f-obs')?.value.trim();
 
-  const cep         = document.getElementById('f-cep')?.value.trim() || null;
-  const rua         = document.getElementById('f-rua')?.value.trim() || null;
-  const numero      = document.getElementById('f-numero')?.value.trim() || null;
+  const hasCPF = document.getElementById('check-cpf')?.checked;
+  const hasRNM = document.getElementById('check-rnm')?.checked;
+  const hasCNH = document.getElementById('check-cnh')?.checked;
+
+  const cpfVal = hasCPF ? (document.getElementById('f-cpf')?.value.trim()     || null) : null;
+  const rnmVal = hasRNM ? (document.getElementById('f-rnm')?.value.trim()     || null) : null;
+  const cnhVal = hasCNH ? (document.getElementById('f-cnh-num')?.value.trim() || null) : null;
+
+  const vinculo   = document.querySelector('input[name="f-vinculo"]:checked')?.value || 'nao';
+  const empresaId = vinculo === 'sim' ? (document.getElementById('f-empresa')?.value || null) : null;
+  const tipo      = empresaId ? 'empresa' : 'pessoa_fisica';
+
+  const cep         = document.getElementById('f-cep')?.value.trim()         || null;
+  const rua         = document.getElementById('f-rua')?.value.trim()         || null;
+  const numero      = document.getElementById('f-numero')?.value.trim()      || null;
   const complemento = document.getElementById('f-complemento')?.value.trim() || null;
-  const bairro      = document.getElementById('f-bairro')?.value.trim() || null;
-  const cidade      = document.getElementById('f-cidade')?.value.trim() || null;
-  const uf          = document.getElementById('f-uf')?.value.trim() || null;
+  const bairro      = document.getElementById('f-bairro')?.value.trim()      || null;
+  const cidade      = document.getElementById('f-cidade')?.value.trim()      || null;
+  const uf          = document.getElementById('f-uf')?.value.trim()          || null;
 
-  const cfg     = DOC_CONFIG[tipoDoc] ?? DOC_CONFIG.cpf;
-  const docRule = cfg.rule; // 'cpf' | 'rnm' | 'cnh_estrangeiro'
+  // Pelo menos um documento é obrigatório
+  if (!hasCPF && !hasRNM && !hasCNH) {
+    toast('Selecione pelo menos um tipo de documento.', 'warning');
+    return;
+  }
 
-  const ok = validateForm([
-    { id: 'f-nome',  value: nome,     rules: ['required'],              label: 'Nome' },
-    { id: 'f-cpf',   value: cpf,      rules: ['required', docRule],     label: cfg.label },
-    { id: 'f-email', value: email,    rules: ['email'],                 label: 'E-mail' },
-    { id: 'f-tel',   value: telefone, rules: ['phone'],                 label: 'Telefone' },
-  ]);
+  // Monta regras de validação dinamicamente
+  const rules = [
+    { id: 'f-nome',  value: nome,     rules: ['required'], label: 'Nome' },
+    { id: 'f-email', value: email,    rules: ['email'],    label: 'E-mail' },
+    { id: 'f-tel',   value: telefone, rules: ['phone'],    label: 'Telefone' },
+  ];
+  if (hasCPF) rules.push({ id: 'f-cpf',     value: cpfVal, rules: ['required', 'cpf'],            label: 'CPF' });
+  if (hasRNM) rules.push({ id: 'f-rnm',     value: rnmVal, rules: ['required', 'rnm'],            label: 'RNM' });
+  if (hasCNH) rules.push({ id: 'f-cnh-num', value: cnhVal, rules: ['required', 'cnh_estrangeiro'], label: 'CNH' });
+
+  const ok = validateForm(rules);
   if (!ok) return;
 
   if (vinculo === 'sim' && !empresaId) {
@@ -744,9 +794,7 @@ async function salvarNovoAluno() {
   fieldOk('f-empresa');
 
   const rawCep = (cep || '').replace(/\D/g, '');
-  if (rawCep && rawCep.length !== 8) {
-    fieldError('f-cep', 'CEP deve ter 8 dígitos.'); return;
-  }
+  if (rawCep && rawCep.length !== 8) { fieldError('f-cep', 'CEP deve ter 8 dígitos.'); return; }
   fieldOk('f-cep');
 
   if (nascimento) {
@@ -766,10 +814,11 @@ async function salvarNovoAluno() {
       .insert({
         tenant_id:       getTenantId(),
         nome,
-        cpf,
-        tipo_documento:  tipoDoc,
-        email:           email || null,
-        telefone:        telefone || null,
+        cpf:             cpfVal,
+        rnm:             rnmVal,
+        cnh_num:         cnhVal,
+        email:           email     || null,
+        telefone:        telefone  || null,
         data_nascimento: nascimento || null,
         tipo_pessoa:     tipo,
         empresa_id:      empresaId,
@@ -779,7 +828,13 @@ async function salvarNovoAluno() {
       });
 
     if (error) {
-      if (error.code === '23505') throw new Error(`Já existe um aluno cadastrado com este ${cfg.label}.`);
+      if (error.code === '23505') {
+        const which = error.message?.includes('cpf') ? 'CPF'
+                    : error.message?.includes('rnm') ? 'RNM'
+                    : error.message?.includes('cnh') ? 'CNH'
+                    : 'documento';
+        throw new Error(`Já existe um aluno cadastrado com este ${which}.`);
+      }
       throw error;
     }
 
@@ -797,112 +852,148 @@ async function salvarNovoAluno() {
 // ─── Modal: Editar Aluno ──────────────────────────────────────────────────────
 function modalEditarAluno(aluno) {
   const empresaOptions = _empresasCache.map(e =>
-    `<option value="${e.id}" ${e.id === aluno.empresa_id ? 'selected' : ''}>${e.nome}</option>`
+    `<option value="${e.id}" ${e.id === aluno.empresa_id ? 'selected' : ''}>${esc(e.nome)}</option>`
   ).join('');
 
   openModal(`Editar — ${aluno.nome.split(' ')[0]}`, `
-    <div class="form-grid">
-      <div class="form-group full">
-        <label>Nome Completo *</label>
-        <input id="e-nome" type="text" value="${aluno.nome}">
-      </div>
-      <div class="form-group">
-        <label>CPF</label>
-        <input id="e-cpf" type="text" value="${aluno.cpf ?? ''}" disabled style="opacity:0.6">
-      </div>
-      <div class="form-group">
-        <label>E-mail</label>
-        <input id="e-email" type="email" value="${aluno.email ?? ''}">
-      </div>
-      <div class="form-group">
-        <label>Telefone / WhatsApp</label>
-        <input id="e-tel" type="text" value="${aluno.telefone ?? ''}">
-      </div>
-      <div class="form-group">
-        <label>Tipo</label>
-        <select id="e-tipo">
-          <option value="pessoa_fisica" ${aluno.tipo_pessoa === 'pessoa_fisica' ? 'selected' : ''}>Pessoa Física</option>
-          <option value="empresa"       ${aluno.tipo_pessoa === 'empresa'       ? 'selected' : ''}>Via Empresa</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Empresa</label>
-        <select id="e-empresa">
-          <option value="">— Nenhuma —</option>
-          ${empresaOptions}
-        </select>
-      </div>
-      <div class="form-group full" style="grid-column: 1 / -1">
-        <hr style="border:0;border-top:1px solid var(--border-color);margin:10px 0"/>
-        <label style="color:var(--accent);margin-bottom:8px">Endereço (Auto-CEP)</label>
-      </div>
-      <div class="form-group">
-        <label>CEP</label>
-        <input id="e-cep" type="text" placeholder="00000-000" value="${aluno.cep || ''}">
-      </div>
-      <div class="form-group full">
-        <label>Rua/Logradouro</label>
-        <input id="e-rua" type="text" value="${esc(aluno.rua || '')}">
-      </div>
-      <div class="form-group">
-        <label>Número *</label>
-        <input id="e-numero" type="text" value="${esc(aluno.numero || '')}">
-      </div>
-      <div class="form-group">
-        <label>Complemento</label>
-        <input id="e-complemento" type="text" value="${esc(aluno.complemento || '')}">
-      </div>
-      <div class="form-group">
-        <label>Bairro</label>
-        <input id="e-bairro" type="text" value="${esc(aluno.bairro || '')}">
-      </div>
-      <div class="form-group">
-        <label>Cidade</label>
-        <input id="e-cidade" type="text" value="${esc(aluno.cidade || '')}">
-      </div>
-      <div class="form-group">
-        <label>UF</label>
-        <input id="e-uf" type="text" maxlength="2" value="${esc(aluno.uf || '')}">
-      </div>
-    </div>
+    <form id="form-editar-aluno" novalidate>
+
+      <fieldset class="form-fieldset">
+        <legend>Identificação</legend>
+        <div class="input-row">
+          <div class="form-group flex-2">
+            <label for="e-nome">Nome Completo *</label>
+            <input id="e-nome" type="text" value="${esc(aluno.nome)}">
+          </div>
+          <div class="form-group">
+            <label for="e-nasc">Nascimento</label>
+            <input id="e-nasc" type="date" value="${aluno.data_nascimento || ''}">
+          </div>
+        </div>
+        <div class="input-row">
+          <div class="form-group">
+            <label for="e-email">E-mail</label>
+            <input id="e-email" type="email" value="${esc(aluno.email ?? '')}">
+          </div>
+          <div class="form-group">
+            <label for="e-tel">Telefone / WhatsApp</label>
+            <input id="e-tel" type="text" value="${esc(aluno.telefone ?? '')}">
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="form-fieldset">
+        <legend>Documentos</legend>
+        <div class="input-row">
+          <div class="form-group">
+            <label for="e-cpf">CPF</label>
+            <input id="e-cpf" type="text" value="${esc(aluno.cpf ?? '')}" placeholder="000.000.000-00">
+          </div>
+          <div class="form-group">
+            <label for="e-rnm">RNM</label>
+            <input id="e-rnm" type="text" value="${esc(aluno.rnm ?? '')}" placeholder="V123456-J">
+          </div>
+          <div class="form-group">
+            <label for="e-cnh-num">CNH</label>
+            <input id="e-cnh-num" type="text" value="${esc(aluno.cnh_num ?? '')}" placeholder="00000000000">
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="form-fieldset">
+        <legend>Vínculo Empresarial</legend>
+        <div class="input-row">
+          <div class="form-group">
+            <label for="e-tipo">Tipo de pessoa</label>
+            <select id="e-tipo">
+              <option value="pessoa_fisica" ${aluno.tipo_pessoa === 'pessoa_fisica' ? 'selected' : ''}>Pessoa Física</option>
+              <option value="empresa"       ${aluno.tipo_pessoa === 'empresa'       ? 'selected' : ''}>Via Empresa</option>
+            </select>
+          </div>
+          <div class="form-group flex-2">
+            <label for="e-empresa">Empresa</label>
+            <select id="e-empresa">
+              <option value="">— Nenhuma —</option>
+              ${empresaOptions}
+            </select>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="form-fieldset">
+        <legend>Endereço</legend>
+        <div class="input-row">
+          <div class="form-group">
+            <label for="e-cep">CEP</label>
+            <input id="e-cep" type="text" placeholder="00000-000" value="${esc(aluno.cep || '')}">
+          </div>
+          <div class="form-group flex-2">
+            <label for="e-rua">Logradouro</label>
+            <input id="e-rua" type="text" value="${esc(aluno.rua || '')}">
+          </div>
+        </div>
+        <div class="input-row">
+          <div class="form-group">
+            <label for="e-numero">Número</label>
+            <input id="e-numero" type="text" value="${esc(aluno.numero || '')}">
+          </div>
+          <div class="form-group">
+            <label for="e-complemento">Complemento</label>
+            <input id="e-complemento" type="text" value="${esc(aluno.complemento || '')}">
+          </div>
+          <div class="form-group">
+            <label for="e-bairro">Bairro</label>
+            <input id="e-bairro" type="text" value="${esc(aluno.bairro || '')}">
+          </div>
+        </div>
+        <div class="input-row">
+          <div class="form-group flex-2">
+            <label for="e-cidade">Cidade</label>
+            <input id="e-cidade" type="text" value="${esc(aluno.cidade || '')}">
+          </div>
+          <div class="form-group">
+            <label for="e-uf">UF</label>
+            <input id="e-uf" type="text" maxlength="2" value="${esc(aluno.uf || '')}">
+          </div>
+        </div>
+      </fieldset>
+
+    </form>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
       <button class="btn btn-primary" id="modal-update" data-id="${aluno.id}">Salvar Alterações</button>
     </div>
-  `);
+  `, true);
 
-  applyMasks('e-');
-  // Ajusta a label inicial do CPF/CNPJ
-  const tipoEl = document.getElementById('e-tipo');
-  const cpfLabel = document.getElementById('e-cpf')?.previousElementSibling;
-  if(tipoEl && cpfLabel && cpfLabel.tagName === 'LABEL') {
-    cpfLabel.textContent = tipoEl.value === 'pessoa_fisica' ? 'CPF' : 'CNPJ';
-  }
-
-  document.getElementById('e-cep')?.addEventListener('blur', (e) => buscarCEP(e.target.value, 'e-'));
+  bindMasksEditarAluno();
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-update')?.addEventListener('click', () => atualizarAluno(aluno.id));
 }
 
 // ─── UPDATE real ──────────────────────────────────────────────────────────────
 async function atualizarAluno(id) {
-  const nome      = document.getElementById('e-nome')?.value.trim();
-  const email     = document.getElementById('e-email')?.value.trim();
-  const telefone  = document.getElementById('e-tel')?.value.trim();
-  const tipo      = document.getElementById('e-tipo')?.value;
-  const empresaId = document.getElementById('e-empresa')?.value || null;
-  const cep         = document.getElementById('e-cep')?.value.trim() || null;
-  const rua         = document.getElementById('e-rua')?.value.trim() || null;
-  const numero      = document.getElementById('e-numero')?.value.trim() || null;
+  const nome        = document.getElementById('e-nome')?.value.trim();
+  const email       = document.getElementById('e-email')?.value.trim();
+  const telefone    = document.getElementById('e-tel')?.value.trim();
+  const nascimento  = document.getElementById('e-nasc')?.value || null;
+  const tipo        = document.getElementById('e-tipo')?.value;
+  const empresaId   = document.getElementById('e-empresa')?.value || null;
+  const cpfVal      = document.getElementById('e-cpf')?.value.trim() || null;
+  const rnmVal      = document.getElementById('e-rnm')?.value.trim() || null;
+  const cnhVal      = document.getElementById('e-cnh-num')?.value.trim() || null;
+
+  const cep         = document.getElementById('e-cep')?.value.trim()         || null;
+  const rua         = document.getElementById('e-rua')?.value.trim()         || null;
+  const numero      = document.getElementById('e-numero')?.value.trim()      || null;
   const complemento = document.getElementById('e-complemento')?.value.trim() || null;
-  const bairro      = document.getElementById('e-bairro')?.value.trim() || null;
-  const cidade      = document.getElementById('e-cidade')?.value.trim() || null;
-  const uf          = document.getElementById('e-uf')?.value.trim() || null;
+  const bairro      = document.getElementById('e-bairro')?.value.trim()      || null;
+  const cidade      = document.getElementById('e-cidade')?.value.trim()      || null;
+  const uf          = document.getElementById('e-uf')?.value.trim()          || null;
 
   if (!nome) { toast('O campo Nome é obrigatório.', 'warning'); return; }
-  
+
   const rawTel = (telefone || '').replace(/\D/g, '');
-  if (rawTel && rawTel.length < 10) { toast('Telefone inválido. Deve ter pelo menos 10 dígitos com DDD.', 'warning'); return; }
+  if (rawTel && rawTel.length < 10) { toast('Telefone inválido. Use DDD + número (10-11 dígitos).', 'warning'); return; }
 
   const rawCep = (cep || '').replace(/\D/g, '');
   if (rawCep && rawCep.length !== 8) { toast('CEP inválido.', 'warning'); return; }
@@ -917,10 +1008,14 @@ async function atualizarAluno(id) {
       .from('alunos')
       .update({
         nome,
-        email:      email     || null,
-        telefone:   telefone  || null,
-        tipo_pessoa: tipo,
-        empresa_id: empresaId,
+        cpf:             cpfVal,
+        rnm:             rnmVal,
+        cnh_num:         cnhVal,
+        email:           email    || null,
+        telefone:        telefone || null,
+        data_nascimento: nascimento,
+        tipo_pessoa:     tipo,
+        empresa_id:      empresaId,
         cep, rua, numero, complemento, bairro, cidade, uf
       })
       .eq('id', id)
@@ -939,21 +1034,22 @@ async function atualizarAluno(id) {
   }
 }
 
-// ─── Exportar CSV ────────────────────────────────────────────────────────────
+// ─── Exportar CSV ─────────────────────────────────────────────────────────────
 function exportarCSV() {
-  if (!_alunosCache.length) {
-    toast('Nenhum dado para exportar.', 'warning');
-    return;
-  }
-  const headers = ['Nome','Tipo Documento','Documento','Email','Telefone','Tipo','Empresa','Status'];
+  if (!_alunosCache.length) { toast('Nenhum dado para exportar.', 'warning'); return; }
+  const headers = ['Nome','CPF','RNM','CNH','Email','Telefone','Tipo','Empresa','Status'];
   const rows = _alunosCache.map(a => [
     a.nome,
-    (DOC_CONFIG[a.tipo_documento] ?? DOC_CONFIG.cpf).label,
-    a.cpf,
-    a.email ?? '', a.telefone ?? '',
-    a.tipo_pessoa, a.empresa_nome, a.status,
-  ].map(v => `"${v}"`).join(','));
-  const csv = [headers.join(','), ...rows].join('\n');
+    a.cpf     ?? '',
+    a.rnm     ?? '',
+    a.cnh_num ?? '',
+    a.email   ?? '',
+    a.telefone ?? '',
+    a.tipo_pessoa,
+    a.empresa_nome,
+    a.status,
+  ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+  const csv  = [headers.join(','), ...rows].join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
