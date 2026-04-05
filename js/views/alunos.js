@@ -15,12 +15,14 @@
 import { getClient, getTenantId } from '../core/supabase.js';
 import { currentUser } from '../core/auth.js';
 import { setContent, openModal, closeModal, toast } from '../ui/components.js';
-import { validateForm, fieldOk, clearErrors, isValidCPF, isValidCNPJ, bindBlur } from '../ui/validate.js';
+import { validateForm, fieldOk, bindBlur, isValidRNM, isValidCNHEstrangeiro } from '../ui/validate.js';
 
 // Cache local — evita re-fetch desnecessário ao filtrar
 let _alunosCache = [];
 // Cache de empresas para o select do modal
 let _empresasCache = [];
+// IDs selecionados para delete em massa
+let _selectedIds = new Set();
 
 // ─── Render principal ─────────────────────────────────────────────────────────
 export async function render() {
@@ -49,7 +51,7 @@ export async function render() {
       <div class="table-toolbar">
         <div class="search-input-wrap">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input class="search-input" id="search-alunos" placeholder="Nome, CPF ou e-mail...">
+          <input class="search-input" id="search-alunos" placeholder="Nome, CPF, CNPJ, telefone ou e-mail...">
         </div>
         <select class="select-input" id="filtro-tipo">
           <option value="">Todos os tipos</option>
@@ -61,13 +63,23 @@ export async function render() {
           <option value="ativo">Ativo</option>
           <option value="inativo">Inativo</option>
         </select>
+        <button class="btn" id="btn-excluir-selecionados" hidden
+          style="background:var(--red);color:#fff;opacity:0.9;display:none" aria-live="polite">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          <span id="btn-excluir-label">Excluir selecionados</span>
+        </button>
       </div>
+      <div style="overflow-x:auto">
       <table>
         <thead><tr>
-          <th>Aluno</th><th>CPF</th><th>Contato</th><th>Tipo</th><th>Empresa</th><th>Status</th><th>Ações</th>
+          <th style="width:36px;padding:10px 8px">
+            <input type="checkbox" id="check-all" aria-label="Selecionar todos"
+              style="width:15px;height:15px;cursor:pointer;accent-color:var(--red)">
+          </th>
+          <th>Aluno</th><th>Documento</th><th>Contato</th><th>Tipo</th><th>Empresa</th><th>Status</th><th>Ações</th>
         </tr></thead>
         <tbody id="alunos-tbody">
-          <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-tertiary)">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-tertiary)">
             <div style="display:flex;align-items:center;justify-content:center;gap:10px">
               <div class="skeleton" style="width:16px;height:16px;border-radius:50%"></div>
               Carregando alunos...
@@ -75,6 +87,7 @@ export async function render() {
           </td></tr>
         </tbody>
       </table>
+      </div>
       <div class="table-footer">
         <span class="table-info" id="alunos-count">—</span>
         <div class="pagination" id="alunos-pag"></div>
@@ -85,6 +98,7 @@ export async function render() {
   // Registra listeners que não dependem dos dados
   document.getElementById('btn-novo-aluno')?.addEventListener('click', () => modalNovoAluno());
   document.getElementById('btn-exportar')?.addEventListener('click', () => exportarCSV());
+  document.getElementById('btn-excluir-selecionados')?.addEventListener('click', () => excluirSelecionados());
 
   // Carrega dados do Supabase em paralelo
   await Promise.all([loadAlunos(), loadEmpresas()]);
@@ -96,7 +110,7 @@ async function loadAlunos() {
     const client = await getClient();
     const { data, error } = await client
       .from('alunos')
-      .select('id, nome, cpf, email, telefone, data_nascimento, tipo_pessoa, status, cep, rua, numero, complemento, bairro, cidade, uf, empresa:empresa_id(id, nome)')
+      .select('id, nome, cpf, tipo_documento, email, telefone, data_nascimento, tipo_pessoa, status, cep, rua, numero, complemento, bairro, cidade, uf, empresa:empresa_id(id, nome)')
       .eq('tenant_id', getTenantId())
       .order('nome')
       .limit(200);
@@ -160,26 +174,38 @@ function renderTabela(alunos) {
   if (!tbody) return;
 
   if (!alunos.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:48px;color:var(--text-tertiary)">Nenhum aluno encontrado</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:48px;color:var(--text-tertiary)">Nenhum aluno encontrado</td></tr>`;
     if (countEl) countEl.textContent = '0 alunos';
+    updateSelecaoUI();
     return;
   }
 
   tbody.innerHTML = alunos.map(a => `
-    <tr>
+    <tr data-id="${a.id}">
+      <td style="padding:10px 8px">
+        <input type="checkbox" class="row-check" data-id="${a.id}"
+          aria-label="Selecionar ${esc(a.nome)}"
+          style="width:15px;height:15px;cursor:pointer;accent-color:var(--red)"
+          ${_selectedIds.has(a.id) ? 'checked' : ''}>
+      </td>
       <td>
         <div style="display:flex;align-items:center;gap:9px">
-          <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));display:grid;place-items:center;font-size:11px;font-weight:600;color:white;flex-shrink:0">${a.nome.charAt(0)}</div>
+          <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--purple));display:grid;place-items:center;font-size:11px;font-weight:600;color:white;flex-shrink:0" aria-hidden="true">${a.nome.charAt(0)}</div>
           <div>
-            <div style="font-weight:500;font-size:13px">${a.nome}</div>
-            <div style="font-size:11px;color:var(--text-tertiary)">${a.email ?? '—'}</div>
+            <div style="font-weight:500;font-size:13px">${esc(a.nome)}</div>
+            <div style="font-size:11px;color:var(--text-tertiary)">${esc(a.email ?? '—')}</div>
           </div>
         </div>
       </td>
-      <td style="font-family:var(--font-mono);font-size:12px">${a.cpf ?? '—'}</td>
-      <td style="font-size:12.5px">${a.telefone ?? '—'}</td>
+      <td>
+        <div style="font-family:var(--font-mono);font-size:12px">${esc(a.cpf ?? '—')}</div>
+        ${a.tipo_documento && a.tipo_documento !== 'cpf'
+          ? `<div style="font-size:10px;color:var(--text-tertiary);margin-top:2px">${a.tipo_documento === 'rnm' ? 'RNM' : 'CNH Est.'}</div>`
+          : ''}
+      </td>
+      <td style="font-size:12.5px">${esc(a.telefone ?? '—')}</td>
       <td><span class="badge ${a.tipo_pessoa === 'pessoa_fisica' ? 'badge-blue' : 'badge-amber'}">${a.tipo_pessoa === 'pessoa_fisica' ? 'PF' : 'Empresa'}</span></td>
-      <td style="font-size:12.5px;color:var(--text-secondary)">${a.empresa_nome}</td>
+      <td style="font-size:12.5px;color:var(--text-secondary)">${esc(a.empresa_nome)}</td>
       <td><span class="badge ${a.status === 'ativo' ? 'badge-green' : 'badge-gray'}">${a.status === 'ativo' ? 'Ativo' : 'Inativo'}</span></td>
       <td>
         <div style="display:flex;gap:4px">
@@ -188,6 +214,10 @@ function renderTabela(alunos) {
           <button class="action-btn danger" data-action="toggle-status" data-id="${a.id}" data-status="${a.status}">
             ${a.status === 'ativo' ? 'Inativar' : 'Ativar'}
           </button>
+          <button class="action-btn danger" data-action="excluir" data-id="${a.id}" data-nome="${esc(a.nome)}"
+            title="Excluir permanentemente" aria-label="Excluir ${esc(a.nome)}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+          </button>
         </div>
       </td>
     </tr>
@@ -195,6 +225,7 @@ function renderTabela(alunos) {
 
   if (countEl) countEl.textContent = `${alunos.length} aluno${alunos.length !== 1 ? 's' : ''}`;
   bindRowActions();
+  bindCheckboxes();
 }
 
 // ─── Filtros em tempo real (client-side sobre o cache) ─────────────────────────
@@ -205,14 +236,33 @@ function bindFiltros() {
   if (!search) return;
 
   function applyFilter() {
-    const q  = search.value.toLowerCase().trim();
-    const tp = filtTipo.value;
-    const st = filtSt.value;
-    const filtered = _alunosCache.filter(a =>
-      (!q  || a.nome.toLowerCase().includes(q) || (a.cpf ?? '').includes(q) || (a.email ?? '').toLowerCase().includes(q)) &&
-      (!tp || a.tipo_pessoa === tp) &&
-      (!st || a.status === st)
-    );
+    const raw = search.value.trim();
+    const q   = raw.toLowerCase();
+    // Versão só com dígitos — para buscar CPF/CNPJ/telefone sem separadores
+    const qDigits = raw.replace(/\D/g, '');
+    const tp  = filtTipo.value;
+    const st  = filtSt.value;
+
+    const filtered = _alunosCache.filter(a => {
+      if (q) {
+        const cpfDigits  = (a.cpf  ?? '').replace(/\D/g, '');
+        const telDigits  = (a.telefone ?? '').replace(/\D/g, '');
+        const nomeMatch  = a.nome.toLowerCase().includes(q);
+        const emailMatch = (a.email ?? '').toLowerCase().includes(q);
+        // Se a busca for só dígitos, compara sem formatação
+        const cpfMatch   = qDigits
+          ? cpfDigits.includes(qDigits)
+          : (a.cpf ?? '').includes(q);
+        const telMatch   = qDigits
+          ? telDigits.includes(qDigits)
+          : (a.telefone ?? '').includes(q);
+
+        if (!nomeMatch && !emailMatch && !cpfMatch && !telMatch) return false;
+      }
+      if (tp && a.tipo_pessoa !== tp) return false;
+      if (st && a.status !== st) return false;
+      return true;
+    });
     renderTabela(filtered);
   }
 
@@ -229,17 +279,112 @@ function bindRowActions() {
       if (aluno) modalVerFicha(aluno);
     });
   });
-
   document.querySelectorAll('.action-btn[data-action="editar"]').forEach(btn => {
     btn.addEventListener('click', () => {
       const aluno = _alunosCache.find(a => a.id === btn.dataset.id);
       if (aluno) modalEditarAluno(aluno);
     });
   });
-
   document.querySelectorAll('.action-btn[data-action="toggle-status"]').forEach(btn => {
     btn.addEventListener('click', () => toggleStatus(btn.dataset.id, btn.dataset.status));
   });
+  document.querySelectorAll('.action-btn[data-action="excluir"]').forEach(btn => {
+    btn.addEventListener('click', () => excluirAluno(btn.dataset.id, btn.dataset.nome));
+  });
+}
+
+// ─── Checkboxes de seleção ────────────────────────────────────────────────────
+function bindCheckboxes() {
+  // Checkboxes individuais
+  document.querySelectorAll('.row-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) _selectedIds.add(cb.dataset.id);
+      else _selectedIds.delete(cb.dataset.id);
+      updateSelecaoUI();
+    });
+  });
+
+  // Selecionar todos
+  const checkAll = document.getElementById('check-all');
+  if (checkAll) {
+    // Sincroniza estado inicial
+    const visibleIds = [...document.querySelectorAll('.row-check')].map(c => c.dataset.id);
+    checkAll.checked = visibleIds.length > 0 && visibleIds.every(id => _selectedIds.has(id));
+    checkAll.indeterminate = !checkAll.checked && visibleIds.some(id => _selectedIds.has(id));
+
+    checkAll.addEventListener('change', () => {
+      document.querySelectorAll('.row-check').forEach(cb => {
+        cb.checked = checkAll.checked;
+        if (checkAll.checked) _selectedIds.add(cb.dataset.id);
+        else _selectedIds.delete(cb.dataset.id);
+      });
+      updateSelecaoUI();
+    });
+  }
+}
+
+function updateSelecaoUI() {
+  const btn   = document.getElementById('btn-excluir-selecionados');
+  const label = document.getElementById('btn-excluir-label');
+  if (!btn) return;
+  const n = _selectedIds.size;
+  if (n > 0) {
+    btn.hidden = false;
+    btn.style.display = '';
+    if (label) label.textContent = `Excluir ${n} selecionado${n !== 1 ? 's' : ''}`;
+  } else {
+    btn.hidden = true;
+    btn.style.display = 'none';
+  }
+  // Atualiza checkbox de cabeçalho
+  const checkAll = document.getElementById('check-all');
+  if (checkAll) {
+    const allCbs = [...document.querySelectorAll('.row-check')];
+    checkAll.checked = allCbs.length > 0 && allCbs.every(c => _selectedIds.has(c.dataset.id));
+    checkAll.indeterminate = !checkAll.checked && allCbs.some(c => _selectedIds.has(c.dataset.id));
+  }
+}
+
+// ─── Excluir individual ───────────────────────────────────────────────────────
+async function excluirAluno(id, nome) {
+  if (!confirm(`Excluir permanentemente "${nome}"?\n\nEsta ação não pode ser desfeita. Matrículas e certificados vinculados serão afetados.`)) return;
+  try {
+    const client = await getClient();
+    const { error } = await client
+      .from('alunos').delete()
+      .eq('id', id).eq('tenant_id', getTenantId());
+    if (error) throw error;
+    _selectedIds.delete(id);
+    toast(`Aluno "${nome.split(' ')[0]}" excluído.`, 'success');
+    await loadAlunos();
+  } catch (err) {
+    const msg = err.message?.includes('violates foreign key')
+      ? 'Não é possível excluir: aluno possui matrículas ou certificados vinculados.'
+      : err.message;
+    toast(`Erro: ${msg}`, 'error');
+  }
+}
+
+// ─── Excluir em massa ─────────────────────────────────────────────────────────
+async function excluirSelecionados() {
+  const ids = [..._selectedIds];
+  if (!ids.length) return;
+  if (!confirm(`Excluir permanentemente ${ids.length} aluno${ids.length !== 1 ? 's' : ''}?\n\nEsta ação não pode ser desfeita.`)) return;
+  try {
+    const client = await getClient();
+    const { error } = await client
+      .from('alunos').delete()
+      .in('id', ids).eq('tenant_id', getTenantId());
+    if (error) throw error;
+    _selectedIds.clear();
+    toast(`${ids.length} aluno${ids.length !== 1 ? 's excluídos' : ' excluído'} com sucesso.`, 'success');
+    await loadAlunos();
+  } catch (err) {
+    const msg = err.message?.includes('violates foreign key')
+      ? 'Um ou mais alunos possuem matrículas ou certificados vinculados e não podem ser excluídos.'
+      : err.message;
+    toast(`Erro: ${msg}`, 'error');
+  }
 }
 
 // ─── Toggle ativo/inativo ─────────────────────────────────────────────────────
@@ -266,7 +411,7 @@ function modalVerFicha(aluno) {
   openModal(`Ficha do Aluno — ${aluno.nome.split(' ')[0]}`, `
     <div style="display:flex;flex-direction:column;gap:12px;font-size:13px">
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">Nome:</strong><span>${esc(aluno.nome)}</span></div>
-      <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">CPF:</strong><span>${esc(aluno.cpf || '—')}</span></div>
+      <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">${(DOC_CONFIG[aluno.tipo_documento] ?? DOC_CONFIG.cpf).label}:</strong><span>${esc(aluno.cpf || '—')}</span></div>
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">E-mail:</strong><span>${esc(aluno.email || '—')}</span></div>
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">Telefone:</strong><span>${esc(aluno.telefone || '—')}</span></div>
       <div style="display:flex;gap:12px"><strong style="width:120px;color:var(--text-secondary)">Nascimento:</strong><span>${aluno.data_nascimento || '—'}</span></div>
@@ -301,14 +446,6 @@ function maskCPF(v) {
   if (d.length <= 9)  return d.replace(/(\d{3})(\d{3})(\d+)/, '$1.$2.$3');
   return d.replace(/(\d{3})(\d{3})(\d{3})(\d{1,2})/, '$1.$2.$3-$4');
 }
-function maskCNPJ(v) {
-  const d = v.replace(/\D/g, '').slice(0, 14);
-  if (d.length <= 2)  return d;
-  if (d.length <= 5)  return d.replace(/(\d{2})(\d+)/, '$1.$2');
-  if (d.length <= 8)  return d.replace(/(\d{2})(\d{3})(\d+)/, '$1.$2.$3');
-  if (d.length <= 12) return d.replace(/(\d{2})(\d{3})(\d{3})(\d+)/, '$1.$2.$3/$4');
-  return d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{1,2})/, '$1.$2.$3/$4-$5');
-}
 function maskTel(v) {
   const d = v.replace(/\D/g, '').slice(0, 11);
   if (d.length <= 2)  return d.length ? `(${d}` : d;
@@ -321,18 +458,53 @@ function maskCEP(v) {
   return d.length > 5 ? d.replace(/(\d{5})(\d+)/, '$1-$2') : d;
 }
 
-function applyMasks(prefix) {
-  const cpfEl = document.getElementById(prefix + 'cpf');
-  const telEl = document.getElementById(prefix + 'tel');
-  const cepEl = document.getElementById(prefix + 'cep');
+// RNM: 1 letra + 6 dígitos + traço + 1 letra/dígito  →  V123456-J
+function maskRNM(v) {
+  const raw = v.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (raw.length === 0) return '';
+  const letra1 = /[A-Z]/.test(raw[0]) ? raw[0] : '';
+  const resto  = letra1 ? raw.slice(1) : raw;
+  const digitos = resto.replace(/[^0-9]/g, '').slice(0, 6);
+  const verif   = resto.replace(/[^A-Z0-9]/g, '').slice(6, 7);
+  let result = letra1 + digitos;
+  if (digitos.length === 6 && verif) result += '-' + verif;
+  return result;
+}
 
-  if (cpfEl) {
-    cpfEl.addEventListener('input', (e) => {
-      e.target.value = maskCPF(e.target.value);
-    });
-    cpfEl.setAttribute('maxlength', '14');
-    cpfEl.setAttribute('inputmode', 'numeric');
-  }
+// CNH Estrangeiro: apenas 11 dígitos numéricos
+function maskCNHEstrangeiro(v) {
+  return v.replace(/\D/g, '').slice(0, 11);
+}
+
+// Mapa de configuração por tipo de documento
+const DOC_CONFIG = {
+  cpf:             { label: 'CPF',                    placeholder: '000.000.000-00', maxlength: '14', inputmode: 'numeric',   mask: maskCPF,            rule: 'cpf' },
+  rnm:             { label: 'RNM',                    placeholder: 'V123456-J',      maxlength: '9',  inputmode: 'text',       mask: maskRNM,            rule: 'rnm' },
+  cnh_estrangeiro: { label: 'CNH Estrangeiro (11 dígitos)', placeholder: '00000000000', maxlength: '11', inputmode: 'numeric', mask: maskCNHEstrangeiro, rule: 'cnh_estrangeiro' },
+};
+
+function applyDocMask(docEl, tipoDocEl) {
+  if (!docEl || !tipoDocEl) return;
+  const update = () => {
+    const cfg = DOC_CONFIG[tipoDocEl.value] ?? DOC_CONFIG.cpf;
+    docEl.value       = cfg.mask(docEl.value);
+    docEl.placeholder = cfg.placeholder;
+    docEl.maxLength   = cfg.maxlength;
+    docEl.inputMode   = cfg.inputmode;
+  };
+  docEl.addEventListener('input', update);
+  tipoDocEl.addEventListener('change', () => { docEl.value = ''; update(); fieldOk(docEl.id); });
+  update(); // estado inicial
+}
+
+function applyMasks(prefix) {
+  const docEl     = document.getElementById(prefix + 'cpf');
+  const tipoDocEl = document.getElementById(prefix + 'tipo-doc');
+  const telEl     = document.getElementById(prefix + 'tel');
+  const cepEl     = document.getElementById(prefix + 'cep');
+
+  applyDocMask(docEl, tipoDocEl);
+
   if (telEl) {
     telEl.addEventListener('input', (e) => { e.target.value = maskTel(e.target.value); });
     telEl.setAttribute('maxlength', '15');
@@ -379,9 +551,19 @@ function modalNovoAluno() {
       </div>
 
       <div class="form-group">
-        <label for="f-cpf">CPF <span aria-hidden="true" style="color:var(--red)">*</span></label>
+        <label for="f-tipo-doc">Tipo de Documento <span aria-hidden="true" style="color:var(--red)">*</span></label>
+        <select id="f-tipo-doc" name="tipo_documento" aria-required="true">
+          <option value="cpf">CPF — Brasileiro</option>
+          <option value="rnm">RNM — Registro Nacional Migratório (Estrangeiro)</option>
+          <option value="cnh_estrangeiro">CNH Estrangeiro (11 dígitos)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="f-cpf" id="f-cpf-label">CPF <span aria-hidden="true" style="color:var(--red)">*</span></label>
         <input id="f-cpf" name="cpf" type="text" placeholder="000.000.000-00"
                aria-required="true" autocomplete="off">
+        <small id="f-cpf-hint" style="font-size:10.5px;color:var(--text-tertiary)"></small>
       </div>
 
       <div class="form-group">
@@ -478,6 +660,24 @@ function modalNovoAluno() {
   `);
 
   applyMasks('f-');
+
+  // Atualiza label e hint ao trocar tipo de documento
+  const tipoDocEl = document.getElementById('f-tipo-doc');
+  const cpfLabelEl = document.getElementById('f-cpf-label');
+  const cpfHintEl  = document.getElementById('f-cpf-hint');
+  const DOC_HINTS = {
+    cpf:             '',
+    rnm:             'Formato: A000000-A  (ex: V123456-J)',
+    cnh_estrangeiro: 'Estrangeiros amparados pela Convenção de Viena podem usar CNH de origem por 180 dias.',
+  };
+  function updateDocLabel() {
+    const cfg = DOC_CONFIG[tipoDocEl?.value] ?? DOC_CONFIG.cpf;
+    if (cpfLabelEl) cpfLabelEl.firstChild.textContent = cfg.label + ' ';
+    if (cpfHintEl)  cpfHintEl.textContent = DOC_HINTS[tipoDocEl?.value] ?? '';
+  }
+  tipoDocEl?.addEventListener('change', updateDocLabel);
+  updateDocLabel();
+
   document.getElementById('f-uf').addEventListener('input', e => {
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 2);
   });
@@ -502,6 +702,7 @@ function modalNovoAluno() {
 // ─── INSERT real ──────────────────────────────────────────────────────────────
 async function salvarNovoAluno() {
   const nome       = document.getElementById('f-nome')?.value.trim();
+  const tipoDoc    = document.getElementById('f-tipo-doc')?.value || 'cpf';
   const cpf        = document.getElementById('f-cpf')?.value.trim();
   const email      = document.getElementById('f-email')?.value.trim();
   const telefone   = document.getElementById('f-tel')?.value.trim();
@@ -519,11 +720,14 @@ async function salvarNovoAluno() {
   const cidade      = document.getElementById('f-cidade')?.value.trim() || null;
   const uf          = document.getElementById('f-uf')?.value.trim() || null;
 
+  const cfg     = DOC_CONFIG[tipoDoc] ?? DOC_CONFIG.cpf;
+  const docRule = cfg.rule; // 'cpf' | 'rnm' | 'cnh_estrangeiro'
+
   const ok = validateForm([
-    { id: 'f-nome',  value: nome,     rules: ['required'],        label: 'Nome' },
-    { id: 'f-cpf',   value: cpf,      rules: ['required', 'cpf'], label: 'CPF' },
-    { id: 'f-email', value: email,    rules: ['email'],           label: 'E-mail' },
-    { id: 'f-tel',   value: telefone, rules: ['phone'],           label: 'Telefone' },
+    { id: 'f-nome',  value: nome,     rules: ['required'],              label: 'Nome' },
+    { id: 'f-cpf',   value: cpf,      rules: ['required', docRule],     label: cfg.label },
+    { id: 'f-email', value: email,    rules: ['email'],                 label: 'E-mail' },
+    { id: 'f-tel',   value: telefone, rules: ['phone'],                 label: 'Telefone' },
   ]);
   if (!ok) return;
 
@@ -556,6 +760,7 @@ async function salvarNovoAluno() {
         tenant_id:       getTenantId(),
         nome,
         cpf,
+        tipo_documento:  tipoDoc,
         email:           email || null,
         telefone:        telefone || null,
         data_nascimento: nascimento || null,
@@ -567,7 +772,7 @@ async function salvarNovoAluno() {
       });
 
     if (error) {
-      if (error.code === '23505') throw new Error('Já existe um aluno cadastrado com este CPF.');
+      if (error.code === '23505') throw new Error(`Já existe um aluno cadastrado com este ${cfg.label}.`);
       throw error;
     }
 
@@ -733,9 +938,12 @@ function exportarCSV() {
     toast('Nenhum dado para exportar.', 'warning');
     return;
   }
-  const headers = ['Nome','CPF','Email','Telefone','Tipo','Empresa','Status'];
+  const headers = ['Nome','Tipo Documento','Documento','Email','Telefone','Tipo','Empresa','Status'];
   const rows = _alunosCache.map(a => [
-    a.nome, a.cpf, a.email ?? '', a.telefone ?? '',
+    a.nome,
+    (DOC_CONFIG[a.tipo_documento] ?? DOC_CONFIG.cpf).label,
+    a.cpf,
+    a.email ?? '', a.telefone ?? '',
     a.tipo_pessoa, a.empresa_nome, a.status,
   ].map(v => `"${v}"`).join(','));
   const csv = [headers.join(','), ...rows].join('\n');

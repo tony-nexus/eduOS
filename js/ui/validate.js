@@ -69,6 +69,16 @@ export function isValidEmail(email) {
   return email.trim().includes('@') && email.trim().length >= 3;
 }
 
+// RNM: 1 letra + 6 dígitos + traço + 1 letra ou dígito  ex: V123456-J
+export function isValidRNM(rnm) {
+  return /^[A-Za-z]\d{6}-[A-Za-z0-9]$/.test(rnm.trim().toUpperCase());
+}
+
+// CNH Estrangeiro: exatamente 11 dígitos numéricos
+export function isValidCNHEstrangeiro(cnh) {
+  return /^\d{11}$/.test(cnh.replace(/\D/g, ''));
+}
+
 export function isValidPhone(tel) {
   const d = tel.replace(/\D/g, '');
   return d.length >= 10 && d.length <= 11;
@@ -99,6 +109,14 @@ export function validateForm(rules) {
     }
     if (checks.includes('cnpj') && !isValidCNPJ(v)) {
       fieldError(id, 'CNPJ inválido.');
+      valid = false; continue;
+    }
+    if (checks.includes('rnm') && !isValidRNM(v)) {
+      fieldError(id, 'RNM inválido. Formato: A000000-A (ex: V123456-J).');
+      valid = false; continue;
+    }
+    if (checks.includes('cnh_estrangeiro') && !isValidCNHEstrangeiro(v)) {
+      fieldError(id, 'CNH Estrangeiro deve ter 11 dígitos numéricos.');
       valid = false; continue;
     }
     if (checks.includes('email') && !isValidEmail(v)) {
