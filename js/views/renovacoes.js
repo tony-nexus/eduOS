@@ -5,6 +5,7 @@
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, toast, esc, fmtDate } from '../ui/components.js';
+import { criarRenovacao } from '../core/automations.js';
 
 let _alerts = [];
 
@@ -20,7 +21,10 @@ export async function render() {
     <div class="page-header">
       <div><h1>Renovações</h1><p>Certificados vencidos e a vencer</p></div>
       <div class="page-header-actions">
-        <button class="btn btn-secondary" id="btn-notificar-todos">Notificar Lembretes (Mock)</button>
+        <button class="btn btn-primary" id="btn-renovar-todos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+          Criar Todas as Renovações
+        </button>
       </div>
     </div>
     <div class="stats-row" id="renovacoes-kpis">
@@ -39,7 +43,7 @@ export async function render() {
     </div>
   `);
 
-  document.getElementById('btn-notificar-todos')?.addEventListener('click', () => toast('Funções de mensageria não configuradas...', 'info'));
+  document.getElementById('btn-renovar-todos')?.addEventListener('click', () => renovarTodos());
 
   await loadData();
 }
@@ -62,14 +66,16 @@ async function loadData() {
       _alerts = data.map(c => {
         const dias = Math.round((new Date(c.data_validade) - new Date()) / (1000*60*60*24));
         const nivel = dias < 0 ? 'vencido' : dias <= 30 ? 'critico' : dias <= 60 ? 'atencao' : 'aviso';
-        return { 
-          id: c.id,
-          aluno: c.aluno?.nome ?? '—',
-          empresa: c.aluno?.empresa?.nome ?? '—',
-          curso: c.curso?.nome ?? '—', 
+        return {
+          id:           c.id,
+          aluno_id:     c.aluno_id,
+          curso_id:     c.curso_id,
+          aluno:        c.aluno?.nome         ?? '—',
+          empresa:      c.aluno?.empresa?.nome ?? '—',
+          curso:        c.curso?.nome          ?? '—',
           data_validade: c.data_validade,
-          dias, 
-          nivel 
+          dias,
+          nivel,
         };
       });
     } else {
@@ -124,13 +130,58 @@ function renderTabela(alerts) {
       <td><span class="badge ${n.badge}">${n.label}</span></td>
       <td>
         <div style="display:flex;gap:4px">
-          <button class="action-btn action-wpp" data-id="${a.id}">Avisar via WhatsApp</button>
+          <button class="action-btn action-renovar"
+            data-aluno-id="${a.aluno_id}"
+            data-curso-id="${a.curso_id}"
+            data-aluno="${esc(a.aluno)}"
+            data-curso="${esc(a.curso)}">
+            Criar Renovação
+          </button>
         </div>
       </td>
     </tr>`;
   }).join('');
 
-  document.querySelectorAll('.action-wpp').forEach(btn => {
-    btn.addEventListener('click', () => toast('Mensagem mockada de cobrança', 'success'));
+  document.querySelectorAll('.action-renovar').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = 'Criando...';
+      const result = await criarRenovacao(btn.dataset.alunoId, btn.dataset.cursoId);
+      if (result.ok) {
+        toast(`Renovação criada para ${btn.dataset.aluno} — ${btn.dataset.curso}!`, 'success');
+        await loadData();
+      } else {
+        toast(result.reason, 'warning');
+        btn.disabled = false;
+        btn.textContent = 'Criar Renovação';
+      }
+    });
   });
+}
+
+// ─── Renovação em massa ───────────────────────────────────────────────────────
+async function renovarTodos() {
+  const elegíveis = _alerts.filter(a => a.nivel === 'vencido' || a.nivel === 'critico');
+  if (!elegíveis.length) {
+    toast('Nenhum certificado vencido ou crítico para renovar.', 'info');
+    return;
+  }
+
+  const btn = document.getElementById('btn-renovar-todos');
+  if (btn) { btn.disabled = true; btn.textContent = 'Processando...'; }
+
+  let criados = 0, pulados = 0;
+  for (const a of elegíveis) {
+    const result = await criarRenovacao(a.aluno_id, a.curso_id);
+    if (result.ok) criados++;
+    else pulados++;
+  }
+
+  if (btn) { btn.disabled = false; btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Criar Todas as Renovações'; }
+
+  toast(
+    `${criados} renovação(ões) criada(s)${pulados > 0 ? ` · ${pulados} já possuíam matrícula ativa` : ''}.`,
+    criados > 0 ? 'success' : 'info'
+  );
+  if (criados > 0) await loadData();
 }

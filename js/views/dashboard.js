@@ -7,6 +7,7 @@
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, fmtDate, fmtMoney, toast } from '../ui/components.js';
 import { navigate } from '../core/router.js';
+import { runAutomations } from '../core/automations.js';
 
 // ─── Render principal ────────────────────────────────────────────────────────
 export async function render() {
@@ -42,6 +43,19 @@ export async function render() {
   document.getElementById('dash-refresh-btn')?.addEventListener('click', () => render());
 
   setSkeletons();
+
+  // ── Automações em background (não bloqueia o render) ──────────────────────
+  runAutomations().then(({ turmasAvancadas, certEmitidos }) => {
+    const msgs = [];
+    if (turmasAvancadas > 0) msgs.push(`${turmasAvancadas} turma(s) avançada(s)`);
+    if (certEmitidos    > 0) msgs.push(`${certEmitidos} certificado(s) emitido(s)`);
+    if (msgs.length) {
+      toast(`Automações: ${msgs.join(' · ')}`, 'success');
+      // Re-renderiza KPIs após automações para refletir novo estado
+      renderKPIs();
+      renderPipeline();
+    }
+  });
 
   try {
     await Promise.all([

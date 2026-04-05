@@ -9,6 +9,7 @@
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtMoney, fmtDate, esc } from '../ui/components.js';
 import { validateForm } from '../ui/validate.js';
+import { autoEmitirCertificados } from '../core/automations.js';
 
 let _pagamentos = [];
 let _matriculas = [];
@@ -207,16 +208,25 @@ async function setStatus(id, newStatus) {
     const { error } = await supabase.from('pagamentos').update(payload).eq('id', id).eq('tenant_id', getTenantId());
     if (error) throw error;
     
-    // -- INÍCIO AUTOMAÇÃO PIPELINE --
+    // -- AUTOMAÇÃO PIPELINE --
     if (newStatus === 'recebido') {
       const p = _pagamentos.find(x => x.id == id);
-      if (p && p.matricula_id) {
-         // Move a matrícula para 'concluido'
-         await supabase.from('matriculas')
-               .update({ status: 'concluido' })
-               .eq('id', p.matricula_id)
-               .eq('tenant_id', getTenantId());
-         toast('Pagamento recebido! Aluno avançou para Concluído no Pipeline.', 'success');
+      if (p?.matricula_id) {
+        // Move a matrícula para 'concluido'
+        await supabase.from('matriculas')
+          .update({ status: 'concluido' })
+          .eq('id', p.matricula_id)
+          .eq('tenant_id', getTenantId());
+
+        // Tenta emitir certificado automaticamente (sem pendências)
+        const certCount = await autoEmitirCertificados();
+        if (certCount > 0) {
+          toast('Pagamento recebido! Certificado emitido automaticamente.', 'success');
+        } else {
+          toast('Pagamento recebido! Aluno avançou para Concluído no Pipeline.', 'success');
+        }
+      } else {
+        toast('Pagamento recebido!', 'success');
       }
     } else {
       toast('Status atualizado!', 'success');

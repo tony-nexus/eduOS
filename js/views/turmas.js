@@ -13,6 +13,7 @@
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
 import { validateForm, fieldError, fieldOk } from '../ui/validate.js';
+import { autoSyncTurmaStatus, autoEnrollAguardando } from '../core/automations.js';
 
 let _turmas     = [];
 let _cursos     = [];
@@ -89,6 +90,14 @@ export async function render() {
   document.getElementById('filtro-inst-turma')?.addEventListener('change', applyFilter);
 
   await Promise.all([loadTurmas(), loadCursos(), loadInstrutores()]);
+
+  // ── Auto-sync de status por data (agendada→em_andamento→concluida) ──────
+  autoSyncTurmaStatus().then(count => {
+    if (count > 0) {
+      toast(`${count} turma(s) avançada(s) automaticamente por data.`, 'info');
+      loadTurmas();
+    }
+  });
 
   const fCurso = document.getElementById('filtro-curso-turma');
   if (fCurso) _cursos.forEach(c => fCurso.innerHTML += `<option value="${c.id}">${esc(c.nome)}</option>`);
@@ -396,29 +405,45 @@ async function saveTurma(id) {
   btn.textContent = 'Salvando...';
 
   try {
-    let error, data;
+    let error, newTurmaId;
     if (id) {
       ({ error } = await supabase.from('turmas').update(payload).eq('id', id).eq('tenant_id', getTenantId()));
     } else {
       payload.ocupadas = 0;
-      let res = await supabase.from('turmas').insert(payload);
+      let res = await supabase.from('turmas').insert(payload).select('id').single();
       error = res.error;
-      
-      // Feature: Retry Code Generation if collision
+      newTurmaId = res.data?.id;
+
+      // Retry em colisão de código
       if (error && error.code === '23505') {
         const novoCodigo = await gerarCodigoTurma(curso_id, inicio);
         payload.codigo = novoCodigo;
-        res = await supabase.from('turmas').insert(payload);
+        res = await supabase.from('turmas').insert(payload).select('id').single();
         error = res.error;
+        newTurmaId = res.data?.id;
       }
     }
-    
+
     if (error) {
       if (error.code === '23505') throw new Error('Já existe uma turma com este código. Tente novamente.');
       throw error;
     }
     closeModal();
     toast(id ? 'Turma atualizada com sucesso!' : `Turma ${payload.codigo} criada!`, 'success');
+
+    // ── Auto-enroll: vincula alunos aguardando este curso ─────────────────
+    if (!id && newTurmaId) {
+      autoEnrollAguardando(newTurmaId, curso_id, vagas).then(enrolled => {
+        if (enrolled > 0) {
+          toast(
+            `${enrolled} aluno(s) em espera foram automaticamente adicionados à turma ${payload.codigo}!`,
+            'info'
+          );
+          loadTurmas();
+        }
+      });
+    }
+
     await loadTurmas();
   } catch (err) {
     toast(`Erro: ${err.message}`, 'error');

@@ -17,11 +17,14 @@ import { getClient, getTenantId } from '../core/supabase.js';
 import { currentUser } from '../core/auth.js';
 import { setContent, openModal, closeModal, toast } from '../ui/components.js';
 import { validateForm, fieldError, fieldOk, bindBlur } from '../ui/validate.js';
+import { criarMatriculaAutomatica } from '../core/automations.js';
 
 // Cache local — evita re-fetch desnecessário ao filtrar
 let _alunosCache  = [];
 // Cache de empresas para o select do modal
 let _empresasCache = [];
+// Cache de cursos para matrícula automática
+let _cursosCache  = [];
 // IDs selecionados para delete em massa
 let _selectedIds  = new Set();
 
@@ -98,7 +101,7 @@ export async function render() {
   document.getElementById('btn-exportar')?.addEventListener('click', () => exportarCSV());
   document.getElementById('btn-excluir-selecionados')?.addEventListener('click', () => excluirSelecionados());
 
-  await Promise.all([loadAlunos(), loadEmpresas()]);
+  await Promise.all([loadAlunos(), loadEmpresas(), loadCursos()]);
 }
 
 // ─── Fetch de alunos ──────────────────────────────────────────────────────────
@@ -128,6 +131,22 @@ async function loadAlunos() {
   renderKPIs(_alunosCache);
   renderTabela(_alunosCache);
   bindFiltros();
+}
+
+// ─── Fetch de cursos (para matrícula automática) ──────────────────────────────
+async function loadCursos() {
+  try {
+    const client = await getClient();
+    const { data } = await client
+      .from('cursos')
+      .select('id, nome, codigo')
+      .eq('tenant_id', getTenantId())
+      .eq('ativo', true)
+      .order('nome');
+    _cursosCache = data ?? [];
+  } catch (_) {
+    _cursosCache = [];
+  }
 }
 
 // ─── Fetch de empresas ────────────────────────────────────────────────────────
@@ -879,6 +898,26 @@ function modalNovoAluno() {
         <textarea id="f-obs" name="observacoes" placeholder="Informações adicionais..." rows="3"></textarea>
       </div>
 
+      <!-- ── Matrícula Automática ───────────────────────────────────── -->
+      <fieldset class="form-fieldset" style="border-color:var(--accent);background:var(--accent-soft);margin-top:16px">
+        <legend style="color:var(--accent);display:flex;align-items:center;gap:6px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          Matrícula Automática
+          <span style="font-size:11px;color:var(--text-tertiary);font-weight:400">(opcional)</span>
+        </legend>
+        <p style="font-size:12px;color:var(--text-secondary);margin-bottom:14px;font-family:var(--font-mono);line-height:1.5">
+          Selecione um curso para criar a matrícula automaticamente após o cadastro.<br>
+          Se houver turma com vaga → o aluno já entra. Caso contrário → entra em espera.
+        </p>
+        <div class="form-group" style="margin-bottom:0">
+          <label for="f-curso-auto">Curso de Interesse</label>
+          <select id="f-curso-auto">
+            <option value="">— Somente cadastrar o aluno —</option>
+            ${_cursosCache.map(c => `<option value="${c.id}">${esc(c.nome)}${c.codigo ? ` (${esc(c.codigo)})` : ''}</option>`).join('')}
+          </select>
+        </div>
+      </fieldset>
+
     </form>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modal-cancel" type="button">Cancelar</button>
@@ -991,9 +1030,12 @@ async function salvarNovoAluno() {
   saveBtn.disabled = true;
   saveBtn.innerHTML = '<span aria-live="assertive">Salvando...</span>';
 
+  // Captura o curso de interesse para matrícula automática
+  const cursoAutoId = document.getElementById('f-curso-auto')?.value || null;
+
   try {
     const client = await getClient();
-    const { error } = await client
+    const { data: inserted, error } = await client
       .from('alunos')
       .insert({
         tenant_id:       getTenantId(),
@@ -1009,7 +1051,9 @@ async function salvarNovoAluno() {
         observacoes:     obs || null,
         status:          'ativo',
         cep, rua, numero, complemento, bairro, cidade, uf
-      });
+      })
+      .select('id')
+      .single();
 
     if (error) {
       if (error.code === '23505') {
@@ -1023,7 +1067,22 @@ async function salvarNovoAluno() {
     }
 
     closeModal();
-    toast(`Aluno "${nome.split(' ')[0]}" cadastrado com sucesso!`, 'success');
+
+    // ── Matrícula automática se curso foi selecionado ─────────────────────
+    if (cursoAutoId && inserted?.id) {
+      const result = await criarMatriculaAutomatica(inserted.id, cursoAutoId);
+      if (result.ok) {
+        const msg = result.turma_code
+          ? `Aluno cadastrado e matriculado na turma ${result.turma_code}!`
+          : `Aluno cadastrado e adicionado à fila de espera do curso.`;
+        toast(msg, 'success');
+      } else {
+        toast(`Aluno "${nome.split(' ')[0]}" cadastrado. Matrícula: ${result.reason}`, 'warning');
+      }
+    } else {
+      toast(`Aluno "${nome.split(' ')[0]}" cadastrado com sucesso!`, 'success');
+    }
+
     await loadAlunos();
 
   } catch (err) {
