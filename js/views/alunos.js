@@ -284,7 +284,10 @@ function bindRowActions() {
     btn.addEventListener('click', () => toggleStatus(btn.dataset.id, btn.dataset.status));
   });
   document.querySelectorAll('.action-btn[data-action="excluir"]').forEach(btn => {
-    btn.addEventListener('click', () => excluirAluno(btn.dataset.id, btn.dataset.nome));
+    btn.addEventListener('click', () => {
+      const aluno = _alunosCache.find(a => a.id === btn.dataset.id);
+      if (aluno) abrirModalExclusao(aluno);
+    });
   });
 }
 
@@ -336,46 +339,233 @@ function updateSelecaoUI() {
   }
 }
 
-// ─── Excluir individual ───────────────────────────────────────────────────────
-async function excluirAluno(id, nome) {
-  if (!confirm(`Excluir permanentemente "${nome}"?\n\nEsta ação não pode ser desfeita. Matrículas e certificados vinculados serão afetados.`)) return;
-  try {
-    const client = await getClient();
-    const { error } = await client
-      .from('alunos').delete()
-      .eq('id', id).eq('tenant_id', getTenantId());
-    if (error) throw error;
-    _selectedIds.delete(id);
-    toast(`Aluno "${nome.split(' ')[0]}" excluído.`, 'success');
-    await loadAlunos();
-  } catch (err) {
-    const msg = err.message?.includes('violates foreign key')
-      ? 'Não é possível excluir: aluno possui matrículas ou certificados vinculados.'
-      : err.message;
-    toast(`Erro: ${msg}`, 'error');
-  }
+// ─── Retorna o documento identificador principal do aluno ────────────────────
+function getDocIdentifier(aluno) {
+  if (aluno.cpf)     return { label: 'CPF',  value: aluno.cpf };
+  if (aluno.rnm)     return { label: 'RNM',  value: aluno.rnm };
+  if (aluno.cnh_num) return { label: 'CNH',  value: aluno.cnh_num };
+  return null;
 }
 
-// ─── Excluir em massa ─────────────────────────────────────────────────────────
+// ─── Modal de exclusão individual (estilo GitHub / Supabase) ──────────────────
+async function abrirModalExclusao(aluno) {
+  const client = await getClient();
+  const tid    = getTenantId();
+
+  // Consulta impacto em paralelo
+  const [rCerts, rMats, rPags] = await Promise.all([
+    client.from('certificados').select('*', { count: 'exact', head: true }).eq('aluno_id', aluno.id).eq('tenant_id', tid),
+    client.from('matriculas')  .select('*', { count: 'exact', head: true }).eq('aluno_id', aluno.id).eq('tenant_id', tid),
+    client.from('pagamentos')  .select('*', { count: 'exact', head: true }).eq('aluno_id', aluno.id).eq('tenant_id', tid),
+  ]);
+
+  const nCerts = rCerts.count ?? 0;
+  const nMats  = rMats.count  ?? 0;
+  const nPags  = rPags.count  ?? 0;
+  const temVinculo = nCerts > 0 || nMats > 0 || nPags > 0;
+
+  const doc = getDocIdentifier(aluno);
+  const primeiroNome = aluno.nome.split(' ')[0];
+
+  // Bloco de impacto — só renderiza se houver vínculos
+  const impactoHTML = temVinculo ? `
+    <div class="danger-impact-box">
+      <p>⚠ Esta exclusão irá remover permanentemente todos os registros vinculados:</p>
+      ${nMats  > 0 ? `<div class="danger-impact-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        Matrículas <span class="danger-impact-count">${nMats}</span>
+      </div>` : ''}
+      ${nCerts > 0 ? `<div class="danger-impact-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+        Certificados <span class="danger-impact-count">${nCerts}</span>
+      </div>` : ''}
+      ${nPags  > 0 ? `<div class="danger-impact-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        Pagamentos <span class="danger-impact-count">${nPags}</span>
+      </div>` : ''}
+    </div>` : `
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;font-family:var(--font-mono)">
+      Nenhum registro vinculado encontrado. A exclusão remove apenas o cadastro do aluno.
+    </p>`;
+
+  // Bloco de confirmação por documento
+  const confirmHTML = doc ? `
+    <div class="danger-confirm-wrap">
+      <label>Para confirmar, digite o <strong>${doc.label}</strong> do aluno abaixo:</label>
+      <code class="danger-confirm-code">${esc(doc.value)}</code>
+      <input
+        id="danger-confirm-input"
+        class="danger-confirm-input"
+        type="text"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        placeholder="Digite o ${doc.label} para confirmar...">
+    </div>` : `
+    <div class="danger-confirm-wrap">
+      <label>Para confirmar, digite o <strong>nome</strong> do aluno abaixo:</label>
+      <code class="danger-confirm-code">${esc(aluno.nome)}</code>
+      <input id="danger-confirm-input" class="danger-confirm-input" type="text"
+        autocomplete="off" placeholder="Digite o nome para confirmar...">
+    </div>`;
+
+  const expectedValue = doc ? doc.value : aluno.nome;
+
+  openModal('Excluir aluno permanentemente', `
+    <div class="danger-banner">
+      <div class="danger-banner-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+          <path d="M9 6V4h6v2"/>
+        </svg>
+      </div>
+      <div class="danger-banner-info">
+        <div class="danger-banner-title">${esc(aluno.nome)}</div>
+        <div class="danger-banner-sub">${doc ? `${doc.label}: ${esc(doc.value)}` : 'Sem documento cadastrado'}</div>
+      </div>
+    </div>
+
+    ${impactoHTML}
+    ${confirmHTML}
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="danger-cancel-btn">Cancelar</button>
+      <button class="btn btn-danger" id="danger-confirm-btn" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+        </svg>
+        Excluir permanentemente
+      </button>
+    </div>
+  `);
+
+  // Listeners pós-render
+  document.getElementById('danger-cancel-btn')?.addEventListener('click', () => closeModal());
+
+  const input  = document.getElementById('danger-confirm-input');
+  const btnDel = document.getElementById('danger-confirm-btn');
+
+  input?.addEventListener('input', () => {
+    const match = input.value.trim() === expectedValue.trim();
+    input.classList.toggle('valid', match);
+    btnDel.disabled = !match;
+  });
+
+  btnDel?.addEventListener('click', async () => {
+    btnDel.disabled = true;
+    btnDel.innerHTML = '<span style="font-family:var(--font-mono);font-size:12px">Excluindo...</span>';
+    try {
+      await executarExclusaoCascade(aluno.id);
+      closeModal();
+      _selectedIds.delete(aluno.id);
+      toast(`${primeiroNome} excluído permanentemente.`, 'success');
+      await loadAlunos();
+    } catch (err) {
+      toast(`Erro ao excluir: ${err.message}`, 'error');
+      btnDel.disabled = false;
+      btnDel.innerHTML = 'Excluir permanentemente';
+    }
+  });
+}
+
+// ─── Exclusão cascade (ordem correta de FKs) ─────────────────────────────────
+async function executarExclusaoCascade(id) {
+  const client = await getClient();
+  const tid    = getTenantId();
+
+  // 1. Certificados (FK RESTRICT em alunos → precisa ir antes)
+  const { error: e1 } = await client.from('certificados').delete().eq('aluno_id', id).eq('tenant_id', tid);
+  if (e1) throw e1;
+
+  // 2. Pagamentos (FK CASCADE de matriculas, mas explicito para garantir)
+  const { error: e2 } = await client.from('pagamentos').delete().eq('aluno_id', id).eq('tenant_id', tid);
+  if (e2) throw e2;
+
+  // 3. Matrículas (FK RESTRICT em alunos)
+  const { error: e3 } = await client.from('matriculas').delete().eq('aluno_id', id).eq('tenant_id', tid);
+  if (e3) throw e3;
+
+  // 4. Aluno
+  const { error: e4 } = await client.from('alunos').delete().eq('id', id).eq('tenant_id', tid);
+  if (e4) throw e4;
+}
+
+// ─── Modal de exclusão em massa ───────────────────────────────────────────────
 async function excluirSelecionados() {
   const ids = [..._selectedIds];
   if (!ids.length) return;
-  if (!confirm(`Excluir permanentemente ${ids.length} aluno${ids.length !== 1 ? 's' : ''}?\n\nEsta ação não pode ser desfeita.`)) return;
-  try {
-    const client = await getClient();
-    const { error } = await client
-      .from('alunos').delete()
-      .in('id', ids).eq('tenant_id', getTenantId());
-    if (error) throw error;
+
+  const n = ids.length;
+
+  openModal('Excluir alunos selecionados', `
+    <div class="danger-banner">
+      <div class="danger-banner-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <div class="danger-banner-info">
+        <div class="danger-banner-title">${n} aluno${n !== 1 ? 's' : ''} selecionado${n !== 1 ? 's' : ''}</div>
+        <div class="danger-banner-sub">Todos os registros vinculados serão removidos</div>
+      </div>
+    </div>
+
+    <div class="danger-impact-box" style="margin-bottom:20px">
+      <p>⚠ Para cada aluno selecionado, serão excluídos permanentemente:</p>
+      <div class="danger-impact-row">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M9 11l3 3L22 4"/></svg>
+        Matrículas, certificados e pagamentos vinculados
+      </div>
+      <div class="danger-impact-row" style="color:var(--red);font-size:12px;font-family:var(--font-mono)">
+        Esta ação não pode ser desfeita.
+      </div>
+    </div>
+
+    <div class="danger-confirm-wrap">
+      <label>Para confirmar, digite <strong>${n}</strong> no campo abaixo:</label>
+      <code class="danger-confirm-code">${n}</code>
+      <input id="danger-mass-input" class="danger-confirm-input" type="text"
+        inputmode="numeric" autocomplete="off" placeholder="Digite o número de alunos...">
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="danger-mass-cancel">Cancelar</button>
+      <button class="btn btn-danger" id="danger-mass-confirm" disabled>
+        Excluir ${n} aluno${n !== 1 ? 's' : ''} permanentemente
+      </button>
+    </div>
+  `);
+
+  document.getElementById('danger-mass-cancel')?.addEventListener('click', () => closeModal());
+
+  const input  = document.getElementById('danger-mass-input');
+  const btnDel = document.getElementById('danger-mass-confirm');
+
+  input?.addEventListener('input', () => {
+    const match = input.value.trim() === String(n);
+    input.classList.toggle('valid', match);
+    btnDel.disabled = !match;
+  });
+
+  btnDel?.addEventListener('click', async () => {
+    btnDel.disabled = true;
+    btnDel.textContent = 'Excluindo...';
+    let erros = 0;
+    for (const id of ids) {
+      try { await executarExclusaoCascade(id); }
+      catch { erros++; }
+    }
+    closeModal();
     _selectedIds.clear();
-    toast(`${ids.length} aluno${ids.length !== 1 ? 's excluídos' : ' excluído'} com sucesso.`, 'success');
+    const ok = ids.length - erros;
+    if (ok > 0) toast(`${ok} aluno${ok !== 1 ? 's excluídos' : ' excluído'} com sucesso.`, 'success');
+    if (erros > 0) toast(`${erros} exclusão(ões) falharam.`, 'error');
     await loadAlunos();
-  } catch (err) {
-    const msg = err.message?.includes('violates foreign key')
-      ? 'Um ou mais alunos possuem matrículas ou certificados vinculados e não podem ser excluídos.'
-      : err.message;
-    toast(`Erro: ${msg}`, 'error');
-  }
+  });
 }
 
 // ─── Toggle ativo/inativo ─────────────────────────────────────────────────────
