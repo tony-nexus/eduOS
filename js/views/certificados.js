@@ -195,7 +195,174 @@ function applyFilter() {
   `).join('');
 
   document.querySelectorAll('.action-btn[data-action="pdf"]').forEach(b => {
-    b.addEventListener('click', () => toast('Geração de PDF em breve', 'success'));
+    b.addEventListener('click', () => {
+      const cert = _certs.find(c => c.id === b.dataset.id);
+      if (cert) gerarPDF(cert);
+    });
+  });
+}
+
+// ─── Geração de PDF do Certificado ───────────────────────────────────────────
+async function gerarPDF(cert) {
+  toast('Gerando certificado PDF...', 'info');
+  try {
+    if (typeof window.jspdf === 'undefined') {
+      await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+    }
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const W = 297, H = 210;
+
+    // ── Fundo e borda ──────────────────────────────────────────────────────
+    doc.setFillColor(10, 12, 18);
+    doc.rect(0, 0, W, H, 'F');
+
+    // Borda externa dourada
+    doc.setDrawColor(99, 255, 171);
+    doc.setLineWidth(1.5);
+    doc.rect(8, 8, W - 16, H - 16);
+
+    // Borda interna sutil
+    doc.setDrawColor(40, 60, 50);
+    doc.setLineWidth(0.5);
+    doc.rect(11, 11, W - 22, H - 22);
+
+    // ── Marca d'água sutil ─────────────────────────────────────────────────
+    doc.setTextColor(99, 255, 171);
+    doc.setFontSize(120);
+    doc.setFont('helvetica', 'bold');
+    doc.setGState(new doc.GState({ opacity: 0.04 }));
+    doc.text('EDU', W / 2, H / 2 + 30, { align: 'center' });
+    doc.setGState(new doc.GState({ opacity: 1 }));
+
+    // ── Header: Logo EduOS ────────────────────────────────────────────────
+    doc.setFillColor(99, 255, 171);
+    doc.roundedRect(20, 16, 20, 20, 3, 3, 'F');
+    doc.setTextColor(10, 12, 18);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('E', 30, 29.5, { align: 'center' });
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(13);
+    doc.text('EduOS', 44, 24);
+    doc.setTextColor(99, 255, 171);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Plataforma de Gestão Educacional', 44, 30);
+
+    // ── Título: CERTIFICADO ────────────────────────────────────────────────
+    doc.setTextColor(99, 255, 171);
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text('CERTIFICADO DE CONCLUSÃO', W / 2, 28, { align: 'center', charSpace: 3 });
+
+    // Linha decorativa sob o título
+    doc.setDrawColor(99, 255, 171);
+    doc.setLineWidth(0.8);
+    doc.line(W / 2 - 50, 32, W / 2 + 50, 32);
+
+    // ── Texto central ──────────────────────────────────────────────────────
+    doc.setTextColor(160, 170, 160);
+    doc.setFontSize(10);
+    doc.text('Certificamos que', W / 2, 58, { align: 'center' });
+
+    // Nome do aluno (destaque máximo)
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(26);
+    doc.setFont('helvetica', 'bold');
+    doc.text(cert.aluno_nome.toUpperCase(), W / 2, 76, { align: 'center' });
+
+    // Linha sob o nome
+    doc.setDrawColor(99, 255, 171);
+    doc.setLineWidth(0.4);
+    const nomeWidth = Math.min(doc.getTextWidth(cert.aluno_nome.toUpperCase()) + 10, W - 40);
+    doc.line(W / 2 - nomeWidth / 2, 80, W / 2 + nomeWidth / 2, 80);
+
+    // Texto de conclusão
+    doc.setTextColor(160, 170, 160);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text('concluiu com aproveitamento o curso de', W / 2, 93, { align: 'center' });
+
+    // Nome do curso
+    doc.setTextColor(99, 255, 171);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text(cert.curso_nome.toUpperCase(), W / 2, 108, { align: 'center' });
+
+    // ── Rodapé: datas e código ─────────────────────────────────────────────
+    const emissaoFmt = cert.data_emissao
+      ? new Date(cert.data_emissao + 'T00:00:00').toLocaleDateString('pt-BR')
+      : '—';
+    const validadeFmt = cert.data_validade
+      ? new Date(cert.data_validade + 'T00:00:00').toLocaleDateString('pt-BR')
+      : 'Sem validade';
+
+    // Box de informações (3 colunas)
+    doc.setFillColor(15, 22, 15);
+    doc.roundedRect(20, 128, 257, 28, 2, 2, 'F');
+
+    doc.setTextColor(99, 255, 171);
+    doc.setFontSize(8);
+    doc.setFont('courier', 'normal');
+
+    // Col 1: Data de emissão
+    doc.setTextColor(100, 110, 100);
+    doc.text('DATA DE EMISSÃO', 45, 138, { align: 'center' });
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(10);
+    doc.text(emissaoFmt, 45, 147, { align: 'center' });
+
+    // Col 2: Validade
+    doc.setTextColor(100, 110, 100);
+    doc.setFontSize(8);
+    doc.text('VÁLIDO ATÉ', W / 2, 138, { align: 'center' });
+    doc.setTextColor(cert.status === 'vencido' ? 220 : 255, cert.status === 'vencido' ? 80 : 255, cert.status === 'vencido' ? 80 : 255);
+    doc.setFontSize(10);
+    doc.text(validadeFmt, W / 2, 147, { align: 'center' });
+
+    // Col 3: Código
+    doc.setTextColor(100, 110, 100);
+    doc.setFontSize(8);
+    doc.text('CÓDIGO DE VERIFICAÇÃO', W - 45, 138, { align: 'center' });
+    doc.setTextColor(99, 255, 171);
+    doc.setFontSize(9);
+    doc.text(cert.codigo_verificacao || '—', W - 45, 147, { align: 'center' });
+
+    // ── Status badge ───────────────────────────────────────────────────────
+    const statusColors = {
+      valido:   [22, 163, 74],
+      a_vencer: [202, 138, 4],
+      vencido:  [185, 28, 28],
+    };
+    const [r, g, b] = statusColors[cert.status] ?? [100, 100, 100];
+    doc.setFillColor(r, g, b);
+    doc.roundedRect(W - 55, 14, 34, 9, 1.5, 1.5, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    const statusLabel = cert.status === 'valido' ? 'VÁLIDO' : cert.status === 'a_vencer' ? 'A VENCER' : 'VENCIDO';
+    doc.text(statusLabel, W - 38, 20.5, { align: 'center' });
+
+    // ── Salva o PDF ────────────────────────────────────────────────────────
+    const nomeSanitizado = cert.aluno_nome.replace(/[^a-zA-Z0-9 ]/g, '').replace(/ /g, '_');
+    doc.save(`Certificado_${nomeSanitizado}.pdf`);
+    toast('Certificado PDF gerado!', 'success');
+  } catch (err) {
+    console.error('[PDF] Erro:', err);
+    toast('Erro ao gerar PDF do certificado.', 'error');
+  }
+}
+
+function _loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
   });
 }
 

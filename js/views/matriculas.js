@@ -18,8 +18,8 @@ let _alunos     = [];
 let _cursos     = [];
 let _turmas     = [];
 
-const BADGE_MAP = { matriculado:'badge-blue', aguardando_turma:'badge-amber', em_andamento:'badge-accent', concluido:'badge-green', certificado_emitido:'badge-purple', cancelado:'badge-red' };
-const LABEL_MAP = { matriculado:'Matriculado', aguardando_turma:'Ag. Turma', em_andamento:'Em Andamento', concluido:'Concluído', certificado_emitido:'Cert. Emitido', cancelado:'Cancelado' };
+const BADGE_MAP = { matriculado:'badge-blue', aguardando_turma:'badge-amber', em_andamento:'badge-accent', concluido:'badge-green', certificado_emitido:'badge-purple', cancelado:'badge-red', reprovado:'badge-red' };
+const LABEL_MAP = { matriculado:'Matriculado', aguardando_turma:'Ag. Turma', em_andamento:'Em Andamento', concluido:'Concluído', certificado_emitido:'Cert. Emitido', cancelado:'Cancelado', reprovado:'Reprovado' };
 
 export async function render() {
   setContent(`
@@ -49,6 +49,7 @@ export async function render() {
           <option value="concluido">Concluído</option>
           <option value="certificado_emitido">Certificado Emitido</option>
           <option value="cancelado">Cancelado</option>
+          <option value="reprovado">Reprovado</option>
         </select>
       </div>
       <div style="overflow-x:auto">

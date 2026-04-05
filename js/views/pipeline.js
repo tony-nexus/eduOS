@@ -4,7 +4,7 @@
  */
 
 import { supabase, getTenantId } from '../core/supabase.js';
-import { setContent, toast } from '../ui/components.js';
+import { setContent, toast, esc } from '../ui/components.js';
 import { navigate } from '../core/router.js';
 
 let _matriculas = [];
@@ -57,12 +57,13 @@ function renderKanban(searchTerm = '') {
   const term = searchTerm.trim().toLowerCase();
 
   const cols = [
-    { key: 'matriculado', label: 'Matriculados', color: 'var(--blue)', items: [] },
-    { key: 'aguardando_turma', label: 'Aguardando Turma', color: 'var(--amber)', items: [] },
-    { key: 'em_andamento', label: 'Em Andamento', color: 'var(--accent)', items: [] },
-    { key: 'concluido', label: 'Concluído', color: 'var(--green)', items: [] },
-    { key: 'certificado_emitido', label: 'Cert. Emitido', color: 'var(--purple)', items: [] },
-    { key: 'outros', label: 'Outros / Sem Status', color: 'var(--text-tertiary)', items: [] },
+    { key: 'matriculado',         label: 'Matriculados',     color: 'var(--blue)',         items: [] },
+    { key: 'aguardando_turma',    label: 'Ag. Turma',        color: 'var(--amber)',         items: [] },
+    { key: 'em_andamento',        label: 'Em Andamento',     color: 'var(--accent)',        items: [] },
+    { key: 'reprovado',           label: 'Reprovados',       color: 'var(--red)',           items: [] },
+    { key: 'concluido',           label: 'Concluído',        color: 'var(--green)',         items: [] },
+    { key: 'certificado_emitido', label: 'Cert. Emitido',    color: 'var(--purple)',        items: [] },
+    { key: 'outros',              label: 'Outros',           color: 'var(--text-tertiary)', items: [] },
   ];
 
   _matriculas.forEach(m => {
@@ -131,32 +132,46 @@ function setupDragAndDrop() {
       if (!draggingCard) return;
 
       const newStatus = col.dataset.status;
-      const cardId = draggingCard.dataset.id;
-      
-      const matricula = _matriculas.find(m => m.id == cardId);
-      if(matricula && matricula.status !== newStatus) {
-        const oldStatus = matricula.status;
-        matricula.status = newStatus;
-        
-        // Optimistic UI updates
-        const searchInput = document.getElementById('search-pipeline');
-        renderKanban(searchInput ? searchInput.value : '');
+      const cardId    = draggingCard.dataset.id;
 
-        try {
-          const { error } = await supabase
-            .from('matriculas')
-            .update({ status: newStatus })
-            .eq('id', cardId);
-            
-          if (error) throw error;
-          toast('Alocado com sucesso!', 'success');
-        } catch(err) {
-          console.error(err);
-          // Revert on error
-          matricula.status = oldStatus;
-          renderKanban(searchInput ? searchInput.value : '');
-          toast('Erro ao alterar status.', 'error');
-        }
+      const matricula = _matriculas.find(m => m.id == cardId);
+      if (!matricula || matricula.status === newStatus) return;
+
+      // ── Validação de transições ────────────────────────────────────────────
+      const VALIDAS = {
+        matriculado:         ['aguardando_turma', 'em_andamento'],
+        aguardando_turma:    ['matriculado', 'em_andamento'],
+        em_andamento:        ['concluido', 'reprovado'],
+        reprovado:           ['aguardando_turma'],
+        concluido:           ['certificado_emitido'],
+        certificado_emitido: [],   // estado terminal
+        outros:              ['matriculado'],
+      };
+      const permitidas = VALIDAS[matricula.status] ?? [];
+      if (!permitidas.includes(newStatus)) {
+        toast(`Transição inválida: ${matricula.status} → ${newStatus}`, 'warning');
+        return;
+      }
+
+      const oldStatus = matricula.status;
+      matricula.status = newStatus;
+
+      const searchInput = document.getElementById('search-pipeline');
+      renderKanban(searchInput?.value ?? '');
+
+      try {
+        const { error } = await supabase
+          .from('matriculas')
+          .update({ status: newStatus })
+          .eq('id', cardId)
+          .eq('tenant_id', getTenantId());
+
+        if (error) throw error;
+        toast(`Pipeline: ${esc(draggingCard.dataset.nome)} → ${newStatus.replace('_', ' ')}`, 'success');
+      } catch (err) {
+        matricula.status = oldStatus;
+        renderKanban(searchInput?.value ?? '');
+        toast('Erro ao alterar status.', 'error');
       }
     });
   });

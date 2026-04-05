@@ -212,11 +212,13 @@ async function setStatus(id, newStatus) {
     if (newStatus === 'recebido') {
       const p = _pagamentos.find(x => x.id == id);
       if (p?.matricula_id) {
-        // Move a matrícula para 'concluido'
+        // Avança matrícula para 'concluido' APENAS se ainda está em andamento
+        // (não sobrescreve reprovado, certificado_emitido, etc.)
         await supabase.from('matriculas')
           .update({ status: 'concluido' })
           .eq('id', p.matricula_id)
-          .eq('tenant_id', getTenantId());
+          .eq('tenant_id', getTenantId())
+          .in('status', ['matriculado', 'aguardando_turma', 'em_andamento']);
 
         // Tenta emitir certificado automaticamente (sem pendências)
         const certCount = await autoEmitirCertificados();

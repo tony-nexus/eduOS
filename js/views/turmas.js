@@ -452,28 +452,154 @@ async function saveTurma(id) {
   }
 }
 
-// ─── Visualização de Alunos ───────────────────────────────────────────────────
+// ─── Diário de Classe ─────────────────────────────────────────────────────────
 async function verAlunos(turma) {
-  openModal(`Alunos na Turma: ${turma.codigo}`, `<div style="text-align:center;padding:40px;color:var(--text-tertiary)">Carregando...</div>`);
+  const STATUS_BADGE = {
+    matriculado:         'badge-blue',
+    aguardando_turma:    'badge-amber',
+    em_andamento:        'badge-accent',
+    concluido:           'badge-green',
+    certificado_emitido: 'badge-purple',
+    reprovado:           'badge-red',
+    cancelado:           'badge-gray',
+  };
+  const STATUS_LABEL = {
+    matriculado:         'Matriculado',
+    aguardando_turma:    'Ag. Turma',
+    em_andamento:        'Em Andamento',
+    concluido:           'Concluído',
+    certificado_emitido: 'Cert. Emitido',
+    reprovado:           'Reprovado',
+    cancelado:           'Cancelado',
+  };
+
+  openModal(`Diário de Classe — ${esc(turma.codigo)}`, `
+    <div style="text-align:center;padding:40px;color:var(--text-tertiary)">Carregando...</div>
+  `);
+
   try {
-    const { data, error } = await supabase.from('matriculas')
-      .select('id, aluno:aluno_id(nome, cpf), status')
-      .eq('turma_id', turma.id).eq('tenant_id', getTenantId())
+    const { data, error } = await supabase
+      .from('matriculas')
+      .select('id, aluno_id, curso_id, aluno:aluno_id(nome, cpf, rnm), status')
+      .eq('turma_id', turma.id)
+      .eq('tenant_id', getTenantId())
       .neq('status', 'cancelado');
+
     if (error) throw error;
-    if (!data || !data.length) {
-      document.getElementById('modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-tertiary)">Nenhum aluno ativo nesta turma.</div>';
+
+    if (!data?.length) {
+      document.getElementById('modal-body').innerHTML = `
+        <div style="padding:40px;text-align:center;color:var(--text-tertiary)">Nenhum aluno nesta turma.</div>
+      `;
       return;
     }
-    const html = data.map(m => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--border-color)">
-        <div><strong>${esc(m.aluno?.nome)}</strong><br><small style="color:var(--text-secondary)">CPF: ${esc(m.aluno?.cpf || 'N/A')}</small></div>
-        <div><span class="badge badge-gray">${esc(m.status)}</span></div>
+
+    // Botões de avaliação só disponíveis para turmas em andamento
+    const podeAvaliar = ['agendada', 'em_andamento', 'concluida'].includes(turma.status);
+
+    const counts = {
+      em_andamento: data.filter(m => m.status === 'em_andamento').length,
+      concluido:    data.filter(m => m.status === 'concluido').length,
+      reprovado:    data.filter(m => m.status === 'reprovado').length,
+    };
+
+    const html = data.map(m => {
+      const badge = STATUS_BADGE[m.status] ?? 'badge-gray';
+      const label = STATUS_LABEL[m.status] ?? m.status;
+      const doc   = m.aluno?.cpf ? `CPF: ${esc(m.aluno.cpf)}` : m.aluno?.rnm ? `RNM: ${esc(m.aluno.rnm)}` : '—';
+
+      const btns = podeAvaliar && m.status === 'em_andamento' ? `
+        <div style="display:flex;gap:4px;margin-top:8px">
+          <button class="action-btn diario-aprovar"
+            style="background:var(--green-soft);color:var(--green);border-color:var(--green)"
+            data-id="${m.id}" data-nome="${esc(m.aluno?.nome)}"
+            data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
+            ✓ Aprovar
+          </button>
+          <button class="action-btn danger diario-reprovar"
+            data-id="${m.id}" data-nome="${esc(m.aluno?.nome)}"
+            data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
+            ✗ Reprovar
+          </button>
+        </div>` : '';
+
+      return `
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-weight:500;font-size:13px">${esc(m.aluno?.nome ?? '—')}</div>
+              <div style="font-size:11.5px;color:var(--text-tertiary);margin-top:2px">${doc}</div>
+            </div>
+            <span class="badge ${badge}">${label}</span>
+          </div>
+          ${btns}
+        </div>`;
+    }).join('');
+
+    document.getElementById('modal-body').innerHTML = `
+      <div style="display:flex;gap:16px;padding:12px 16px;background:var(--bg-elevated);border-bottom:1px solid var(--border-subtle);font-family:var(--font-mono);font-size:11.5px;color:var(--text-secondary)">
+        <span>${data.length} aluno(s)</span>
+        <span style="color:var(--accent)">${counts.em_andamento} em andamento</span>
+        <span style="color:var(--green)">${counts.concluido} aprovados</span>
+        <span style="color:var(--red)">${counts.reprovado} reprovados</span>
       </div>
-    `).join('');
-    document.getElementById('modal-body').innerHTML = `<div style="max-height:400px;overflow-y:auto">${html}</div>`;
+      ${podeAvaliar ? `<div style="padding:8px 16px;background:var(--accent-soft);font-size:11.5px;color:var(--accent);font-family:var(--font-mono)">
+        Avalie cada aluno: Aprovar avança para Concluído · Reprovar cria nova matrícula em espera
+      </div>` : ''}
+      <div style="max-height:420px;overflow-y:auto">${html}</div>
+    `;
+
+    // ── Bind: Aprovar ───────────────────────────────────────────────────────
+    document.querySelectorAll('.diario-aprovar').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = '...';
+        await avaliarAluno(btn.dataset.id, 'concluido');
+        toast(`${btn.dataset.nome} aprovado(a)!`, 'success');
+        verAlunos(turma);
+      });
+    });
+
+    // ── Bind: Reprovar ──────────────────────────────────────────────────────
+    document.querySelectorAll('.diario-reprovar').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = '...';
+        await avaliarAluno(btn.dataset.id, 'reprovado', {
+          alunoId:  btn.dataset.alunoId,
+          cursoId:  btn.dataset.cursoId,
+        });
+        toast(`${btn.dataset.nome} reprovado(a). Nova matrícula criada na fila de espera.`, 'info');
+        verAlunos(turma);
+      });
+    });
+
   } catch (e) {
-    document.getElementById('modal-body').innerHTML = '<div style="padding:20px;color:var(--red)">Erro ao carregar alunos.</div>';
+    document.getElementById('modal-body').innerHTML = `
+      <div style="padding:20px;color:var(--red)">Erro ao carregar alunos da turma.</div>
+    `;
+  }
+}
+
+// ─── Avaliação de aluno (aprovar / reprovar) ──────────────────────────────────
+async function avaliarAluno(matriculaId, novoStatus, opts = {}) {
+  const { error } = await supabase
+    .from('matriculas')
+    .update({ status: novoStatus })
+    .eq('id', matriculaId)
+    .eq('tenant_id', getTenantId())
+    .eq('status', 'em_andamento'); // Só avança a partir de em_andamento
+
+  if (error) throw error;
+
+  // Reprovado: cria nova matrícula automática em aguardando_turma (reciclagem)
+  if (novoStatus === 'reprovado' && opts.alunoId && opts.cursoId) {
+    await supabase.from('matriculas').insert({
+      tenant_id: getTenantId(),
+      aluno_id:  opts.alunoId,
+      curso_id:  opts.cursoId,
+      status:    'aguardando_turma',
+    }).catch(() => {}); // Ignora erro silenciosamente (pode já ter outra ativa)
   }
 }
 
