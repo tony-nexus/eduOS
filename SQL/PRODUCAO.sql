@@ -132,7 +132,12 @@ CREATE TABLE public.alunos (
     tenant_id       UUID         REFERENCES public.tenants(id) ON DELETE CASCADE NOT NULL,
     user_id         UUID         REFERENCES auth.users(id) ON DELETE SET NULL,
     nome            VARCHAR(255) NOT NULL,
-    cpf             VARCHAR(14)  NOT NULL,
+    -- Documentos: pelo menos um dos três deve ser preenchido (validado no frontend)
+    cpf             VARCHAR(20),                                          -- CPF brasileiro (nullable: estrangeiros podem não ter)
+    rnm             VARCHAR(9),                                           -- Registro Nacional Migratório (M5)
+    cnh_num         VARCHAR(11),                                          -- CNH estrangeira (M5)
+    tipo_documento  VARCHAR(20) NOT NULL DEFAULT 'cpf'
+                    CHECK (tipo_documento IN ('cpf', 'rnm', 'cnh')),     -- (M4) tipo principal
     email           VARCHAR(255),
     telefone        VARCHAR(20),
     data_nascimento DATE,
@@ -140,7 +145,7 @@ CREATE TABLE public.alunos (
     empresa_id      UUID         REFERENCES public.empresas(id) ON DELETE SET NULL,
     status          VARCHAR(20)  DEFAULT 'ativo' CHECK (status IN ('ativo','inativo')),
     observacoes     TEXT,
-    -- Endereço (M1)
+    -- Endereço
     cep             VARCHAR(10),
     rua             VARCHAR(255),
     numero          VARCHAR(20),
@@ -148,9 +153,13 @@ CREATE TABLE public.alunos (
     bairro          VARCHAR(100),
     cidade          VARCHAR(100),
     uf              VARCHAR(2),
-    created_at      TIMESTAMPTZ  DEFAULT timezone('utc', now()),
-    UNIQUE(tenant_id, cpf)
+    created_at      TIMESTAMPTZ  DEFAULT timezone('utc', now())
 );
+
+-- Partial unique indexes: permitem NULL e evitam duplicatas por tipo de documento
+CREATE UNIQUE INDEX idx_alunos_cpf_unique ON public.alunos(tenant_id, cpf)     WHERE cpf     IS NOT NULL;
+CREATE UNIQUE INDEX idx_alunos_rnm_unique ON public.alunos(tenant_id, rnm)     WHERE rnm     IS NOT NULL;
+CREATE UNIQUE INDEX idx_alunos_cnh_unique ON public.alunos(tenant_id, cnh_num) WHERE cnh_num IS NOT NULL;
 
 CREATE TABLE public.turmas (
     id             UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
