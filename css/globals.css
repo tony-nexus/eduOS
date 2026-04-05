@@ -1,0 +1,105 @@
+/* ============================================================
+   globals.css — EduOS Design Tokens, Reset & Scrollbar
+   ATENÇÃO: Não altere variáveis CSS sem aprovação de design.
+   ============================================================ */
+
+/* ===== DESIGN TOKENS ===== */
+:root {
+  --font-sans: 'Geist', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', monospace;
+
+  /* Dark theme (default) */
+  --bg-base: #0a0a0b;
+  --bg-surface: #111113;
+  --bg-elevated: #18181b;
+  --bg-overlay: #1e1e22;
+  --bg-hover: #26262b;
+  --bg-active: #2e2e35;
+
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-default: rgba(255,255,255,0.10);
+  --border-strong: rgba(255,255,255,0.18);
+
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --text-inverse: #09090b;
+
+  --accent: #cc785c;
+  --accent-soft: rgba(204,120,92,0.12);
+  --accent-hover: #d4896e;
+
+  --blue: #5b8af0;
+  --blue-soft: rgba(91,138,240,0.12);
+  --green: #4ade80;
+  --green-soft: rgba(74,222,128,0.12);
+  --amber: #f59e0b;
+  --amber-soft: rgba(245,158,11,0.12);
+  --red: #f87171;
+  --red-soft: rgba(248,113,113,0.12);
+  --purple: #a78bfa;
+  --purple-soft: rgba(167,139,250,0.12);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.5);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
+
+  --sidebar-width: 240px;
+  --topbar-height: 56px;
+
+  --transition: 150ms cubic-bezier(0.4,0,0.2,1);
+}
+
+[data-theme="light"] {
+  --bg-base: #fafafa;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f4f4f5;
+  --bg-overlay: #e4e4e7;
+  --bg-hover: #e4e4e7;
+  --bg-active: #d4d4d8;
+
+  --border-subtle: rgba(0,0,0,0.05);
+  --border-default: rgba(0,0,0,0.09);
+  --border-strong: rgba(0,0,0,0.16);
+
+  --text-primary: #09090b;
+  --text-secondary: #52525b;
+  --text-tertiary: #a1a1aa;
+  --text-inverse: #f4f4f5;
+
+  --accent: #cc785c;
+  --accent-soft: rgba(204,120,92,0.10);
+
+  --blue-soft: rgba(59,130,246,0.10);
+  --green-soft: rgba(22,163,74,0.10);
+  --amber-soft: rgba(217,119,6,0.10);
+  --red-soft: rgba(220,38,38,0.10);
+  --purple-soft: rgba(124,58,237,0.10);
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 16px rgba(0,0,0,0.12);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.16);
+}
+
+/* ===== RESET ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 14px; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  height: 100vh;
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
