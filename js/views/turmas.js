@@ -210,7 +210,8 @@ function applyFilter() {
           ${['agendada','em_andamento'].includes(t.status) ? `
             <button class="action-btn action-editar" data-id="${t.id}">Editar</button>
             <button class="action-btn action-encerrar" data-id="${t.id}" style="color:var(--amber);border-color:var(--amber)">Encerrar</button>
-          ` : `<span style="font-size:11px;color:var(--text-tertiary);padding:4px 6px">${LABEL[t.status] ?? t.status}</span>`}
+          ` : ''}
+          <button class="action-btn danger action-excluir-turma" data-id="${t.id}">Excluir</button>
         </div>
       </td>
     </tr>`;
@@ -234,6 +235,13 @@ function applyFilter() {
     btn.addEventListener('click', () => {
       const t = _turmas.find(x => x.id === btn.dataset.id);
       if (t) encerrarTurma(t);
+    });
+  });
+
+  document.querySelectorAll('.action-excluir-turma').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = _turmas.find(x => x.id === btn.dataset.id);
+      if (t) confirmarExclusaoTurma(t);
     });
   });
 }
@@ -300,12 +308,13 @@ function modalTurma(turma = null) {
       </div>
       <div class="form-group full">
         <label>Código da Turma</label>
-        <input id="f-codigo" type="text" value="${esc(turma?.codigo || '')}"
+        <input id="f-codigo" type="text"
+          value="${esc(turma?.codigo || '')}"
           placeholder="Gerado automaticamente…"
-          style="font-family:var(--font-mono);letter-spacing:0.5px"
-          ${isEdit ? 'readonly style="font-family:var(--font-mono);letter-spacing:0.5px;background:var(--bg-overlay);cursor:not-allowed;opacity:0.7"' : ''}>
+          readonly
+          style="font-family:var(--font-mono);letter-spacing:0.5px;background:var(--bg-overlay);cursor:not-allowed;opacity:0.8">
         <small style="color:var(--text-tertiary);font-size:11px">
-          ${isEdit ? '🔒 Código de identificação — não pode ser alterado após criação.' : 'Gerado automaticamente ao selecionar curso e data de início.'}
+          ${isEdit ? '🔒 Código é imutável após criação.' : 'Preenchido automaticamente ao selecionar curso e data de início.'}
         </small>
       </div>
       <div class="form-group">
