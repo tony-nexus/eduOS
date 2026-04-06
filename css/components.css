@@ -626,6 +626,87 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 }
 
 
+/* ===== LOADING SCREEN (pós-login) ===== */
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--bg-base);
+  background-image: var(--bg-gradient, var(--bg-base));
+  transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.loading-screen.ls-fade-out {
+  opacity: 0;
+  transform: scale(1.04);
+  pointer-events: none;
+}
+
+.loading-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-main);
+  padding: 40px 32px;
+  width: calc(100% - 60px);
+  max-width: 360px;
+  backdrop-filter: var(--card-blur, none);
+  -webkit-backdrop-filter: var(--card-blur, none);
+  box-shadow: var(--card-shadow, var(--shadow-lg));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+}
+
+.ls-progress-wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ls-bar-container {
+  width: 100%;
+  height: 3px;
+  background: var(--border-default);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ls-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.15s ease-out;
+  box-shadow: 0 0 8px var(--accent-soft);
+}
+
+.ls-footer {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.ls-status {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 75%;
+  color: var(--text-secondary);
+}
+
+.ls-percent {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .dash-grid-main, .dash-grid-2, .dash-grid-2b { grid-template-columns: 1fr; }

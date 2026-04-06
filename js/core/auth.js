@@ -10,6 +10,7 @@
  */
 
 import { navigate } from './router.js';
+import { showLoadingScreen } from '../ui/loading.js';
 
 // Removido DEMO_USERS
 
@@ -56,6 +57,7 @@ export async function doLogin(email, password) {
 
     showApp();
     navigate('dashboard');
+    showLoadingScreen();
 
   } catch (err) {
     const msgs = {

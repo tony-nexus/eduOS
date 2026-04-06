@@ -311,6 +311,25 @@
   </div>
 </div>
 
+<!-- ===================== LOADING SCREEN (pós-login) ===================== -->
+<div id="loading-screen" class="loading-screen" style="display:none">
+  <div class="loading-card">
+    <div class="login-logo" style="margin-bottom:0">
+      <div class="login-logo-icon">E</div>
+      <div class="login-logo-text">Edu<span>OS</span></div>
+    </div>
+    <div class="ls-progress-wrapper">
+      <div class="ls-bar-container">
+        <div id="ls-bar-fill" class="ls-bar-fill"></div>
+      </div>
+      <div class="ls-footer">
+        <span id="ls-status" class="ls-status">> init_system...</span>
+        <span id="ls-percent" class="ls-percent">0%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script type="module" src="./js/core/init.js"></script>
 </body>
 </html>
