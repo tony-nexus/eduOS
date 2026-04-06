@@ -70,8 +70,12 @@ function renderCards(inst) {
     return `
       <div class="card" style="padding:20px;position:relative" data-id="${i.id}">
         <div style="position:absolute;top:10px;right:10px;display:flex;gap:4px">
-          <button class="action-btn action-editar" data-id="${i.id}" style="font-size:11px;padding:4px 8px">Editar</button>
-          <button class="action-btn danger action-excluir" data-id="${i.id}" style="font-size:11px;padding:4px 8px">Excluir</button>
+          <button class="action-btn action-editar" data-id="${i.id}" style="padding:6px" title="Editar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="action-btn danger action-excluir" data-id="${i.id}" style="padding:6px;color:var(--red)" title="Excluir">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
         </div>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
           <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--purple));display:grid;place-items:center;font-size:16px;font-weight:600;color:white;flex-shrink:0">${i.nome.charAt(0).toUpperCase()}</div>

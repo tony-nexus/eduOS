@@ -789,3 +789,48 @@ async function exportarPDF() {
     toast('Erro ao gerar PDF', 'error');
   }
 }
+
+// ─── Exclusão de Turmas ────────────────────────────────────────────────────────
+
+function confirmarExclusaoTurma(turma) {
+  openModal('Excluir Turma', `
+    <div class="danger-banner">
+      <div class="danger-banner-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </div>
+      <div class="danger-banner-info">
+        <div class="danger-banner-title">Excluir turma permanentemente</div>
+        <div class="danger-banner-sub">${turma.codigo} · ${turma.curso_nome}</div>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;line-height:1.6">
+      Esta ação é irreversível. O agendamento da turma e as matrículas associadas podem ser <strong style="color:var(--red)">afetadas permanentemente</strong>.
+    </p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+      <button class="btn btn-danger" id="btn-confirmar-exclusao-turma">Excluir Turma</button>
+    </div>
+  `);
+
+  document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
+  document.getElementById('btn-confirmar-exclusao-turma')?.addEventListener('click', () => excluirTurma(turma.id));
+}
+
+async function excluirTurma(id) {
+  const btn = document.getElementById('btn-confirmar-exclusao-turma');
+  btn.disabled = true;
+  btn.textContent = 'Excluindo...';
+  try {
+    const { error } = await supabase.from('turmas').delete().eq('id', id).eq('tenant_id', getTenantId());
+    if (error) throw error;
+    closeModal();
+    toast('Turma excluída com sucesso!', 'success');
+    await loadTurmas();
+  } catch (err) {
+    console.error(err);
+    toast(`Erro ao excluir: ${err.message}`, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Excluir Turma';
+  }
+}
+
