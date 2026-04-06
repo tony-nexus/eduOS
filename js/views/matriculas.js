@@ -316,8 +316,8 @@ async function saveMatricula() {
       throw error;
     }
 
-    // [FIX CRÍTICO] Incrementa vagas ocupadas na turma
-    if (turma_id) await adjustOcupadas(turma_id, +1);
+    // A trigger do banco (fn_sync_turma_ocupadas) já incrementa a ocupada do BD.
+    // O frontend não deve fazer manualmente para não causar salto duplo (ex: 1/20 virar 2/20 no visual)
 
     // Registra pagamento inicial se informado valor
     if (valor && valor > 0 && novaMat?.id) {
@@ -342,31 +342,9 @@ async function saveMatricula() {
   }
 }
 
-// ─── Ajusta turmas.ocupadas (+1 ao matricular, -1 ao cancelar) ────────────────
-async function adjustOcupadas(turmaId, delta) {
-  if (!turmaId) return;
-  try {
-    // Lê o valor atual para calcular o novo
-    const { data, error: errRead } = await supabase
-      .from('turmas')
-      .select('ocupadas')
-      .eq('id', turmaId)
-      .eq('tenant_id', getTenantId())
-      .single();
-    if (errRead) throw errRead;
-
-    const novoVal = Math.max(0, (data.ocupadas || 0) + delta);
-    const { error: errUpd } = await supabase
-      .from('turmas')
-      .update({ ocupadas: novoVal })
-      .eq('id', turmaId)
-      .eq('tenant_id', getTenantId());
-    if (errUpd) throw errUpd;
-  } catch (err) {
-    console.warn('[adjustOcupadas] Falha ao atualizar vagas:', err.message);
-    // Não bloqueia o fluxo principal — log e segue
-  }
-}
+// ─── Atualização de Vagas via BD Automático ─────────────────────────────────
+// A função adjustOcupadas nativa do frontend foi removida, pois a base de dados
+// usa a trigger fn_sync_turma_ocupadas() para garantir ACID em incrementos.
 
 // ─── Modal Editar Status ──────────────────────────────────────────────────────
 function modalEditar(m) {
@@ -400,13 +378,8 @@ function modalEditar(m) {
         .from('matriculas').update({ status: st }).eq('id', m.id).eq('tenant_id', getTenantId());
       if (error) throw error;
 
-      // [FIX CRÍTICO] Ajusta ocupadas quando cancela ou reativa matrícula
-      if (m.turma_id) {
-        const foiCancelado   = st === 'cancelado' && oldSt !== 'cancelado';
-        const foiReativado   = st !== 'cancelado' && oldSt === 'cancelado';
-        if (foiCancelado) await adjustOcupadas(m.turma_id, -1);
-        if (foiReativado)  await adjustOcupadas(m.turma_id, +1);
-      }
+      // O banco de dados ajusta as vagas ocupadas automaticamente via Trigger
+      // quando o status muda para "cancelado" ou retorna.
 
       closeModal();
       toast('Status atualizado!', 'success');

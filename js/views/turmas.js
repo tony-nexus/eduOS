@@ -269,14 +269,27 @@ async function gerarCodigoTurma(cursoId, dataInicio) {
   const prefixo = `${sigla}-${ano}`;
 
   try {
-    const { count } = await supabase
+    const { data, error } = await supabase
       .from('turmas')
-      .select('*', { count: 'exact', head: true })
+      .select('codigo')
       .eq('tenant_id', getTenantId())
-      .eq('curso_id', cursoId)
-      .like('codigo', `${prefixo}%`);
+      .like('codigo', `${prefixo}-%`)
+      .order('codigo', { ascending: false })
+      .limit(1);
 
-    const seq = String((count || 0) + 1).padStart(3, '0');
+    if (error) throw error;
+
+    let nextSeq = 1;
+    if (data && data.length > 0 && data[0].codigo) {
+      const parts = data[0].codigo.split('-');
+      const lastSeqStr = parts[parts.length - 1];
+      const lastSeq = parseInt(lastSeqStr, 10);
+      if (!isNaN(lastSeq)) {
+        nextSeq = lastSeq + 1;
+      }
+    }
+
+    const seq = String(nextSeq).padStart(3, '0');
     return `${prefixo}-${seq}`;
   } catch (_) {
     return `${prefixo}-001`;
