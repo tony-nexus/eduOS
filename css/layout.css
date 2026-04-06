@@ -99,28 +99,44 @@
 @media (min-width: 769px) {
   body.sidebar-collapsed .sidebar {
     width: 72px; 
-    /* The flex basis behaves as 72px width */
   }
   
   /* Expand over the content on hover */
   body.sidebar-collapsed .sidebar:hover {
     width: var(--sidebar-width);
-    margin-right: calc(72px - var(--sidebar-width)); /* Evita o "empurrão" na layout (shifts) */
+    margin-right: calc(72px - var(--sidebar-width));
     box-shadow: 12px 0 32px rgba(0,0,0,0.12), var(--nav-shadow);
   }
 
-  /* Esconde textos/elementos extras QUANDO colapsado e NÃO está no hover */
+  /* Textos e Gaps zerados para centralização perfeita dos ícones */
   body.sidebar-collapsed .sidebar:not(:hover) .sidebar-brand-name,
-  body.sidebar-collapsed .sidebar:not(:hover) .nav-badge,
   body.sidebar-collapsed .sidebar:not(:hover) .user-info,
-  body.sidebar-collapsed .sidebar:not(:hover) #user-chip-logout svg:last-child,
   body.sidebar-collapsed .sidebar:not(:hover) .nav-label {
+    width: 0;
     opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s;
+    overflow: hidden;
+    margin: 0;
+    transition: opacity 0.15s, width 0.15s;
+  }
+
+  /* Elementos ocultados no modo fechado (badges, botão collapse, setas) */
+  body.sidebar-collapsed .sidebar:not(:hover) .nav-badge,
+  body.sidebar-collapsed .sidebar:not(:hover) .sidebar-collapse-btn,
+  body.sidebar-collapsed .sidebar:not(:hover) #user-chip-logout > svg:last-child {
+    display: none;
   }
   body.sidebar-collapsed .sidebar:not(:hover) .sidebar-section-label {
     opacity: 0;
+  }
+
+  /* Centralização ativada removendo gap e pading lateral */
+  body.sidebar-collapsed .sidebar:not(:hover) .sidebar-brand,
+  body.sidebar-collapsed .sidebar:not(:hover) .nav-item,
+  body.sidebar-collapsed .sidebar:not(:hover) .user-chip {
+    padding-left: 0;
+    padding-right: 0;
+    gap: 0;
+    justify-content: center;
   }
 
   /* Inverte a seta do botão collapse */
