@@ -108,6 +108,17 @@
     box-shadow: 12px 0 32px rgba(0,0,0,0.12), var(--nav-shadow);
   }
 
+  /* Equalizando largura de contêiners para manter os centros perfeitos */
+  body.sidebar-collapsed .sidebar:not(:hover) .sidebar-header {
+    padding-left: 8px;
+    padding-right: 8px;
+    border-color: var(--border-default); /* linha separadora mais visível */
+  }
+
+  body.sidebar-collapsed .sidebar:not(:hover) .sidebar-footer {
+    border-color: var(--border-default); /* linha separadora mais visível */
+  }
+
   /* Textos e Gaps zerados para centralização perfeita dos ícones */
   body.sidebar-collapsed .sidebar:not(:hover) .sidebar-brand-name,
   body.sidebar-collapsed .sidebar:not(:hover) .user-info,
@@ -116,6 +127,7 @@
     opacity: 0;
     overflow: hidden;
     margin: 0;
+    flex: none; /* Importante para o user-info não dar stretch e empurrar logo */
     transition: opacity 0.15s, width 0.15s;
   }
 
@@ -127,6 +139,11 @@
   }
   body.sidebar-collapsed .sidebar:not(:hover) .sidebar-section-label {
     opacity: 0;
+    height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin: 0;
+    overflow: hidden;
   }
 
   /* Centralização ativada removendo gap e pading lateral */
@@ -137,6 +154,12 @@
     padding-right: 0;
     gap: 0;
     justify-content: center;
+  }
+
+  /* Força a cor do ativo ser mais quadrada tipo supabase */
+  body.sidebar-collapsed .sidebar:not(:hover) .nav-item {
+    padding-top: 10px;
+    padding-bottom: 10px;
   }
 
   /* Inverte a seta do botão collapse */
