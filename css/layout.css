@@ -113,7 +113,8 @@
   body.sidebar-collapsed .sidebar:not(:hover) .sidebar-brand-name,
   body.sidebar-collapsed .sidebar:not(:hover) .nav-badge,
   body.sidebar-collapsed .sidebar:not(:hover) .user-info,
-  body.sidebar-collapsed .sidebar:not(:hover) #user-chip-logout svg:last-child {
+  body.sidebar-collapsed .sidebar:not(:hover) #user-chip-logout svg:last-child,
+  body.sidebar-collapsed .sidebar:not(:hover) .nav-label {
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.15s;
