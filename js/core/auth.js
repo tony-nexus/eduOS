@@ -7,14 +7,16 @@
  *  - initials gerado com segurança (guard contra nomes undefined)
  *  - Mensagens de erro em PT-BR mais descritivas
  *  - [FIX CRÍTICO] showNavForPerfil() oculta itens do sidebar sem permissão
+ *  - [UX] initAuth() nunca auto-redireciona — exige clique do usuário no login
  */
 
 import { navigate } from './router.js';
 import { showLoadingScreen } from '../ui/loading.js';
 
-// Removido DEMO_USERS
-
 export let currentUser = null;
+
+// Sessão ativa detectada na inicialização (reutilizada sem re-auth se email bater)
+let _cachedSession = null;
 
 // Expõe para getTenantId() sem criar dependência circular
 function _syncGlobal() {
@@ -31,21 +33,29 @@ export async function doLogin(email, password) {
     const { getClient } = await import('./supabase.js');
     const client = await getClient();
 
-    const { data: authData, error: authError } =
-      await client.auth.signInWithPassword({ email, password });
+    let userId;
 
-    if (authError) throw authError;
+    // Reutiliza sessão ativa se o e-mail bater (sem re-autenticar)
+    if (_cachedSession?.user?.email === email) {
+      userId = _cachedSession.user.id;
+    } else {
+      const { data: authData, error: authError } =
+        await client.auth.signInWithPassword({ email, password });
+      if (authError) throw authError;
+      userId = authData.user.id;
+      _cachedSession = null;
+    }
 
     const { data: perfil, error: perfilError } = await client
       .from('perfis')
       .select('nome, role, tenant_id')
-      .eq('user_id', authData.user.id)
+      .eq('user_id', userId)
       .single();
 
     if (perfilError) throw new Error('Perfil não encontrado. Contate o administrador.');
 
     currentUser = {
-      id:        authData.user.id,
+      id:        userId,
       email,
       name:      perfil.nome,
       role:      perfil.role,
@@ -84,6 +94,7 @@ export async function logout() {
 }
 
 // ─── Restaurar sessão ao carregar ─────────────────────────────────────────────
+// Nunca auto-redireciona. Apenas cache a sessão e prepara a UI de login.
 export async function initAuth() {
   try {
     const { getClient } = await import('./supabase.js');
@@ -92,6 +103,7 @@ export async function initAuth() {
     const { data: { session } } = await client.auth.getSession();
     if (!session?.user) return false;
 
+    // Verifica se o perfil é válido (logout preventivo se não houver)
     const { data: perfil, error: perfilError } = await client
       .from('perfis')
       .select('nome, role, tenant_id')
@@ -99,7 +111,6 @@ export async function initAuth() {
       .single();
 
     if (perfilError || !perfil) {
-      // Sem perfil = conta criada sem configuração. Faz logout preventivo.
       await client.auth.signOut();
       const errEl = document.getElementById('login-error');
       if (errEl) {
@@ -109,26 +120,55 @@ export async function initAuth() {
       return false;
     }
 
-    currentUser = {
-      id:        session.user.id,
-      email:     session.user.email,
-      name:      perfil.nome,
-      role:      perfil.role,
-      initials:  _makeInitials(perfil.nome),
-      perfil:    perfil.role,
-      tenant_id: perfil.tenant_id,
-    };
-    _syncGlobal();
-
-    showApp();
-    navigate('dashboard');
-    return true;
+    // Cacheia sessão e adapta UI para "um clique"
+    _cachedSession = session;
+    _setupSessionUI(session, perfil.nome);
 
   } catch (_) { /* sem sessão */ }
-  return false;
+  return false; // sempre exibe a tela de login
 }
 
 // ─── Helpers internos ─────────────────────────────────────────────────────────
+
+/**
+ * Adapta o formulário de login quando já há uma sessão ativa:
+ *  - Pré-preenche o e-mail
+ *  - Esconde o campo de senha (não é necessário redigitar)
+ *  - Muda o botão para "Continuar como [nome]"
+ *  - Se o usuário editar o e-mail, restaura o formulário normal
+ */
+function _setupSessionUI(session, nomeUsuario) {
+  const emailEl   = document.getElementById('login-email');
+  const passField = document.getElementById('login-pass')?.closest('.form-field');
+  const btnEl     = document.getElementById('login-btn');
+  const hintEl    = document.getElementById('login-session-hint');
+
+  if (emailEl) emailEl.value = session.user.email;
+
+  if (passField) passField.style.display = 'none';
+
+  if (btnEl) {
+    const primeiro = nomeUsuario?.split(' ')[0] ?? 'você';
+    btnEl.innerHTML = `Continuar como ${primeiro} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+  }
+
+  if (hintEl) {
+    hintEl.textContent = `Sessão ativa · ${session.user.email}`;
+    hintEl.style.display = 'block';
+  }
+
+  // Se o usuário alterar o e-mail, restaura formulário normal
+  emailEl?.addEventListener('input', function _onEmailChange() {
+    if (this.value !== session.user.email) {
+      _cachedSession = null;
+      if (passField) passField.style.display = '';
+      if (btnEl) btnEl.innerHTML = `Entrar na plataforma <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+      if (hintEl) hintEl.style.display = 'none';
+      emailEl.removeEventListener('input', _onEmailChange);
+    }
+  });
+}
+
 function _makeInitials(name) {
   if (!name) return '?';
   return name.split(' ').filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
@@ -200,12 +240,21 @@ function showNavForPerfil(perfil) {
 }
 
 function hideApp() {
+  _cachedSession = null;
   document.getElementById('app').classList.remove('visible');
   document.getElementById('login-screen').style.display = '';
-  const emailEl = document.getElementById('login-email');
-  const passEl  = document.getElementById('login-pass');
-  if (emailEl) emailEl.value = '';
-  if (passEl) passEl.value = '';
+
+  const emailEl   = document.getElementById('login-email');
+  const passEl    = document.getElementById('login-pass');
+  const passField = passEl?.closest('.form-field');
+  const btnEl     = document.getElementById('login-btn');
+  const hintEl    = document.getElementById('login-session-hint');
+
+  if (emailEl)   emailEl.value = '';
+  if (passEl)    passEl.value  = '';
+  if (passField) passField.style.display = '';
+  if (btnEl)     btnEl.innerHTML = `Entrar na plataforma <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+  if (hintEl)    hintEl.style.display = 'none';
 }
 
 function setLoginLoading(loading) {
