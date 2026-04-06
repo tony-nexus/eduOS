@@ -143,7 +143,7 @@ function modalInstrutor(inst = null) {
   if (inst?.telefone) bindBlur('f-tel',   'Telefone', ['required', 'phone']);
   else                bindBlur('f-tel',   'Telefone', ['phone']);
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('modal-save')?.addEventListener('click', () => saveInstrutor(inst?.id, inst));
+  document.getElementById('modal-save')?.addEventListener('click', () => saveInstrutor(inst?.id, inst ?? {}));
 }
 
 async function saveInstrutor(id, instOriginal = {}) {

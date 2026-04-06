@@ -179,7 +179,7 @@ function modalEmpresa(emp = null) {
   if (emp?.telefone) bindBlur('f-tel',   'Telefone',  ['required', 'phone']);
   else               bindBlur('f-tel',   'Telefone',  ['phone']);
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('modal-save')?.addEventListener('click', () => saveEmpresa(emp?.id, emp));
+  document.getElementById('modal-save')?.addEventListener('click', () => saveEmpresa(emp?.id, emp ?? {}));
 }
 
 async function saveEmpresa(id, empOriginal = {}) {
