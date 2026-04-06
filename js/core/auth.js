@@ -12,6 +12,7 @@
 
 import { navigate } from './router.js';
 import { showLoadingScreen } from '../ui/loading.js';
+import { loadAndApplyBranding } from '../ui/branding.js';
 
 export let currentUser = null;
 
@@ -67,6 +68,7 @@ export async function doLogin(email, password) {
 
     showApp();
     navigate('dashboard');
+    loadAndApplyBranding(); // White-label: aplica cores/logo do tenant
     showLoadingScreen();
 
   } catch (err) {
@@ -123,6 +125,7 @@ export async function initAuth() {
     // Cacheia sessão e adapta UI para "um clique"
     _cachedSession = session;
     _setupSessionUI(session, perfil.nome);
+    loadAndApplyBranding(); // aplica branding mesmo antes do clique (sidebar visível)
 
   } catch (_) { /* sem sessão */ }
   return false; // sempre exibe a tela de login
