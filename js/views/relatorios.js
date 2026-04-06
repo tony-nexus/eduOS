@@ -2,8 +2,6 @@
  * /js/views/relatorios.js
  */
 
-import { setContent, toast } from '../ui/components.js';
-
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, toast, fmtMoney } from '../ui/components.js';
 

@@ -149,12 +149,16 @@ async function loadData() {
 
 async function autoMarkAtrasados() {
   const hoje = new Date().toISOString().split('T')[0];
-  await supabase.from('pagamentos')
-    .update({ status: 'atraso' })
-    .eq('tenant_id', getTenantId())
-    .eq('status', 'pendente')
-    .lt('data_vencimento', hoje)
-    .catch(e => console.warn('[Financeiro] autoMarkAtrasados:', e.message));
+  try {
+    const { error } = await supabase.from('pagamentos')
+      .update({ status: 'atraso' })
+      .eq('tenant_id', getTenantId())
+      .eq('status', 'pendente')
+      .lt('data_vencimento', hoje);
+    if (error) throw error;
+  } catch (e) {
+    console.warn('[Financeiro] autoMarkAtrasados:', e.message);
+  }
 }
 
 // ─── KPIs ─────────────────────────────────────────────────────────────────────
