@@ -1,24 +1,48 @@
 /**
  * /js/views/pipeline.js
  * Kanban alimentado pela tabela de matriculas do Supabase.
+ * Filtros: aluno, turma, curso, status da turma, data início (de/até)
  */
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, toast, esc } from '../ui/components.js';
 import { navigate } from '../core/router.js';
 
-let _matriculas = [];
+let _matriculas  = [];
+let _turmasList  = [];
+let _cursosList  = [];
 
 export async function render() {
   setContent(`
     <div class="page-header">
       <div><h1>Pipeline Operacional</h1><p>Jornada completa do aluno</p></div>
       <div class="page-header-actions">
-        <div class="search-input-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-          <input type="text" id="search-pipeline" class="search-input" placeholder="Buscar aluno...">
-        </div>
         <button class="btn btn-primary" id="btn-nova-mat-pipeline">Nova Matrícula</button>
+      </div>
+    </div>
+    <div class="table-toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:16px">
+      <div class="search-input-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" id="filter-aluno" class="search-input" placeholder="Buscar aluno...">
+      </div>
+      <select class="select-input" id="filter-turma" style="min-width:140px">
+        <option value="">Todas as turmas</option>
+      </select>
+      <select class="select-input" id="filter-curso" style="min-width:140px">
+        <option value="">Todos os cursos</option>
+      </select>
+      <select class="select-input" id="filter-status-turma">
+        <option value="">Status da turma</option>
+        <option value="agendada">Agendada</option>
+        <option value="em_andamento">Em Andamento</option>
+        <option value="concluida">Concluída</option>
+        <option value="cancelada">Cancelada</option>
+      </select>
+      <div style="display:flex;align-items:center;gap:4px">
+        <span style="font-size:11.5px;color:var(--text-tertiary);white-space:nowrap">Início de</span>
+        <input type="date" class="select-input" id="filter-data-de" style="width:auto">
+        <span style="font-size:11.5px;color:var(--text-tertiary)">até</span>
+        <input type="date" class="select-input" id="filter-data-ate" style="width:auto">
       </div>
     </div>
     <div class="kanban-board" id="kanban-board">
@@ -27,55 +51,100 @@ export async function render() {
   `);
 
   document.getElementById('btn-nova-mat-pipeline')?.addEventListener('click', () => navigate('matriculas'));
-  document.getElementById('search-pipeline')?.addEventListener('input', (e) => {
-    renderKanban(e.target.value);
+
+  ['filter-aluno','filter-turma','filter-curso','filter-status-turma','filter-data-de','filter-data-ate'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input',  applyFilters);
+      el.addEventListener('change', applyFilters);
+    }
   });
+
   await loadData();
 }
 
 async function loadData() {
   try {
-    const { data, error } = await supabase
-      .from('matriculas')
-      .select('*, aluno:aluno_id(nome), curso:curso_id(nome)')
-      .eq('tenant_id', getTenantId());
+    const [mRes, tRes, cRes] = await Promise.all([
+      supabase
+        .from('matriculas')
+        .select('*, aluno:aluno_id(nome), curso:curso_id(id,nome), turma:turma_id(id,codigo,status,data_inicio,data_fim)')
+        .eq('tenant_id', getTenantId()),
+      supabase
+        .from('turmas')
+        .select('id, codigo, status, data_inicio, data_fim')
+        .eq('tenant_id', getTenantId())
+        .order('codigo'),
+      supabase
+        .from('cursos')
+        .select('id, nome')
+        .eq('tenant_id', getTenantId())
+        .eq('ativo', true)
+        .order('nome'),
+    ]);
 
-    if (error) throw error;
-    _matriculas = data || [];
+    if (mRes.error) throw mRes.error;
+    _matriculas = mRes.data || [];
+    _turmasList = tRes.data  || [];
+    _cursosList = cRes.data  || [];
   } catch (err) {
     console.error(err);
     toast('Erro ao carregar pipeline', 'error');
     _matriculas = [];
   }
-  renderKanban();
+
+  // Preenche dropdowns de filtro
+  const selTurma = document.getElementById('filter-turma');
+  if (selTurma) _turmasList.forEach(t => {
+    selTurma.innerHTML += `<option value="${t.id}">${esc(t.codigo)}</option>`;
+  });
+
+  const selCurso = document.getElementById('filter-curso');
+  if (selCurso) _cursosList.forEach(c => {
+    selCurso.innerHTML += `<option value="${c.id}">${esc(c.nome)}</option>`;
+  });
+
+  applyFilters();
 }
 
-function renderKanban(searchTerm = '') {
-  const board = document.getElementById('kanban-board');
-  if(!board) return;
+function applyFilters() {
+  const aluno       = (document.getElementById('filter-aluno')?.value || '').trim().toLowerCase();
+  const turmaId     = document.getElementById('filter-turma')?.value || '';
+  const cursoId     = document.getElementById('filter-curso')?.value || '';
+  const statusTurma = document.getElementById('filter-status-turma')?.value || '';
+  const dataDe      = document.getElementById('filter-data-de')?.value || '';
+  const dataAte     = document.getElementById('filter-data-ate')?.value || '';
 
-  const term = searchTerm.trim().toLowerCase();
+  const filtered = _matriculas.filter(m => {
+    if (aluno       && !(m.aluno?.nome || '').toLowerCase().includes(aluno))    return false;
+    if (turmaId     && m.turma_id !== turmaId)                                  return false;
+    if (cursoId     && m.curso?.id !== cursoId)                                 return false;
+    if (statusTurma && m.turma?.status !== statusTurma)                         return false;
+    if (dataDe      && m.turma?.data_inicio && m.turma.data_inicio < dataDe)    return false;
+    if (dataAte     && m.turma?.data_inicio && m.turma.data_inicio > dataAte)   return false;
+    return true;
+  });
+
+  renderKanban(filtered);
+}
+
+function renderKanban(filtered = _matriculas) {
+  const board = document.getElementById('kanban-board');
+  if (!board) return;
 
   const cols = [
-    { key: 'matriculado',         label: 'Matriculados',     color: 'var(--blue)',         items: [] },
-    { key: 'aguardando_turma',    label: 'Ag. Turma',        color: 'var(--amber)',         items: [] },
-    { key: 'em_andamento',        label: 'Em Andamento',     color: 'var(--accent)',        items: [] },
-    { key: 'reprovado',           label: 'Reprovados',       color: 'var(--red)',           items: [] },
-    { key: 'concluido',           label: 'Concluído',        color: 'var(--green)',         items: [] },
-    { key: 'certificado_emitido', label: 'Cert. Emitido',    color: 'var(--purple)',        items: [] },
-    { key: 'outros',              label: 'Outros',           color: 'var(--text-tertiary)', items: [] },
+    { key: 'matriculado',         label: 'Matriculados',     color: 'var(--blue)',          items: [] },
+    { key: 'aguardando_turma',    label: 'Ag. Turma',        color: 'var(--amber)',          items: [] },
+    { key: 'em_andamento',        label: 'Em Andamento',     color: 'var(--accent)',         items: [] },
+    { key: 'reprovado',           label: 'Reprovados',       color: 'var(--red)',            items: [] },
+    { key: 'concluido',           label: 'Concluído',        color: 'var(--green)',          items: [] },
+    { key: 'certificado_emitido', label: 'Cert. Emitido',    color: 'var(--purple)',         items: [] },
+    { key: 'outros',              label: 'Outros',           color: 'var(--text-tertiary)',  items: [] },
   ];
 
-  _matriculas.forEach(m => {
-    const nome = (m.aluno?.nome || '').toLowerCase();
-    if (term && !nome.includes(term)) return;
-
+  filtered.forEach(m => {
     const col = cols.find(c => c.key === m.status);
-    if (col) {
-      col.items.push(m);
-    } else {
-      cols[5].items.push(m);
-    }
+    (col ?? cols[6]).items.push(m);
   });
 
   board.innerHTML = cols.map(c => `
@@ -89,14 +158,16 @@ function renderKanban(searchTerm = '') {
       </div>
       <div class="kanban-col-body" data-status="${c.key}">
         ${c.items.map(m => `
-          <div class="kanban-card" draggable="true" data-id="${m.id}" data-nome="${m.aluno?.nome||'—'}" data-curso="${m.curso?.nome||'—'}">
-            <div class="kanban-card-name">${m.aluno?.nome || '—'}</div>
-            <div class="kanban-card-meta">
-              <span class="badge badge-gray" style="font-size:10px">${m.curso?.nome || '—'}</span>
+          <div class="kanban-card" draggable="true" data-id="${m.id}"
+               data-nome="${esc(m.aluno?.nome||'—')}" data-curso="${esc(m.curso?.nome||'—')}">
+            <div class="kanban-card-name">${esc(m.aluno?.nome || '—')}</div>
+            <div class="kanban-card-meta" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+              <span class="badge badge-gray" style="font-size:10px">${esc(m.curso?.nome || '—')}</span>
+              ${m.turma?.codigo ? `<span style="font-family:var(--font-mono);font-size:10px;color:var(--accent)">${esc(m.turma.codigo)}</span>` : ''}
             </div>
           </div>
         `).join('')}
-        ${c.items.length === 0 ? '<div style="font-size:11px; color:var(--text-tertiary); text-align:center; padding:10px 0;">Vazio</div>' : ''}
+        ${c.items.length === 0 ? '<div style="font-size:11px;color:var(--text-tertiary);text-align:center;padding:10px 0;">Vazio</div>' : ''}
       </div>
     </div>
   `).join('');
@@ -105,12 +176,12 @@ function renderKanban(searchTerm = '') {
 }
 
 function setupDragAndDrop() {
-  const cards = document.querySelectorAll('.kanban-card');
+  const cards   = document.querySelectorAll('.kanban-card');
   const columns = document.querySelectorAll('.kanban-col-body');
-  
+
   cards.forEach(card => {
     card.addEventListener('dragstart', () => card.classList.add('dragging'));
-    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragend',   () => card.classList.remove('dragging'));
     card.addEventListener('click', () => {
       toast(`Matrícula selecionada: ${card.dataset.nome}`, 'info');
     });
@@ -155,9 +226,7 @@ function setupDragAndDrop() {
 
       const oldStatus = matricula.status;
       matricula.status = newStatus;
-
-      const searchInput = document.getElementById('search-pipeline');
-      renderKanban(searchInput?.value ?? '');
+      applyFilters();
 
       try {
         const { error } = await supabase
@@ -167,10 +236,10 @@ function setupDragAndDrop() {
           .eq('tenant_id', getTenantId());
 
         if (error) throw error;
-        toast(`Pipeline: ${esc(draggingCard.dataset.nome)} → ${newStatus.replace('_', ' ')}`, 'success');
+        toast(`${esc(draggingCard.dataset.nome)} → ${newStatus.replace(/_/g, ' ')}`, 'success');
       } catch (err) {
         matricula.status = oldStatus;
-        renderKanban(searchInput?.value ?? '');
+        applyFilters();
         toast('Erro ao alterar status.', 'error');
       }
     });

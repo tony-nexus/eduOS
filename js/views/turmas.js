@@ -13,7 +13,7 @@
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
 import { validateForm, fieldError, fieldOk } from '../ui/validate.js';
-import { autoSyncTurmaStatus, autoEnrollAguardando } from '../core/automations.js';
+import { autoSyncTurmaStatus, autoEnrollAguardando, autoEmitirCertificados } from '../core/automations.js';
 
 let _turmas     = [];
 let _cursos     = [];
@@ -208,6 +208,7 @@ function applyFilter() {
         <div style="display:flex;gap:4px">
           <button class="action-btn action-alunos" data-id="${t.id}">Alunos</button>
           <button class="action-btn action-editar" data-id="${t.id}">Editar</button>
+          ${['agendada','em_andamento'].includes(t.status) ? `<button class="action-btn action-encerrar" data-id="${t.id}" style="color:var(--amber);border-color:var(--amber)">Encerrar</button>` : ''}
         </div>
       </td>
     </tr>`;
@@ -224,6 +225,13 @@ function applyFilter() {
     btn.addEventListener('click', () => {
       const t = _turmas.find(x => x.id === btn.dataset.id);
       if (t) modalTurma(t);
+    });
+  });
+
+  document.querySelectorAll('.action-encerrar').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = _turmas.find(x => x.id === btn.dataset.id);
+      if (t) encerrarTurma(t);
     });
   });
 }
@@ -600,6 +608,136 @@ async function avaliarAluno(matriculaId, novoStatus, opts = {}) {
       curso_id:  opts.cursoId,
       status:    'aguardando_turma',
     }).catch(() => {}); // Ignora erro silenciosamente (pode já ter outra ativa)
+  }
+}
+
+// ─── Encerrar Turma ───────────────────────────────────────────────────────────
+async function encerrarTurma(turma) {
+  openModal(`Encerrar Turma — ${esc(turma.codigo)}`, `
+    <div style="padding:40px;text-align:center;color:var(--text-tertiary)">Verificando alunos...</div>
+  `);
+
+  try {
+    const { data, error } = await supabase
+      .from('matriculas')
+      .select('id, aluno_id, curso_id, status, aluno:aluno_id(nome)')
+      .eq('turma_id', turma.id)
+      .eq('tenant_id', getTenantId())
+      .neq('status', 'cancelado');
+
+    if (error) throw error;
+
+    const emAndamento = (data || []).filter(m => m.status === 'em_andamento');
+
+    if (emAndamento.length > 0) {
+      // Há alunos pendentes de avaliação
+      document.getElementById('modal-body').innerHTML = `
+        <div style="padding:10px 16px;background:var(--amber-soft);border-left:3px solid var(--amber);margin-bottom:4px;font-size:12.5px">
+          <strong>${emAndamento.length} aluno(s) ainda em andamento.</strong> Avalie todos antes de encerrar.
+        </div>
+        <div style="max-height:380px;overflow-y:auto">
+          ${emAndamento.map(m => `
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle);display:flex;justify-content:space-between;align-items:center">
+              <span style="font-weight:500;font-size:13px">${esc(m.aluno?.nome ?? '—')}</span>
+              <div style="display:flex;gap:6px">
+                <button class="action-btn enc-aprovar"
+                  style="background:var(--green-soft);color:var(--green);border-color:var(--green)"
+                  data-id="${m.id}" data-nome="${esc(m.aluno?.nome ?? '')}"
+                  data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
+                  ✓ Aprovar
+                </button>
+                <button class="action-btn danger enc-reprovar"
+                  data-id="${m.id}" data-nome="${esc(m.aluno?.nome ?? '')}"
+                  data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
+                  ✗ Reprovar
+                </button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+        </div>
+      `;
+
+      document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
+
+      document.querySelectorAll('.enc-aprovar').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true; btn.textContent = '...';
+          await avaliarAluno(btn.dataset.id, 'concluido');
+          toast(`${btn.dataset.nome} aprovado(a)!`, 'success');
+          closeModal();
+          encerrarTurma(turma);
+        });
+      });
+
+      document.querySelectorAll('.enc-reprovar').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true; btn.textContent = '...';
+          await avaliarAluno(btn.dataset.id, 'reprovado', {
+            alunoId: btn.dataset.alunoId,
+            cursoId: btn.dataset.cursoId,
+          });
+          toast(`${btn.dataset.nome} reprovado(a). Nova matrícula em espera criada.`, 'info');
+          closeModal();
+          encerrarTurma(turma);
+        });
+      });
+
+    } else {
+      // Todos avaliados — confirmar encerramento
+      const counts = {
+        concluido:    (data || []).filter(m => m.status === 'concluido').length,
+        reprovado:    (data || []).filter(m => m.status === 'reprovado').length,
+        certificado:  (data || []).filter(m => m.status === 'certificado_emitido').length,
+      };
+
+      document.getElementById('modal-body').innerHTML = `
+        <div style="padding:16px;font-size:13px;line-height:1.6">
+          <p>Todos os alunos foram avaliados. Confirma o encerramento da turma <strong>${esc(turma.codigo)}</strong>?</p>
+          <div style="display:flex;gap:20px;margin-top:12px;font-family:var(--font-mono);font-size:12px;flex-wrap:wrap">
+            <span style="color:var(--green)">✓ ${counts.concluido} aprovados</span>
+            <span style="color:var(--red)">✗ ${counts.reprovado} reprovados</span>
+            <span style="color:var(--purple)">🎓 ${counts.certificado} já certificados</span>
+          </div>
+          <p style="margin-top:12px;font-size:11.5px;color:var(--text-tertiary)">
+            Os certificados dos alunos aprovados serão emitidos automaticamente.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+          <button class="btn btn-primary" id="btn-encerrar-confirm">Encerrar Turma</button>
+        </div>
+      `;
+
+      document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
+      document.getElementById('btn-encerrar-confirm')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-encerrar-confirm');
+        btn.disabled = true; btn.textContent = 'Encerrando...';
+
+        const { error: errTurma } = await supabase
+          .from('turmas')
+          .update({ status: 'concluida' })
+          .eq('id', turma.id)
+          .eq('tenant_id', getTenantId());
+
+        if (errTurma) { toast('Erro ao encerrar turma.', 'error'); return; }
+
+        closeModal();
+        toast(`Turma ${esc(turma.codigo)} encerrada com sucesso!`, 'success');
+
+        autoEmitirCertificados().then(n => {
+          if (n > 0) toast(`${n} certificado(s) emitido(s) automaticamente.`, 'info');
+        });
+
+        await loadTurmas();
+      });
+    }
+  } catch (e) {
+    document.getElementById('modal-body').innerHTML = `
+      <div style="padding:20px;color:var(--red)">Erro ao verificar status dos alunos.</div>
+    `;
   }
 }
 
