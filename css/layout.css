@@ -90,8 +90,42 @@
   display: flex; flex-direction: column;
   flex-shrink: 0; overflow-y: auto;
   padding: 0 0 16px 0;
-  transition: transform var(--transition), background 0.4s, border-color 0.3s;
+  transition: width 0.3s cubic-bezier(0.2,0,0,1), margin 0.3s cubic-bezier(0.2,0,0,1), transform var(--transition), background 0.4s, border-color 0.3s;
   z-index: 200;
+  overflow-x: hidden;
+}
+
+/* ─── SIDEBAR COLLAPSED (Expand on Hover) ────────────────────────────────── */
+@media (min-width: 769px) {
+  body.sidebar-collapsed .sidebar {
+    width: 72px; 
+    /* The flex basis behaves as 72px width */
+  }
+  
+  /* Expand over the content on hover */
+  body.sidebar-collapsed .sidebar:hover {
+    width: var(--sidebar-width);
+    margin-right: calc(72px - var(--sidebar-width)); /* Evita o "empurrão" na layout (shifts) */
+    box-shadow: 12px 0 32px rgba(0,0,0,0.12), var(--nav-shadow);
+  }
+
+  /* Esconde textos/elementos extras QUANDO colapsado e NÃO está no hover */
+  body.sidebar-collapsed .sidebar:not(:hover) .sidebar-brand-name,
+  body.sidebar-collapsed .sidebar:not(:hover) .nav-badge,
+  body.sidebar-collapsed .sidebar:not(:hover) .user-info,
+  body.sidebar-collapsed .sidebar:not(:hover) #user-chip-logout svg:last-child {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s;
+  }
+  body.sidebar-collapsed .sidebar:not(:hover) .sidebar-section-label {
+    opacity: 0;
+  }
+
+  /* Inverte a seta do botão collapse */
+  body.sidebar-collapsed .sidebar-collapse-btn svg {
+    transform: rotate(180deg);
+  }
 }
 
 /* Overlay mobile */
@@ -104,15 +138,26 @@
 }
 
 .sidebar-header { padding: 16px 16px 12px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 8px; }
-.sidebar-brand { display: flex; align-items: center; gap: 9px; }
+.sidebar-brand { display: flex; align-items: center; gap: 9px; width: 100%; }
 .sidebar-brand-icon {
   width: 30px; height: 30px; border-radius: var(--radius-md);
   background: var(--accent); display: grid; place-items: center;
   font-size: 14px; font-weight: 700; color: var(--text-inverse); font-family: var(--font-mono); flex-shrink: 0;
   transition: background 0.3s, border-radius 0.3s;
 }
-.sidebar-brand-name { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; font-family: var(--font-mono); }
+.sidebar-brand-name { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; font-family: var(--font-mono); transition: opacity 0.2s; white-space: nowrap; }
 .sidebar-brand-name span { color: var(--accent); }
+
+.sidebar-collapse-btn {
+  margin-left: auto;
+  background: transparent; border: none;
+  color: var(--text-tertiary); cursor: pointer; flex-shrink: 0;
+  padding: 4px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  transition: var(--transition);
+}
+.sidebar-collapse-btn svg { transition: transform 0.3s; }
+.sidebar-collapse-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 
 .sidebar-section { padding: 0 8px; margin-bottom: 4px; }
 .sidebar-section-label {
@@ -125,6 +170,7 @@
   padding: 8px 10px; border-radius: var(--radius-sm);
   cursor: pointer; color: var(--text-secondary); font-size: 13px;
   transition: var(--transition); user-select: none;
+  white-space: nowrap;
 }
 .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
@@ -141,6 +187,7 @@
   display: flex; align-items: center; gap: 9px;
   padding: 8px 10px; border-radius: var(--radius-sm);
   cursor: pointer; transition: var(--transition);
+  white-space: nowrap;
 }
 .user-chip:hover { background: var(--bg-hover); }
 .user-avatar {

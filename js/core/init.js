@@ -64,6 +64,18 @@ function registerEventListeners() {
     document.getElementById('sidebar-overlay')?.classList.toggle('open');
   });
 
+  // ── Sidebar Collapse (Desktop) ────────────────────────────────────────────
+  const colBtn = document.getElementById('sidebar-collapse-btn');
+  if (colBtn) {
+    if (localStorage.getItem('eduos_sidebar_collapsed') === 'true') {
+      document.body.classList.add('sidebar-collapsed');
+    }
+    colBtn.addEventListener('click', () => {
+      document.body.classList.toggle('sidebar-collapsed');
+      localStorage.setItem('eduos_sidebar_collapsed', document.body.classList.contains('sidebar-collapsed'));
+    });
+  }
+
   // ── Overlay fecha sidebar ─────────────────────────────────────────────────
   document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
     document.getElementById('sidebar')?.classList.remove('open');
