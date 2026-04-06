@@ -138,22 +138,27 @@ function modalInstrutor(inst = null) {
   `);
 
   bindBlur('f-nome',  'Nome',     ['required']);
-  bindBlur('f-email', 'E-mail',   ['email']);
-  bindBlur('f-tel',   'Telefone', ['phone']);
+  if (inst?.email)    bindBlur('f-email', 'E-mail',   ['required', 'email']);
+  else                bindBlur('f-email', 'E-mail',   ['email']);
+  if (inst?.telefone) bindBlur('f-tel',   'Telefone', ['required', 'phone']);
+  else                bindBlur('f-tel',   'Telefone', ['phone']);
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('modal-save')?.addEventListener('click', () => saveInstrutor(inst?.id));
+  document.getElementById('modal-save')?.addEventListener('click', () => saveInstrutor(inst?.id, inst));
 }
 
-async function saveInstrutor(id) {
+async function saveInstrutor(id, instOriginal = {}) {
   const nome   = document.getElementById('f-nome').value.trim();
   const email  = document.getElementById('f-email').value.trim();
   const tel    = document.getElementById('f-tel').value.trim();
   const espRaw = document.getElementById('f-esp').value;
 
+  const emailRules = instOriginal.email    ? ['required', 'email'] : ['email'];
+  const telRules   = instOriginal.telefone ? ['required', 'phone'] : ['phone'];
+
   const ok = validateForm([
-    { id: 'f-nome',  value: nome,  rules: ['required'], label: 'Nome' },
-    { id: 'f-email', value: email, rules: ['email'],    label: 'E-mail' },
-    { id: 'f-tel',   value: tel,   rules: ['phone'],    label: 'Telefone' },
+    { id: 'f-nome',  value: nome,  rules: ['required'],  label: 'Nome' },
+    { id: 'f-email', value: email, rules: emailRules,    label: 'E-mail' },
+    { id: 'f-tel',   value: tel,   rules: telRules,      label: 'Telefone' },
   ]);
   if (!ok) return;
 

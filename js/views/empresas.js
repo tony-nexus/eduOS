@@ -174,13 +174,15 @@ function modalEmpresa(emp = null) {
   });
   bindBlur('f-nome',  'Nome',     ['required']);
   bindBlur('f-cnpj',  'CNPJ',    ['cnpj']);
-  bindBlur('f-email', 'E-mail',  ['email']);
-  bindBlur('f-tel',   'Telefone',['phone']);
+  if (emp?.email)    bindBlur('f-email', 'E-mail',    ['required', 'email']);
+  else               bindBlur('f-email', 'E-mail',    ['email']);
+  if (emp?.telefone) bindBlur('f-tel',   'Telefone',  ['required', 'phone']);
+  else               bindBlur('f-tel',   'Telefone',  ['phone']);
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('modal-save')?.addEventListener('click', () => saveEmpresa(emp?.id));
+  document.getElementById('modal-save')?.addEventListener('click', () => saveEmpresa(emp?.id, emp));
 }
 
-async function saveEmpresa(id) {
+async function saveEmpresa(id, empOriginal = {}) {
   const nome = document.getElementById('f-nome').value.trim();
   const cnpj = document.getElementById('f-cnpj').value.trim() || null;
   const responsavel = document.getElementById('f-resp').value.trim() || null;
@@ -188,11 +190,14 @@ async function saveEmpresa(id) {
   const email = document.getElementById('f-email').value.trim() || null;
   const status = document.getElementById('f-status').value;
 
+  const emailRules = empOriginal.email    ? ['required', 'email'] : ['email'];
+  const telRules   = empOriginal.telefone ? ['required', 'phone'] : ['phone'];
+
   const ok = validateForm([
-    { id: 'f-nome',  value: nome,     rules: ['required'], label: 'Nome' },
-    { id: 'f-cnpj',  value: cnpj||'', rules: ['cnpj'],     label: 'CNPJ' },
-    { id: 'f-email', value: email||'',rules: ['email'],    label: 'E-mail' },
-    { id: 'f-tel',   value: telefone||'', rules: ['phone'],label: 'Telefone' },
+    { id: 'f-nome',  value: nome,       rules: ['required'], label: 'Nome' },
+    { id: 'f-cnpj',  value: cnpj||'',   rules: ['cnpj'],     label: 'CNPJ' },
+    { id: 'f-email', value: email||'',  rules: emailRules,   label: 'E-mail' },
+    { id: 'f-tel',   value: telefone||'', rules: telRules,   label: 'Telefone' },
   ]);
   if (!ok) return;
 

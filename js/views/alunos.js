@@ -1209,12 +1209,20 @@ function modalEditarAluno(aluno) {
   `, true);
 
   bindMasksEditarAluno();
+
+  // Validação em tempo real nos campos obrigatórios da edição
+  bindBlur('e-nome',  'Nome',     ['required']);
+  if (aluno.email)    bindBlur('e-email', 'E-mail',   ['required', 'email']);
+  else                bindBlur('e-email', 'E-mail',   ['email']);
+  if (aluno.telefone) bindBlur('e-tel',   'Telefone', ['required', 'phone']);
+  else                bindBlur('e-tel',   'Telefone', ['phone']);
+
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('modal-update')?.addEventListener('click', () => atualizarAluno(aluno.id));
+  document.getElementById('modal-update')?.addEventListener('click', () => atualizarAluno(aluno.id, aluno));
 }
 
 // ─── UPDATE real ──────────────────────────────────────────────────────────────
-async function atualizarAluno(id) {
+async function atualizarAluno(id, alunoOriginal = {}) {
   const nome        = document.getElementById('e-nome')?.value.trim();
   const email       = document.getElementById('e-email')?.value.trim();
   const telefone    = document.getElementById('e-tel')?.value.trim();
@@ -1233,13 +1241,26 @@ async function atualizarAluno(id) {
   const cidade      = document.getElementById('e-cidade')?.value.trim()      || null;
   const uf          = document.getElementById('e-uf')?.value.trim()          || null;
 
-  if (!nome) { toast('O campo Nome é obrigatório.', 'warning'); return; }
+  // ── Campos obrigatórios: nome sempre; email e telefone se já tinham valor ──
+  const emailRules    = alunoOriginal.email    ? ['required', 'email'] : ['email'];
+  const telefoneRules = alunoOriginal.telefone ? ['required', 'phone'] : ['phone'];
 
-  const rawTel = (telefone || '').replace(/\D/g, '');
-  if (rawTel && rawTel.length < 10) { toast('Telefone inválido. Use DDD + número (10-11 dígitos).', 'warning'); return; }
+  const ok = validateForm([
+    { id: 'e-nome',  value: nome,     rules: ['required'],   label: 'Nome' },
+    { id: 'e-email', value: email,    rules: emailRules,     label: 'E-mail' },
+    { id: 'e-tel',   value: telefone, rules: telefoneRules,  label: 'Telefone' },
+  ]);
+  if (!ok) return;
 
   const rawCep = (cep || '').replace(/\D/g, '');
-  if (rawCep && rawCep.length !== 8) { toast('CEP inválido.', 'warning'); return; }
+  if (rawCep && rawCep.length !== 8) { fieldError('e-cep', 'CEP inválido.'); return; }
+  fieldOk('e-cep');
+
+  // Pelo menos um documento deve permanecer preenchido
+  if (!cpfVal && !rnmVal && !cnhVal) {
+    toast('Pelo menos um documento (CPF, RNM ou CNH) deve permanecer preenchido.', 'warning');
+    return;
+  }
 
   const updateBtn = document.getElementById('modal-update');
   updateBtn.disabled = true;
