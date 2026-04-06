@@ -591,6 +591,75 @@ tbody td { padding: 12px 16px; font-size: 13px; color: var(--text-primary); }
 }
 .btn-danger:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
 
+/* ===== DATE INPUT — ícone calendário visível em todos os temas ===== */
+/*
+   Por padrão, :root = dark → sinaliza ao browser que o campo é escuro.
+   Isso faz o browser adaptar cores nativas (ícone, popup do calendário).
+   ::-webkit-calendar-picker-indicator pinta o ícone explicitamente.
+*/
+
+/* Temas escuros (dark, neon-glass, ocean-glass) — default do :root */
+:root .form-group input[type="date"],
+:root input[type="date"] {
+  color-scheme: dark;
+}
+:root .form-group input[type="date"]::-webkit-calendar-picker-indicator,
+:root input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.75);
+  cursor: pointer;
+  opacity: 0.7;
+  border-radius: 3px;
+  padding: 1px;
+  transition: opacity 0.2s;
+}
+:root .form-group input[type="date"]::-webkit-calendar-picker-indicator:hover,
+:root input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  filter: invert(1) brightness(1);
+}
+
+/* Neon Glass e Ocean Glass — mesmo tratamento */
+[data-theme="neon-glass"] .form-group input[type="date"],
+[data-theme="neon-glass"] input[type="date"],
+[data-theme="ocean-glass"] .form-group input[type="date"],
+[data-theme="ocean-glass"] input[type="date"] {
+  color-scheme: dark;
+}
+[data-theme="neon-glass"] .form-group input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="neon-glass"] input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="ocean-glass"] .form-group input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="ocean-glass"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.75);
+  cursor: pointer;
+  opacity: 0.7;
+  border-radius: 3px;
+  padding: 1px;
+  transition: opacity 0.2s;
+}
+[data-theme="neon-glass"] .form-group input[type="date"]::-webkit-calendar-picker-indicator:hover,
+[data-theme="neon-glass"] input[type="date"]::-webkit-calendar-picker-indicator:hover,
+[data-theme="ocean-glass"] .form-group input[type="date"]::-webkit-calendar-picker-indicator:hover,
+[data-theme="ocean-glass"] input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  filter: invert(1) brightness(1);
+}
+
+/* Light — restaura ícone nativo escuro (browser padrão) */
+[data-theme="light"] .form-group input[type="date"],
+[data-theme="light"] input[type="date"] {
+  color-scheme: light;
+}
+[data-theme="light"] .form-group input[type="date"]::-webkit-calendar-picker-indicator,
+[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: none;
+  opacity: 0.6;
+  cursor: pointer;
+}
+[data-theme="light"] .form-group input[type="date"]::-webkit-calendar-picker-indicator:hover,
+[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .dash-grid-main, .dash-grid-2, .dash-grid-2b { grid-template-columns: 1fr; }

@@ -1252,11 +1252,48 @@ async function atualizarAluno(id, alunoOriginal = {}) {
   ]);
   if (!ok) return;
 
+  // ── Validação: Via Empresa exige empresa selecionada ──────────────────────
+  if (tipo === 'empresa' && !empresaId) {
+    fieldError('e-empresa', 'Selecione a empresa.');
+    return;
+  }
+  fieldOk('e-empresa');
+
+  // ── Validação: data de nascimento → maioridade mínima de 18 anos ──────────
+  if (nascimento) {
+    const ageDays = (Date.now() - new Date(nascimento + 'T00:00:00')) / (1000 * 60 * 60 * 24);
+    if (ageDays < 18 * 365.25) {
+      fieldError('e-nasc', 'Idade mínima: 18 anos.');
+      return;
+    }
+    fieldOk('e-nasc');
+  }
+
+  // ── Validação CEP ─────────────────────────────────────────────────────────
   const rawCep = (cep || '').replace(/\D/g, '');
   if (rawCep && rawCep.length !== 8) { fieldError('e-cep', 'CEP inválido.'); return; }
   fieldOk('e-cep');
 
-  // Pelo menos um documento deve permanecer preenchido
+  // ── Campos de endereço: se já tinham valor, não podem ficar em branco ─────
+  const enderecoFields = [
+    { id: 'e-rua',    value: rua,    original: alunoOriginal.rua,    label: 'Logradouro' },
+    { id: 'e-numero', value: numero, original: alunoOriginal.numero, label: 'Número' },
+    { id: 'e-bairro', value: bairro, original: alunoOriginal.bairro, label: 'Bairro' },
+    { id: 'e-cidade', value: cidade, original: alunoOriginal.cidade, label: 'Cidade' },
+    { id: 'e-uf',     value: uf,     original: alunoOriginal.uf,     label: 'UF' },
+  ];
+  let enderecoOk = true;
+  for (const f of enderecoFields) {
+    if (f.original && !f.value) {
+      fieldError(f.id, `${f.label} é obrigatório.`);
+      enderecoOk = false;
+    } else {
+      fieldOk(f.id);
+    }
+  }
+  if (!enderecoOk) return;
+
+  // ── Pelo menos um documento deve permanecer preenchido ────────────────────
   if (!cpfVal && !rnmVal && !cnhVal) {
     toast('Pelo menos um documento (CPF, RNM ou CNH) deve permanecer preenchido.', 'warning');
     return;

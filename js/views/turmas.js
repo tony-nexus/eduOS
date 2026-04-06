@@ -207,8 +207,10 @@ function applyFilter() {
       <td>
         <div style="display:flex;gap:4px">
           <button class="action-btn action-alunos" data-id="${t.id}">Alunos</button>
-          <button class="action-btn action-editar" data-id="${t.id}">Editar</button>
-          ${['agendada','em_andamento'].includes(t.status) ? `<button class="action-btn action-encerrar" data-id="${t.id}" style="color:var(--amber);border-color:var(--amber)">Encerrar</button>` : ''}
+          ${['agendada','em_andamento'].includes(t.status) ? `
+            <button class="action-btn action-editar" data-id="${t.id}">Editar</button>
+            <button class="action-btn action-encerrar" data-id="${t.id}" style="color:var(--amber);border-color:var(--amber)">Encerrar</button>
+          ` : `<span style="font-size:11px;color:var(--text-tertiary);padding:4px 6px">${LABEL[t.status] ?? t.status}</span>`}
         </div>
       </td>
     </tr>`;
@@ -287,7 +289,7 @@ function modalTurma(turma = null) {
     <div class="form-grid">
       <div class="form-group">
         <label>Curso *</label>
-        <select id="f-curso">
+        <select id="f-curso" ${isEdit ? 'disabled' : ''}>
           <option value="">— Selecione —</option>
           ${cursosOpts}
         </select>
@@ -298,20 +300,12 @@ function modalTurma(turma = null) {
       </div>
       <div class="form-group full">
         <label>Código da Turma</label>
-        <div style="position:relative">
-          <input id="f-codigo" type="text" value="${esc(turma?.codigo || '')}"
-            placeholder="Será gerado automaticamente…"
-            style="padding-right:100px;font-family:var(--font-mono);letter-spacing:0.5px">
-          <button type="button" id="btn-gerar-codigo"
-            style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
-                   background:var(--accent-soft);border:1px solid var(--accent);
-                   color:var(--accent);border-radius:4px;padding:3px 8px;font-size:11px;
-                   cursor:pointer;white-space:nowrap">
-            ↻ Gerar
-          </button>
-        </div>
+        <input id="f-codigo" type="text" value="${esc(turma?.codigo || '')}"
+          placeholder="Gerado automaticamente…"
+          style="font-family:var(--font-mono);letter-spacing:0.5px"
+          ${isEdit ? 'readonly style="font-family:var(--font-mono);letter-spacing:0.5px;background:var(--bg-overlay);cursor:not-allowed;opacity:0.7"' : ''}>
         <small style="color:var(--text-tertiary);font-size:11px">
-          Formato: SIGLA-ANO-SEQ (ex: NR35-2025-001). Gerado automaticamente ao selecionar curso e data.
+          ${isEdit ? '🔒 Código de identificação — não pode ser alterado após criação.' : 'Gerado automaticamente ao selecionar curso e data de início.'}
         </small>
       </div>
       <div class="form-group">
@@ -336,10 +330,8 @@ function modalTurma(turma = null) {
       <div class="form-group full">
         <label>Status</label>
         <select id="f-status">
-          <option value="agendada"      ${turma?.status === 'agendada'      ? 'selected' : ''}>Agendada</option>
-          <option value="em_andamento"  ${turma?.status === 'em_andamento'  ? 'selected' : ''}>Em Andamento</option>
-          <option value="concluida"     ${turma?.status === 'concluida'     ? 'selected' : ''}>Concluída</option>
-          <option value="cancelada"     ${turma?.status === 'cancelada'     ? 'selected' : ''}>Cancelada</option>
+          <option value="agendada"     ${turma?.status === 'agendada'     ? 'selected' : ''}>Agendada</option>
+          <option value="em_andamento" ${turma?.status === 'em_andamento' ? 'selected' : ''}>Em Andamento</option>
         </select>
       </div>
     </div>
@@ -349,10 +341,10 @@ function modalTurma(turma = null) {
     </div>
   `);
 
-  // ── Auto-geração de código ao mudar curso ou data ─────────────────────────
+  // ── Auto-geração de código apenas para turmas novas ──────────────────────
   async function triggerAutoCode() {
-    if (isEdit) return; // não sobrescreve código em edições
-    const cursoId   = document.getElementById('f-curso')?.value;
+    if (isEdit) return; // código é chave - não sobrescreve em edições
+    const cursoId    = document.getElementById('f-curso')?.value;
     const dataInicio = document.getElementById('f-inicio')?.value;
     if (!cursoId || !dataInicio) return;
     const codigo = await gerarCodigoTurma(cursoId, dataInicio);
@@ -360,22 +352,11 @@ function modalTurma(turma = null) {
     if (input) input.value = codigo;
   }
 
-  document.getElementById('f-curso')?.addEventListener('change', triggerAutoCode);
-  document.getElementById('f-inicio')?.addEventListener('change', triggerAutoCode);
-  document.getElementById('btn-gerar-codigo')?.addEventListener('click', async () => {
-    const cursoId   = document.getElementById('f-curso')?.value;
-    const dataInicio = document.getElementById('f-inicio')?.value;
-    if (!cursoId || !dataInicio) {
-      toast('Selecione o curso e a data de início primeiro.', 'warning');
-      return;
-    }
-    const codigo = await gerarCodigoTurma(cursoId, dataInicio);
-    const input  = document.getElementById('f-codigo');
-    if (input) { input.value = codigo; toast('Código gerado!', 'success'); }
-  });
-
-  // Gera automaticamente se curso já estiver selecionado (edição / pré-seleção)
-  if (!isEdit) triggerAutoCode();
+  if (!isEdit) {
+    document.getElementById('f-curso')?.addEventListener('change', triggerAutoCode);
+    document.getElementById('f-inicio')?.addEventListener('change', triggerAutoCode);
+    triggerAutoCode();
+  }
 
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => saveTurma(turma?.id));

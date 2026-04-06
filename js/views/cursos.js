@@ -1,11 +1,15 @@
 /**
  * /js/views/cursos.js
  * CRUD real para Cursos via Supabase.
+ * Melhorias:
+ *  - Campo Valor com máscara R$ (type=text + formatação BRL)
+ *  - Validade passa a ser obrigatória
+ *  - Botão Excluir com modal de confirmação
  */
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtMoney } from '../ui/components.js';
-import { validateForm, bindBlur } from '../ui/validate.js';
+import { validateForm, fieldError, fieldOk, bindBlur } from '../ui/validate.js';
 
 let _cache = [];
 
@@ -49,7 +53,6 @@ async function loadData() {
       .select('*')
       .eq('tenant_id', getTenantId())
       .order('nome');
-      
     if (error) throw error;
     _cache = data || [];
   } catch (err) {
@@ -62,8 +65,8 @@ async function loadData() {
 
 function applyFilter() {
   const q = document.getElementById('search-cursos')?.value.toLowerCase().trim() || '';
-  const filtered = _cache.filter(c => 
-    c.nome.toLowerCase().includes(q) || 
+  const filtered = _cache.filter(c =>
+    c.nome.toLowerCase().includes(q) ||
     (c.codigo && c.codigo.toLowerCase().includes(q))
   );
   renderTabela(filtered);
@@ -87,7 +90,10 @@ function renderTabela(cursos) {
       <td style="font-family:var(--font-mono);font-size:12.5px;color:var(--green)">${c.valor_padrao ? fmtMoney(c.valor_padrao) : '—'}</td>
       <td><span class="badge ${c.ativo !== false ? 'badge-green' : 'badge-gray'}">${c.ativo !== false ? 'Ativo' : 'Inativo'}</span></td>
       <td>
-        <button class="action-btn" data-action="editar" data-id="${c.id}">Editar</button>
+        <div style="display:flex;gap:4px">
+          <button class="action-btn" data-action="editar" data-id="${c.id}">Editar</button>
+          <button class="action-btn danger" data-action="excluir" data-id="${c.id}">Excluir</button>
+        </div>
       </td>
     </tr>
   `).join('');
@@ -98,10 +104,38 @@ function renderTabela(cursos) {
       if (curso) modalCurso(curso);
     });
   });
+
+  document.querySelectorAll('.action-btn[data-action="excluir"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const curso = _cache.find(cx => cx.id == btn.dataset.id);
+      if (curso) confirmarExclusaoCurso(curso);
+    });
+  });
 }
 
+// ─── Máscara R$ ───────────────────────────────────────────────────────────────
+function aplicarMascaraReais(input) {
+  input.addEventListener('input', () => {
+    let raw = input.value.replace(/\D/g, '');
+    if (!raw) { input.value = ''; return; }
+    const cents = parseInt(raw, 10);
+    input.value = (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  });
+}
+
+function parseBRL(str) {
+  if (!str) return null;
+  return parseFloat(str.replace(/\./g, '').replace(',', '.')) || null;
+}
+
+// ─── Modal Curso ───────────────────────────────────────────────────────────────
 function modalCurso(curso = null) {
   const isEdit = !!curso;
+  // Valor formatado para exibição no campo
+  const valorStr = curso?.valor_padrao
+    ? curso.valor_padrao.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : '';
+
   openModal(isEdit ? 'Editar Curso' : 'Novo Curso', `
     <div class="form-grid">
       <div class="form-group full">
@@ -117,12 +151,13 @@ function modalCurso(curso = null) {
         <input id="f-ch" type="number" value="${curso?.carga_horaria || ''}" placeholder="Ex: 8">
       </div>
       <div class="form-group">
-        <label>Validade (meses)</label>
+        <label>Validade (meses) *</label>
         <input id="f-val" type="number" value="${curso?.validade_meses || ''}" placeholder="Ex: 24">
       </div>
       <div class="form-group">
         <label>Valor Padrão (R$) *</label>
-        <input id="f-valor" type="number" value="${curso?.valor_padrao || ''}" step="0.01" placeholder="0.00">
+        <input id="f-valor" type="text" inputmode="numeric" value="${valorStr}" placeholder="0,00"
+          style="font-family:var(--font-mono)">
       </div>
       <div class="form-group">
         <label>Status</label>
@@ -138,36 +173,46 @@ function modalCurso(curso = null) {
     </div>
   `);
 
-  bindBlur('f-nome',  'Nome',          ['required']);
-  bindBlur('f-cod',   'Código',        ['required']);
-  bindBlur('f-ch',    'Carga horária', ['required', 'int_positive']);
-  bindBlur('f-valor', 'Valor',         ['required', 'positive']);
+  aplicarMascaraReais(document.getElementById('f-valor'));
+
+  bindBlur('f-nome', 'Nome',          ['required']);
+  bindBlur('f-cod',  'Código',        ['required']);
+  bindBlur('f-ch',   'Carga horária', ['required', 'int_positive']);
+  bindBlur('f-val',  'Validade',      ['required', 'int_positive']);
+  // Valor: validação manual pois é text com máscara
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => saveCurso(curso?.id));
 }
 
+// ─── Save ─────────────────────────────────────────────────────────────────────
 async function saveCurso(id) {
-  const nome = document.getElementById('f-nome').value.trim();
-  const cod = document.getElementById('f-cod').value.trim();
-  const ch = parseInt(document.getElementById('f-ch').value) || null;
+  const nome    = document.getElementById('f-nome').value.trim();
+  const cod     = document.getElementById('f-cod').value.trim();
+  const ch      = parseInt(document.getElementById('f-ch').value) || null;
   const validade = parseInt(document.getElementById('f-val').value) || null;
-  const valor = parseFloat(document.getElementById('f-valor').value) || null;
-  const ativo = document.getElementById('f-ativo').value === 'true';
+  const valorRaw = document.getElementById('f-valor').value.trim();
+  const valor   = parseBRL(valorRaw);
+  const ativo   = document.getElementById('f-ativo').value === 'true';
 
   const ok = validateForm([
-    { id: 'f-nome',  value: nome,  rules: ['required'],       label: 'Nome' },
-    { id: 'f-cod',   value: cod,   rules: ['required'],       label: 'Código' },
-    { id: 'f-ch',    value: ch,    rules: ['required', 'int_positive'], label: 'Carga horária' },
-    { id: 'f-valor', value: valor, rules: ['required', 'positive'],    label: 'Valor' },
+    { id: 'f-nome', value: nome,           rules: ['required'],            label: 'Nome' },
+    { id: 'f-cod',  value: cod,            rules: ['required'],            label: 'Código' },
+    { id: 'f-ch',   value: ch,             rules: ['required', 'int_positive'], label: 'Carga horária' },
+    { id: 'f-val',  value: validade,       rules: ['required', 'int_positive'], label: 'Validade' },
   ]);
   if (!ok) return;
 
+  if (!valor || valor <= 0) {
+    fieldError('f-valor', 'Informe o valor padrão do curso.');
+    return;
+  }
+  fieldOk('f-valor');
+
   const payload = {
     tenant_id: getTenantId(),
-    nome,
-    codigo: cod,
+    nome, codigo: cod,
     carga_horaria: ch,
-    validade_meses: validade || null,
+    validade_meses: validade,
     valor_padrao: valor,
     ativo
   };
@@ -179,15 +224,11 @@ async function saveCurso(id) {
   try {
     let error;
     if (id) {
-      const res = await supabase.from('cursos').update(payload).eq('id', id).eq('tenant_id', getTenantId());
-      error = res.error;
+      ({ error } = await supabase.from('cursos').update(payload).eq('id', id).eq('tenant_id', getTenantId()));
     } else {
-      const res = await supabase.from('cursos').insert(payload);
-      error = res.error;
+      ({ error } = await supabase.from('cursos').insert(payload));
     }
-
     if (error) throw error;
-
     closeModal();
     toast(id ? 'Curso atualizado!' : 'Curso criado!', 'success');
     await loadData();
@@ -196,5 +237,46 @@ async function saveCurso(id) {
     toast('Erro ao salvar curso', 'error');
     btn.disabled = false;
     btn.textContent = id ? 'Salvar Alterações' : 'Criar Curso';
+  }
+}
+
+// ─── Excluir Curso ─────────────────────────────────────────────────────────────
+function confirmarExclusaoCurso(curso) {
+  openModal('Excluir Curso', `
+    <div class="danger-banner">
+      <div class="danger-banner-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </div>
+      <div class="danger-banner-info">
+        <div class="danger-banner-title">Excluir curso permanentemente</div>
+        <div class="danger-banner-sub">${curso.nome} · ${curso.codigo || ''}</div>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;line-height:1.6">
+      Esta ação é irreversível. Turmas e matrículas vinculadas a este curso <strong style="color:var(--red)">podem ser afetadas</strong>.
+    </p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+      <button class="btn btn-danger" id="btn-confirmar-exclusao">Excluir Curso</button>
+    </div>
+  `);
+  document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
+  document.getElementById('btn-confirmar-exclusao')?.addEventListener('click', () => excluirCurso(curso.id));
+}
+
+async function excluirCurso(id) {
+  const btn = document.getElementById('btn-confirmar-exclusao');
+  btn.disabled = true;
+  btn.textContent = 'Excluindo...';
+  try {
+    const { error } = await supabase.from('cursos').delete().eq('id', id).eq('tenant_id', getTenantId());
+    if (error) throw error;
+    closeModal();
+    toast('Curso excluído com sucesso.', 'success');
+    await loadData();
+  } catch (err) {
+    toast(`Erro ao excluir: ${err.message}`, 'error');
+    btn.disabled = false;
+    btn.textContent = 'Excluir Curso';
   }
 }
