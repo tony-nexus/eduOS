@@ -1156,17 +1156,20 @@ function modalEditarAluno(aluno) {
 
       <fieldset class="form-fieldset">
         <legend>Vínculo Empresarial</legend>
-        <div class="input-row">
+
+        <div class="radio-row" role="radiogroup" aria-label="Vínculo com empresa">
+          <label class="radio-item">
+            <input type="radio" name="e-vinculo" value="nao" ${aluno.tipo_pessoa !== 'empresa' ? 'checked' : ''}> Não vinculado
+          </label>
+          <label class="radio-item">
+            <input type="radio" name="e-vinculo" value="sim" ${aluno.tipo_pessoa === 'empresa' ? 'checked' : ''}> Vinculado a empresa
+          </label>
+        </div>
+
+        <div id="e-empresa-wrap" ${aluno.tipo_pessoa !== 'empresa' ? 'hidden' : ''} aria-hidden="${aluno.tipo_pessoa !== 'empresa'}" style="margin-top:14px">
           <div class="form-group">
-            <label for="e-tipo">Tipo de pessoa</label>
-            <select id="e-tipo">
-              <option value="pessoa_fisica" ${aluno.tipo_pessoa === 'pessoa_fisica' ? 'selected' : ''}>Pessoa Física</option>
-              <option value="empresa"       ${aluno.tipo_pessoa === 'empresa'       ? 'selected' : ''}>Via Empresa</option>
-            </select>
-          </div>
-          <div class="form-group flex-2" id="e-empresa-wrap" ${aluno.tipo_pessoa !== 'empresa' ? 'hidden' : ''}>
             <label for="e-empresa">Empresa <span aria-hidden="true" style="color:var(--red)">*</span></label>
-            <select id="e-empresa">
+            <select id="e-empresa" autocomplete="organization">
               <option value="">— Selecione —</option>
               ${empresaOptions}
             </select>
