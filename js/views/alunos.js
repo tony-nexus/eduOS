@@ -513,6 +513,20 @@ async function excluirSelecionados() {
 
   const n = ids.length;
 
+  // Monta lista de nomes para exibição (até 5, depois trunca)
+  const alunos = ids.map(id => _alunosCache.find(a => a.id === id)).filter(Boolean);
+  const MAX_NOMES = 5;
+  const nomesHtml = alunos.slice(0, MAX_NOMES).map(a => `
+    <div class="danger-impact-row">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      ${esc(a.nome)}
+    </div>`).join('');
+  const nomesRodape = alunos.length > MAX_NOMES
+    ? `<div style="font-size:11px;color:var(--text-tertiary);margin-top:4px;font-family:var(--font-mono)">...e mais ${alunos.length - MAX_NOMES} aluno${alunos.length - MAX_NOMES !== 1 ? 's' : ''}.</div>`
+    : '';
+
+  const PHRASE = 'CONFIRMAR EXCLUSÃO';
+
   openModal('Excluir alunos selecionados', `
     <div class="danger-banner">
       <div class="danger-banner-icon">
@@ -522,32 +536,29 @@ async function excluirSelecionados() {
         </svg>
       </div>
       <div class="danger-banner-info">
-        <div class="danger-banner-title">${n} aluno${n !== 1 ? 's' : ''} selecionado${n !== 1 ? 's' : ''}</div>
-        <div class="danger-banner-sub">Todos os registros vinculados serão removidos</div>
+        <div class="danger-banner-title">Exclusão permanente de ${n} aluno${n !== 1 ? 's' : ''}</div>
+        <div class="danger-banner-sub">Esta operação não pode ser desfeita</div>
       </div>
     </div>
 
     <div class="danger-impact-box" style="margin-bottom:20px">
-      <p>⚠ Para cada aluno selecionado, serão excluídos permanentemente:</p>
-      <div class="danger-impact-row">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path d="M9 11l3 3L22 4"/></svg>
-        Matrículas, certificados e pagamentos vinculados
-      </div>
-      <div class="danger-impact-row" style="color:var(--red);font-size:12px;font-family:var(--font-mono)">
-        Esta ação não pode ser desfeita.
-      </div>
+      <p>⚠ Os seguintes alunos e <strong>todos os seus registros vinculados</strong> (matrículas, certificados e pagamentos) serão excluídos permanentemente:</p>
+      ${nomesHtml}
+      ${nomesRodape}
     </div>
 
     <div class="danger-confirm-wrap">
-      <label>Para confirmar, digite <strong>${n}</strong> no campo abaixo:</label>
-      <code class="danger-confirm-code">${n}</code>
+      <label>Para confirmar, digite <strong>${PHRASE}</strong> no campo abaixo:</label>
+      <code class="danger-confirm-code">${PHRASE}</code>
       <input id="danger-mass-input" class="danger-confirm-input" type="text"
-        inputmode="numeric" autocomplete="off" placeholder="Digite o número de alunos...">
+        autocomplete="off" autocorrect="off" spellcheck="false"
+        placeholder="Digite a frase de confirmação...">
     </div>
 
     <div class="modal-footer">
       <button class="btn btn-secondary" id="danger-mass-cancel">Cancelar</button>
       <button class="btn btn-danger" id="danger-mass-confirm" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
         Excluir ${n} aluno${n !== 1 ? 's' : ''} permanentemente
       </button>
     </div>
