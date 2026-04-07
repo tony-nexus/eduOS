@@ -22,7 +22,7 @@ from watchdog.observers import Observer
 # -- Configuracoes -----------------------------------------------------------
 PROJECT_DIR = Path("C:/Projetos/HLV_edu-main")
 DEBOUNCE_SECONDS = 3          # aguarda X segundos sem novas mudancas antes de commitar
-BRANCH = "master"             # branch de destino no GitHub
+BRANCH = "main"               # branch de destino no GitHub
 LOG_FILE = PROJECT_DIR / "auto_push.log"
 
 # Pastas e extensoes ignoradas
