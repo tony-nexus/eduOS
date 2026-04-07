@@ -130,3 +130,12 @@ error: failed to push some refs to 'origin'
 2026-04-07 17:18:39,834  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\auto_push.py
 2026-04-07 17:18:39,834  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
 2026-04-07 17:18:39,834  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:43,175  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:18:42
+2026-04-07 17:18:43,223  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:18:43,884  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:18:43
+2026-04-07 17:18:44,148  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
