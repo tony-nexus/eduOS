@@ -109,6 +109,10 @@ export function validateForm(rules) {
     }
     if (!v) continue; // campos opcionais: se vazio não valida o resto
 
+    if (checks.includes('name') && !isValidName(v)) {
+      fieldError(id, 'Nome deve conter apenas letras e espaços (sem números ou símbolos).');
+      valid = false; continue;
+    }
     if (checks.includes('cpf') && !isValidCPF(v)) {
       fieldError(id, 'CPF inválido.');
       valid = false; continue;
