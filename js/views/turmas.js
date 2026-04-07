@@ -21,8 +21,19 @@ let _instrutores = [];
 
 export let _turmasCache = []; // acessado por matriculas.js
 
-const BADGE = { em_andamento:'badge-accent', agendada:'badge-blue', concluida:'badge-green', cancelada:'badge-red' };
-const LABEL = { em_andamento:'Em Andamento', agendada:'Agendada', concluida:'Concluída', cancelada:'Cancelada' };
+const BADGE = { agendada:'badge-blue', em_andamento:'badge-amber', concluida:'badge-green', cancelada:'badge-red' };
+const LABEL = { agendada:'Agendada', em_andamento:'Em Andamento', concluida:'Concluída', cancelada:'Cancelada' };
+
+// ─── Status calculado pelas datas ──────────────────────────────────────────────
+function calcularStatusPorData(inicio, fim) {
+  if (!inicio) return 'agendada';
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const di   = new Date(inicio + 'T00:00:00');
+  const df   = fim ? new Date(fim + 'T00:00:00') : null;
+  if (di > hoje)              return 'agendada';
+  if (df && df < hoje)        return 'concluida';
+  return 'em_andamento';
+}
 
 // ─── Render principal ─────────────────────────────────────────────────────────
 export async function render() {
