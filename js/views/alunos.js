@@ -1246,11 +1246,18 @@ async function atualizarAluno(id, alunoOriginal = {}) {
   const telefoneRules = alunoOriginal.telefone ? ['required', 'phone'] : ['phone'];
 
   const ok = validateForm([
-    { id: 'e-nome',  value: nome,     rules: ['required'],   label: 'Nome' },
-    { id: 'e-email', value: email,    rules: emailRules,     label: 'E-mail' },
-    { id: 'e-tel',   value: telefone, rules: telefoneRules,  label: 'Telefone' },
+    { id: 'e-nome',  value: nome,     rules: ['required', 'name'], label: 'Nome' },
+    { id: 'e-email', value: email,    rules: emailRules,            label: 'E-mail' },
+    { id: 'e-tel',   value: telefone, rules: telefoneRules,         label: 'Telefone' },
   ]);
   if (!ok) return;
+
+  // ── Validação de formato dos documentos quando preenchidos ────────────────
+  const docRules = [];
+  if (cpfVal) docRules.push({ id: 'e-cpf',     value: cpfVal, rules: ['cpf'],             label: 'CPF' });
+  if (rnmVal) docRules.push({ id: 'e-rnm',     value: rnmVal, rules: ['rnm'],             label: 'RNM' });
+  if (cnhVal) docRules.push({ id: 'e-cnh-num', value: cnhVal, rules: ['cnh_estrangeiro'], label: 'CNH' });
+  if (docRules.length && !validateForm(docRules)) return;
 
   // ── Validação: Via Empresa exige empresa selecionada ──────────────────────
   if (tipo === 'empresa' && !empresaId) {
