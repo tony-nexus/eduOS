@@ -1000,9 +1000,9 @@ async function salvarNovoAluno() {
 
   // Monta regras de validação dinamicamente
   const rules = [
-    { id: 'f-nome',  value: nome,     rules: ['required'], label: 'Nome' },
-    { id: 'f-email', value: email,    rules: ['email'],    label: 'E-mail' },
-    { id: 'f-tel',   value: telefone, rules: ['phone'],    label: 'Telefone' },
+    { id: 'f-nome',  value: nome,     rules: ['required', 'name'], label: 'Nome' },
+    { id: 'f-email', value: email,    rules: ['email'],             label: 'E-mail' },
+    { id: 'f-tel',   value: telefone, rules: ['phone'],             label: 'Telefone' },
   ];
   if (hasCPF) rules.push({ id: 'f-cpf',     value: cpfVal, rules: ['required', 'cpf'],            label: 'CPF' });
   if (hasRNM) rules.push({ id: 'f-rnm',     value: rnmVal, rules: ['required', 'rnm'],            label: 'RNM' });
