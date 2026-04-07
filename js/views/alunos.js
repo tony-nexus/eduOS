@@ -1153,10 +1153,10 @@ function modalEditarAluno(aluno) {
               <option value="empresa"       ${aluno.tipo_pessoa === 'empresa'       ? 'selected' : ''}>Via Empresa</option>
             </select>
           </div>
-          <div class="form-group flex-2">
-            <label for="e-empresa">Empresa</label>
+          <div class="form-group flex-2" id="e-empresa-wrap" ${aluno.tipo_pessoa !== 'empresa' ? 'hidden' : ''}>
+            <label for="e-empresa">Empresa <span aria-hidden="true" style="color:var(--red)">*</span></label>
             <select id="e-empresa">
-              <option value="">— Nenhuma —</option>
+              <option value="">— Selecione —</option>
               ${empresaOptions}
             </select>
           </div>
