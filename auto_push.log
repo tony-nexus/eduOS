@@ -165,3 +165,9 @@ and the repository exists.
 2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
 2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
 2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:20:24,899  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:20:24
+2026-04-07 17:20:25,022  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
