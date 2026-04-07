@@ -570,7 +570,7 @@ async function excluirSelecionados() {
   const btnDel = document.getElementById('danger-mass-confirm');
 
   input?.addEventListener('input', () => {
-    const match = input.value.trim() === String(n);
+    const match = input.value.trim().toUpperCase() === PHRASE;
     input.classList.toggle('valid', match);
     btnDel.disabled = !match;
   });
