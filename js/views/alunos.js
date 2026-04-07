@@ -1210,8 +1210,17 @@ function modalEditarAluno(aluno) {
 
   bindMasksEditarAluno();
 
+  // Toggle empresa conforme tipo de pessoa
+  document.getElementById('e-tipo')?.addEventListener('change', e => {
+    const wrap = document.getElementById('e-empresa-wrap');
+    if (!wrap) return;
+    const isEmpresa = e.target.value === 'empresa';
+    wrap.hidden = !isEmpresa;
+    if (!isEmpresa) document.getElementById('e-empresa').value = '';
+  });
+
   // Validação em tempo real nos campos obrigatórios da edição
-  bindBlur('e-nome',  'Nome',     ['required']);
+  bindBlur('e-nome',  'Nome',     ['required', 'name']);
   if (aluno.email)    bindBlur('e-email', 'E-mail',   ['required', 'email']);
   else                bindBlur('e-email', 'E-mail',   ['email']);
   if (aluno.telefone) bindBlur('e-tel',   'Telefone', ['required', 'phone']);
