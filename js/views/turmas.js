@@ -443,10 +443,13 @@ async function saveTurma(id) {
   const status      = document.getElementById('f-status')?.value;
 
   const ok = validateForm([
-    { id: 'f-codigo', value: codigo,         rules: ['required'],       label: 'Código' },
-    { id: 'f-curso',  value: curso_id,        rules: ['required'],       label: 'Curso' },
-    { id: 'f-inicio', value: inicio,          rules: ['required'],       label: 'Data de início' },
-    { id: 'f-vagas',  value: vagas.toString(),rules: ['required','int_positive'], label: 'Vagas' },
+    { id: 'f-codigo',    value: codigo,          rules: ['required'],              label: 'Código' },
+    { id: 'f-curso',     value: curso_id,         rules: ['required'],              label: 'Curso' },
+    { id: 'f-instrutor', value: instrutor_id,     rules: ['required'],              label: 'Instrutor' },
+    { id: 'f-inicio',    value: inicio,           rules: ['required'],              label: 'Data de início' },
+    { id: 'f-fim',       value: fim,              rules: ['required'],              label: 'Data de fim' },
+    { id: 'f-vagas',     value: vagas.toString(), rules: ['required','int_positive'], label: 'Vagas' },
+    { id: 'f-local',     value: local,            rules: ['required'],              label: 'Local / Modalidade' },
   ]);
   if (!ok) return;
 
@@ -455,6 +458,12 @@ async function saveTurma(id) {
     return;
   }
   fieldOk('f-fim');
+
+  if (vagas > 31) {
+    fieldError('f-vagas', 'O limite máximo é 31 alunos por turma.');
+    return;
+  }
+  fieldOk('f-vagas');
 
   const payload = { tenant_id: getTenantId(), codigo, curso_id, instrutor_id, data_inicio: inicio, data_fim: fim, vagas, local, status };
 
