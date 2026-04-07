@@ -84,6 +84,12 @@ export function isValidPhone(tel) {
   return d.length >= 10 && d.length <= 11;
 }
 
+// Nome: apenas letras (incluindo acentuadas), espaços, hífens e apóstrofos, mín. 2 chars
+export function isValidName(name) {
+  const t = name.trim();
+  return t.length >= 2 && /^[A-Za-zÀ-ÿ\s\-']+$/.test(t);
+}
+
 // ─── Validação de formulário ──────────────────────────────────────────────────
 /**
  * Valida um conjunto de regras e marca os campos com erro.
