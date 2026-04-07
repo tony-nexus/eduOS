@@ -139,3 +139,9 @@ fatal: Could not read from remote repository.
 
 Please make sure you have the correct access rights
 and the repository exists.
+2026-04-07 17:18:57,676  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:18:57,676  INFO  Branch de destino: master
+2026-04-07 17:18:57,676  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:19:03,623  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:19:03,623  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
