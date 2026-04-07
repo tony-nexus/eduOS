@@ -171,3 +171,25 @@ fatal: Could not read from remote repository.
 
 Please make sure you have the correct access rights
 and the repository exists.
+2026-04-07 17:20:25,218  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:20:25
+2026-04-07 17:20:25,335  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:20:25,376  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:20:25
+2026-04-07 17:20:25,483  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:23:02,966  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:23:02,966  INFO  Branch de destino: master
+2026-04-07 17:23:02,966  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:23:09,736  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,738  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,738  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
