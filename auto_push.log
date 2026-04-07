@@ -54,3 +54,37 @@
 2026-04-07 17:08:59,349  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M8_Add_Reprovado_Status.sql
 2026-04-07 17:08:59,366  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M9_Financeiro_Comprovante.sql
 2026-04-07 17:08:59,385  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\PRODUCAO.sql
+2026-04-07 17:08:59,406  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\certificado.html
+2026-04-07 17:08:59,462  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\css\components.css
+2026-04-07 17:08:59,477  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\css\globals.css
+2026-04-07 17:08:59,492  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\css\layout.css
+2026-04-07 17:08:59,517  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\index.html
+2026-04-07 17:08:59,551  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\auth.js
+2026-04-07 17:08:59,577  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\automations.js
+2026-04-07 17:08:59,600  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\init.js
+2026-04-07 17:08:59,607  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\router.js
+2026-04-07 17:08:59,654  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\supabase.js
+2026-04-07 17:08:59,659  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\schema.json
+2026-04-07 17:08:59,701  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\branding.js
+2026-04-07 17:08:59,706  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\charts.js
+2026-04-07 17:08:59,758  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\components.js
+2026-04-07 17:08:59,782  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\loading.js
+2026-04-07 17:08:59,806  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\theme.js
+2026-04-07 17:08:59,836  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 17:08:59,874  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 17:08:59,903  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\certificados.js
+2026-04-07 17:08:59,931  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\configuracoes.js
+2026-04-07 17:08:59,961  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\cursos.js
+2026-04-07 17:08:59,990  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\dashboard.js
+2026-04-07 17:09:00,024  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\empresas.js
+2026-04-07 17:09:00,058  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\financeiro.js
+2026-04-07 17:09:00,087  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\instrutores.js
+2026-04-07 17:09:00,112  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\matriculas.js
+2026-04-07 17:09:00,138  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\pipeline.js
+2026-04-07 17:09:00,143  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\rbac.js
+2026-04-07 17:09:00,189  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\relatorios.js
+2026-04-07 17:09:00,215  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\renovacoes.js
+2026-04-07 17:09:00,247  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 17:09:01,507  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:08:58
+2026-04-07 17:09:01,580  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
