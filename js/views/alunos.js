@@ -943,7 +943,7 @@ function modalNovoAluno() {
   bindMasksNovoAluno();
 
   // Validação em tempo real
-  bindBlur('f-nome',  'Nome',     ['required']);
+  bindBlur('f-nome',  'Nome',     ['required', 'name']);
   bindBlur('f-email', 'E-mail',   ['email']);
   bindBlur('f-tel',   'Telefone', ['phone']);
 
