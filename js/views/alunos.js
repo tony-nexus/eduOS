@@ -1252,8 +1252,9 @@ async function atualizarAluno(id, alunoOriginal = {}) {
   const email       = document.getElementById('e-email')?.value.trim();
   const telefone    = document.getElementById('e-tel')?.value.trim();
   const nascimento  = document.getElementById('e-nasc')?.value || null;
-  const tipo        = document.getElementById('e-tipo')?.value;
-  const empresaId   = document.getElementById('e-empresa')?.value || null;
+  const vinculo     = document.querySelector('input[name="e-vinculo"]:checked')?.value || 'nao';
+  const tipo        = vinculo === 'sim' ? 'empresa' : 'pessoa_fisica';
+  const empresaId   = vinculo === 'sim' ? (document.getElementById('e-empresa')?.value || null) : null;
   const cpfVal      = document.getElementById('e-cpf')?.value.trim() || null;
   const rnmVal      = document.getElementById('e-rnm')?.value.trim() || null;
   const cnhVal      = document.getElementById('e-cnh-num')?.value.trim() || null;
