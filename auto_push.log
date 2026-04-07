@@ -193,3 +193,11 @@ and the repository exists.
 2026-04-07 17:23:09,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
 2026-04-07 17:23:09,738  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
 2026-04-07 17:23:09,738  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:13,191  ERROR  git commit falhou: fatal: Unable to create 'C:/Projetos/HLV_edu-main/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+2026-04-07 17:23:13,368  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:23:13
