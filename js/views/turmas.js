@@ -317,19 +317,29 @@ function modalTurma(turma = null) {
     `<option value="${i.id}" ${turma?.instrutor_id === i.id ? 'selected' : ''}>${esc(i.nome)}</option>`
   ).join('');
 
+  const statusInicial = turma
+    ? (turma.status === 'cancelada' ? 'cancelada' : calcularStatusPorData(turma.data_inicio, turma.data_fim))
+    : calcularStatusPorData('', '');
+
   openModal(isEdit ? 'Editar Turma' : 'Nova Turma', `
     <div class="form-grid">
+
       <div class="form-group">
-        <label>Curso *</label>
+        <label>Curso <span style="color:var(--red)" aria-hidden="true">*</span></label>
         <select id="f-curso" ${isEdit ? 'disabled' : ''}>
           <option value="">— Selecione —</option>
           ${cursosOpts}
         </select>
       </div>
+
       <div class="form-group">
-        <label>Data Início *</label>
-        <input id="f-inicio" type="date" value="${esc(turma?.data_inicio || '')}">
+        <label>Instrutor <span style="color:var(--red)" aria-hidden="true">*</span></label>
+        <select id="f-instrutor">
+          <option value="">— Selecione —</option>
+          ${instOpts}
+        </select>
       </div>
+
       <div class="form-group full">
         <label>Código da Turma</label>
         <input id="f-codigo" type="text"
@@ -341,32 +351,39 @@ function modalTurma(turma = null) {
           ${isEdit ? '🔒 Código é imutável após criação.' : 'Preenchido automaticamente ao selecionar curso e data de início.'}
         </small>
       </div>
+
       <div class="form-group">
-        <label>Data Fim</label>
+        <label>Data Início <span style="color:var(--red)" aria-hidden="true">*</span></label>
+        <input id="f-inicio" type="date" value="${esc(turma?.data_inicio || '')}">
+      </div>
+
+      <div class="form-group">
+        <label>Data Fim <span style="color:var(--red)" aria-hidden="true">*</span></label>
         <input id="f-fim" type="date" value="${esc(turma?.data_fim || '')}">
       </div>
+
       <div class="form-group">
-        <label>Instrutor</label>
-        <select id="f-instrutor">
-          <option value="">— Nenhum —</option>
-          ${instOpts}
-        </select>
+        <label>Vagas <span style="color:var(--red)" aria-hidden="true">*</span></label>
+        <input id="f-vagas" type="number" min="1" max="31" value="${turma?.vagas || 20}">
+        <small style="color:var(--text-tertiary);font-size:11px">Máximo de 31 alunos por turma.</small>
       </div>
+
       <div class="form-group">
-        <label>Vagas</label>
-        <input id="f-vagas" type="number" min="1" value="${turma?.vagas || 20}">
-      </div>
-      <div class="form-group">
-        <label>Local / Modalidade</label>
+        <label>Local / Modalidade <span style="color:var(--red)" aria-hidden="true">*</span></label>
         <input id="f-local" type="text" placeholder="Ex: Sede SP / Online" value="${esc(turma?.local || '')}">
       </div>
+
       <div class="form-group full">
         <label>Status</label>
-        <select id="f-status">
-          <option value="agendada"     ${turma?.status === 'agendada'     ? 'selected' : ''}>Agendada</option>
-          <option value="em_andamento" ${turma?.status === 'em_andamento' ? 'selected' : ''}>Em Andamento</option>
-        </select>
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0">
+          <span class="badge ${BADGE[statusInicial] ?? 'badge-gray'}" id="f-status-badge">${LABEL[statusInicial] ?? statusInicial}</span>
+          <input type="hidden" id="f-status" value="${statusInicial}">
+          <span style="font-size:11.5px;color:var(--text-tertiary);font-family:var(--font-mono)">
+            Calculado automaticamente pelas datas informadas
+          </span>
+        </div>
       </div>
+
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
