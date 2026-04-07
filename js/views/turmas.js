@@ -402,9 +402,28 @@ function modalTurma(turma = null) {
     if (input) input.value = codigo;
   }
 
+  // ── Atualiza badge de status ao mudar datas ──────────────────────────────
+  function atualizarStatusBadge() {
+    const inicio = document.getElementById('f-inicio')?.value;
+    const fim    = document.getElementById('f-fim')?.value;
+    const statusAtual = turma?.status === 'cancelada' ? 'cancelada' : calcularStatusPorData(inicio, fim);
+    const badge  = document.getElementById('f-status-badge');
+    const hidden = document.getElementById('f-status');
+    if (badge) {
+      badge.className = `badge ${BADGE[statusAtual] ?? 'badge-gray'}`;
+      badge.textContent = LABEL[statusAtual] ?? statusAtual;
+    }
+    if (hidden) hidden.value = statusAtual;
+  }
+
+  document.getElementById('f-inicio')?.addEventListener('change', () => {
+    atualizarStatusBadge();
+    if (!isEdit) triggerAutoCode();
+  });
+  document.getElementById('f-fim')?.addEventListener('change', atualizarStatusBadge);
+
   if (!isEdit) {
     document.getElementById('f-curso')?.addEventListener('change', triggerAutoCode);
-    document.getElementById('f-inicio')?.addEventListener('change', triggerAutoCode);
     triggerAutoCode();
   }
 
