@@ -58,70 +58,85 @@ const ALUNO_LABEL = {
 //  MOCK DATA — substitua pelas queries Supabase ao integrar o backend
 //  As estruturas de dados espelham exatamente o que o Supabase retornaria.
 // ══════════════════════════════════════════════════════════════════════════════
-const _MOCK_TURMAS = [
-  {
-    id: 'mt-001', codigo: 'NR35-2025-001',
-    curso_nome: 'NR-35 Trabalho em Altura',
-    status: 'em_andamento', ocupadas: 14, vagas: 20,
-    data_inicio: '2025-03-01', data_fim: '2025-03-08',
-  },
-  {
-    id: 'mt-002', codigo: 'NR33-2025-001',
-    curso_nome: 'NR-33 Espaço Confinado',
-    status: 'agendada', ocupadas: 8, vagas: 16,
-    data_inicio: '2025-05-10', data_fim: '2025-05-13',
-  },
-  {
-    id: 'mt-003', codigo: 'PS-2025-001',
-    curso_nome: 'Primeiros Socorros',
-    status: 'agendada', ocupadas: 3, vagas: 20,
-    data_inicio: '2025-06-02', data_fim: '2025-06-03',
-  },
-  {
-    id: 'mt-004', codigo: 'NR35-2024-008',
-    curso_nome: 'NR-35 Trabalho em Altura',
-    status: 'concluida', ocupadas: 19, vagas: 20,
-    data_inicio: '2024-11-04', data_fim: '2024-11-11',
-  },
-  {
-    id: 'mt-005', codigo: 'NR20-2024-003',
-    curso_nome: 'NR-20 Inflamáveis e Combustíveis',
-    status: 'concluida', ocupadas: 12, vagas: 16,
-    data_inicio: '2024-09-16', data_fim: '2024-09-18',
-  },
+// 4 conjuntos distintos — cada instrutor recebe um deles por ordem na lista
+const _MOCK_TURMA_SETS = [
+  // Set A
+  [
+    { id:'mt-a1', codigo:'NR35-2025-001', curso_nome:'NR-35 Trabalho em Altura',          status:'em_andamento', ocupadas:14, vagas:20, data_inicio:'2025-03-01', data_fim:'2025-03-08' },
+    { id:'mt-a2', codigo:'NR33-2025-001', curso_nome:'NR-33 Espaço Confinado',            status:'agendada',     ocupadas: 8, vagas:16, data_inicio:'2025-05-10', data_fim:'2025-05-13' },
+    { id:'mt-a3', codigo:'NR35-2024-008', curso_nome:'NR-35 Trabalho em Altura',          status:'concluida',    ocupadas:19, vagas:20, data_inicio:'2024-11-04', data_fim:'2024-11-11' },
+  ],
+  // Set B
+  [
+    { id:'mt-b1', codigo:'PS-2025-002',   curso_nome:'Primeiros Socorros',                status:'em_andamento', ocupadas:11, vagas:20, data_inicio:'2025-02-10', data_fim:'2025-02-11' },
+    { id:'mt-b2', codigo:'NR20-2025-001', curso_nome:'NR-20 Inflamáveis e Combustíveis', status:'agendada',     ocupadas: 4, vagas:16, data_inicio:'2025-06-05', data_fim:'2025-06-07' },
+    { id:'mt-b3', codigo:'NR20-2024-003', curso_nome:'NR-20 Inflamáveis e Combustíveis', status:'concluida',    ocupadas:16, vagas:16, data_inicio:'2024-12-02', data_fim:'2024-12-04' },
+    { id:'mt-b4', codigo:'PS-2024-005',   curso_nome:'Primeiros Socorros',                status:'concluida',    ocupadas:13, vagas:20, data_inicio:'2024-08-05', data_fim:'2024-08-06' },
+  ],
+  // Set C
+  [
+    { id:'mt-c1', codigo:'NR10-2025-001', curso_nome:'NR-10 Segurança em Eletricidade',  status:'agendada',     ocupadas: 5, vagas:20, data_inicio:'2025-06-15', data_fim:'2025-06-19' },
+    { id:'mt-c2', codigo:'NR12-2025-001', curso_nome:'NR-12 Segurança em Máquinas',      status:'agendada',     ocupadas: 3, vagas:16, data_inicio:'2025-07-07', data_fim:'2025-07-10' },
+    { id:'mt-c3', codigo:'NR35-2024-011', curso_nome:'NR-35 Trabalho em Altura',          status:'concluida',    ocupadas:20, vagas:20, data_inicio:'2024-10-14', data_fim:'2024-10-21' },
+  ],
+  // Set D — instrutor sem turmas (testa estado vazio)
+  [],
 ];
 
 const _MOCK_ALUNOS = {
-  'mt-001': [
-    { id: 'a01', nome: 'João Carlos Melo',        doc: 'CPF: 321.654.987-00', status: 'em_andamento' },
-    { id: 'a02', nome: 'Ana Paula Rodrigues',      doc: 'CPF: 456.789.012-34', status: 'em_andamento' },
-    { id: 'a03', nome: 'Bruno Henrique Lima',      doc: 'RNM: V123456-J',      status: 'em_andamento' },
-    { id: 'a04', nome: 'Carla Souza Ferreira',     doc: 'CPF: 789.012.345-67', status: 'em_andamento' },
-    { id: 'a05', nome: 'Diego Martins Pereira',    doc: 'CPF: 012.345.678-90', status: 'em_andamento' },
-    { id: 'a06', nome: 'Elaine Cristina Borges',   doc: 'CPF: 135.246.357-80', status: 'em_andamento' },
-    { id: 'a07', nome: 'Fábio Augusto Correia',    doc: 'CPF: 246.357.468-91', status: 'em_andamento' },
+  // Set A
+  'mt-a1': [
+    { id:'a01', nome:'João Carlos Melo',      doc:'CPF: 321.654.987-00', status:'em_andamento' },
+    { id:'a02', nome:'Ana Paula Rodrigues',   doc:'CPF: 456.789.012-34', status:'em_andamento' },
+    { id:'a03', nome:'Bruno Henrique Lima',   doc:'RNM: V123456-J',      status:'em_andamento' },
+    { id:'a04', nome:'Carla Souza Ferreira',  doc:'CPF: 789.012.345-67', status:'em_andamento' },
+    { id:'a05', nome:'Diego Martins Pereira', doc:'CPF: 012.345.678-90', status:'em_andamento' },
   ],
-  'mt-002': [
-    { id: 'a08', nome: 'Gabriela Nunes Santos',    doc: 'CPF: 357.468.579-02', status: 'matriculado' },
-    { id: 'a09', nome: 'Henrique Costa Dias',      doc: 'CPF: 468.579.680-13', status: 'matriculado' },
-    { id: 'a10', nome: 'Igor Fonseca Lima',         doc: 'CPF: 579.680.791-24', status: 'matriculado' },
+  'mt-a2': [
+    { id:'a06', nome:'Elaine Borges',         doc:'CPF: 135.246.357-80', status:'matriculado' },
+    { id:'a07', nome:'Fábio Correia',         doc:'CPF: 246.357.468-91', status:'matriculado' },
+    { id:'a08', nome:'Gabriela Santos',       doc:'CPF: 357.468.579-02', status:'matriculado' },
   ],
-  'mt-003': [
-    { id: 'a11', nome: 'Júlia Moreira Viana',      doc: 'CPF: 680.791.802-35', status: 'matriculado' },
-    { id: 'a12', nome: 'Kaio Roberto Teixeira',    doc: 'CNH: 01234567890',    status: 'matriculado' },
-    { id: 'a13', nome: 'Larissa Pinto Almeida',    doc: 'CPF: 791.802.913-46', status: 'matriculado' },
+  'mt-a3': [
+    { id:'a09', nome:'Henrique Costa',        doc:'CPF: 468.579.680-13', status:'concluido' },
+    { id:'a10', nome:'Igor Lima',             doc:'CPF: 579.680.791-24', status:'concluido' },
+    { id:'a11', nome:'Júlia Viana',           doc:'CPF: 680.791.802-35', status:'reprovado'  },
   ],
-  'mt-004': [
-    { id: 'a14', nome: 'Marcos Antônio Freitas',   doc: 'CPF: 802.913.024-57', status: 'concluido' },
-    { id: 'a15', nome: 'Natália Campos Rocha',     doc: 'CPF: 913.024.135-68', status: 'concluido' },
-    { id: 'a16', nome: 'Otávio Silva Barbosa',     doc: 'CPF: 024.135.246-79', status: 'concluido' },
-    { id: 'a17', nome: 'Patrícia Lemos Castro',    doc: 'CPF: 135.246.357-80', status: 'concluido' },
-    { id: 'a18', nome: 'Rafael Duarte Mendes',     doc: 'RNM: A654321-B',      status: 'reprovado'  },
+  // Set B
+  'mt-b1': [
+    { id:'b01', nome:'Kaio Teixeira',         doc:'CNH: 01234567890',    status:'em_andamento' },
+    { id:'b02', nome:'Larissa Almeida',       doc:'CPF: 791.802.913-46', status:'em_andamento' },
+    { id:'b03', nome:'Marcos Freitas',        doc:'CPF: 802.913.024-57', status:'em_andamento' },
+    { id:'b04', nome:'Natália Rocha',         doc:'CPF: 913.024.135-68', status:'em_andamento' },
   ],
-  'mt-005': [
-    { id: 'a19', nome: 'Sabrina Figueiredo Luz',   doc: 'CPF: 246.357.468-91', status: 'concluido' },
-    { id: 'a20', nome: 'Thiago Cavalcante Reis',   doc: 'CPF: 357.468.579-02', status: 'concluido' },
-    { id: 'a21', nome: 'Ursula Monteiro Gomes',    doc: 'CPF: 468.579.680-13', status: 'concluido' },
+  'mt-b2': [
+    { id:'b05', nome:'Otávio Barbosa',        doc:'CPF: 024.135.246-79', status:'matriculado' },
+    { id:'b06', nome:'Patrícia Castro',       doc:'CPF: 135.246.357-80', status:'matriculado' },
+  ],
+  'mt-b3': [
+    { id:'b07', nome:'Rafael Mendes',         doc:'RNM: A654321-B',      status:'concluido' },
+    { id:'b08', nome:'Sabrina Luz',           doc:'CPF: 246.357.468-91', status:'concluido' },
+    { id:'b09', nome:'Thiago Reis',           doc:'CPF: 357.468.579-02', status:'concluido' },
+  ],
+  'mt-b4': [
+    { id:'b10', nome:'Ursula Gomes',          doc:'CPF: 468.579.680-13', status:'concluido' },
+    { id:'b11', nome:'Vitor Cardoso',         doc:'CPF: 579.680.791-24', status:'concluido' },
+  ],
+  // Set C
+  'mt-c1': [
+    { id:'c01', nome:'Wesley Andrade',        doc:'CPF: 100.200.300-40', status:'matriculado' },
+    { id:'c02', nome:'Xuxa Pereira',          doc:'CPF: 200.300.400-50', status:'matriculado' },
+    { id:'c03', nome:'Yara Fontes',           doc:'CPF: 300.400.500-60', status:'matriculado' },
+  ],
+  'mt-c2': [
+    { id:'c04', nome:'Zilda Monteiro',        doc:'CPF: 400.500.600-70', status:'matriculado' },
+    { id:'c05', nome:'Alan Braga',            doc:'RNM: C789012-D',      status:'matriculado' },
+  ],
+  'mt-c3': [
+    { id:'c06', nome:'Beatriz Tavares',       doc:'CPF: 500.600.700-80', status:'concluido' },
+    { id:'c07', nome:'Caio Neves',            doc:'CPF: 600.700.800-90', status:'concluido' },
+    { id:'c08', nome:'Débora Pinheiro',       doc:'CPF: 700.800.900-01', status:'concluido' },
+    { id:'c09', nome:'Eduardo Magalhães',     doc:'CPF: 800.900.001-12', status:'reprovado'  },
   ],
 };
 
@@ -138,9 +153,10 @@ const _MOCK_ALUNOS = {
  * if (error) throw error;
  * return (data || []).map(t => ({ ...t, curso_nome: t.curso?.nome ?? '—' }));
  */
-async function loadTurmasDoInstrutor(_instrutorId) {
-  // Mock: retorna as mesmas turmas de demonstração para qualquer instrutor
-  return _MOCK_TURMAS;
+async function loadTurmasDoInstrutor(instrutorId) {
+  // Mock: cada instrutor recebe um conjunto diferente pela posição na lista
+  const idx = _cache.findIndex(i => i.id === instrutorId);
+  return _MOCK_TURMA_SETS[(idx >= 0 ? idx : 0) % _MOCK_TURMA_SETS.length];
 }
 
 // ─── Fetch alunos de uma turma ────────────────────────────────────────────────
@@ -222,12 +238,17 @@ export async function render() {
       </div>
 
       <!-- ── DETAIL: turmas do instrutor selecionado ───────────────────── -->
-      <div class="inst-detail-panel">
+      <div class="inst-detail-panel" id="inst-detail-panel">
         <div id="detail-content">${_renderDetailEmpty()}</div>
       </div>
 
     </div>
   `);
+
+  // No mobile, o detail começa oculto (só aparece após selecionar instrutor)
+  if (window.innerWidth <= 768) {
+    document.getElementById('inst-detail-panel')?.classList.add('mob-hide');
+  }
 
   document.getElementById('btn-novo-inst')
     ?.addEventListener('click', () => modalInstrutor());
@@ -367,6 +388,8 @@ function renderMasterList(inst) {
 }
 
 // ─── Selecionar instrutor → atualiza detail ───────────────────────────────────
+function _isMobile() { return window.innerWidth <= 768; }
+
 async function selecionarInstrutor(id) {
   _activeId = id;
 
@@ -376,6 +399,13 @@ async function selecionarInstrutor(id) {
     card.classList.toggle('active', isActive);
     card.setAttribute('aria-pressed', String(isActive));
   });
+
+  // Mobile: esconde lista, exibe detalhe
+  if (_isMobile()) {
+    document.querySelector('.inst-master-panel')?.classList.add('mob-hide');
+    document.getElementById('inst-detail-panel')?.classList.remove('mob-hide');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   // Skeleton de carregamento no detail
   const detail = document.getElementById('detail-content');
@@ -585,7 +615,29 @@ function renderDetailPanel(instrutor, turmas) {
       </div>`;
   }
 
-  detail.innerHTML = header + tableHtml;
+  detail.innerHTML = `
+    <button class="btn btn-secondary inst-back-btn" aria-label="Voltar à lista de instrutores">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" width="14" height="14" aria-hidden="true">
+        <line x1="19" y1="12" x2="5" y2="12"/>
+        <polyline points="12 19 5 12 12 5"/>
+      </svg>
+      Voltar
+    </button>
+  ` + header + tableHtml;
+
+  // Botão voltar (mobile)
+  detail.querySelector('.inst-back-btn')?.addEventListener('click', () => {
+    _activeId = null;
+    document.querySelectorAll('.inst-item').forEach(c => {
+      c.classList.remove('active');
+      c.setAttribute('aria-pressed', 'false');
+    });
+    document.querySelector('.inst-master-panel')?.classList.remove('mob-hide');
+    document.getElementById('inst-detail-panel')?.classList.add('mob-hide');
+    document.getElementById('detail-content').innerHTML = _renderDetailEmpty();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
 
   // ── Bind: lupa → modal de alunos por turma ────────────────────────────────
   detail.querySelectorAll('.inst-ver-alunos').forEach(btn =>

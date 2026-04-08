@@ -836,6 +836,40 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   min-width: 0;
 }
 
+/* Botão "voltar" — visível só em mobile */
+.inst-back-btn { display: none; }
+
+@media (max-width: 768px) {
+  .inst-layout {
+    flex-direction: column;
+    gap: 0;
+  }
+  .inst-master-panel,
+  .inst-detail-panel {
+    width: 100%;
+  }
+  /* Oculta painel no mobile quando o outro está ativo */
+  .inst-master-panel.mob-hide,
+  .inst-detail-panel.mob-hide {
+    display: none;
+  }
+  /* Remove max-height da lista no mobile (scroll da página inteira) */
+  .inst-master-panel #inst-list {
+    max-height: none !important;
+  }
+  /* Botão "voltar" aparece no mobile */
+  .inst-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  /* Tabela de turmas rola horizontalmente no mobile */
+  .inst-detail-panel .table-wrap { overflow-x: auto; }
+}
+
 /* Card da lista master */
 .inst-item {
   display: flex;
