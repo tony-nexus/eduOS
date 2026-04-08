@@ -164,15 +164,24 @@ function modalCurso(curso = null) {
       </div>
 
       <div class="form-group full">
-        <label>Validade do Certificado <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <label class="radio-item" style="margin-bottom:10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:13px">
-          <input type="checkbox" id="f-vitalicio" ${vitalicio ? 'checked' : ''}>
-          Vitalício <span style="font-size:11.5px;color:var(--text-tertiary);font-family:var(--font-mono)">(sem prazo de expiração)</span>
+        <label class="section-label" style="display:block;font-size:11px;font-weight:700;color:var(--text-secondary);letter-spacing:0.5px;text-transform:uppercase;margin-bottom:10px">
+          Validade do Certificado <span style="color:var(--red)" aria-hidden="true">*</span>
         </label>
-        <div id="f-val-wrap" ${vitalicio ? 'hidden' : ''}>
-          <input id="f-val" type="number" min="1" max="600"
-            value="${curso?.validade_meses ?? ''}" placeholder="Ex: 24">
-          <small style="color:var(--text-tertiary);font-size:11px">Em meses — máximo 600 (50 anos)</small>
+
+        <label class="validade-toggle-row" for="f-vitalicio">
+          <span class="validade-toggle-text">Vitalício (sem expiração)</span>
+          <div class="v-switch">
+            <input type="checkbox" id="f-vitalicio" ${vitalicio ? 'checked' : ''}>
+            <span class="v-slider"></span>
+          </div>
+        </label>
+
+        <div class="validade-meses-area ${vitalicio ? 'disabled-state' : ''}" id="f-val-wrap">
+          <label for="f-val" class="validade-meses-label">Válido por (meses):</label>
+          <input type="number" id="f-val" class="validade-meses-input"
+            min="1" max="600"
+            value="${curso?.validade_meses ?? 12}"
+            ${vitalicio ? 'disabled' : ''}>
         </div>
       </div>
 
@@ -195,11 +204,16 @@ function modalCurso(curso = null) {
 
   // Toggle vitalício
   document.getElementById('f-vitalicio')?.addEventListener('change', e => {
-    const wrap = document.getElementById('f-val-wrap');
-    wrap.hidden = e.target.checked;
+    const area  = document.getElementById('f-val-wrap');
+    const input = document.getElementById('f-val');
     if (e.target.checked) {
-      const input = document.getElementById('f-val');
-      if (input) { input.value = ''; fieldOk('f-val'); }
+      area.classList.add('disabled-state');
+      input.disabled = true;
+      fieldOk('f-val');
+    } else {
+      area.classList.remove('disabled-state');
+      input.disabled = false;
+      input.focus();
     }
   });
 

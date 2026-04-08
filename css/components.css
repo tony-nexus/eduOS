@@ -707,6 +707,120 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   color: var(--text-primary);
 }
 
+/* ===== VALIDADE TOGGLE (componente reutilizável) ===== */
+
+/* Linha do toggle vitalício */
+.validade-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-elevated);
+  padding: 13px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.validade-toggle-row:hover { border-color: var(--border-strong); }
+
+.validade-toggle-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Switch pill */
+.v-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.v-switch input { opacity: 0; width: 0; height: 0; }
+
+.v-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-strong);
+  border-radius: 22px;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+.v-slider::before {
+  content: '';
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--text-tertiary);
+  border-radius: 50%;
+  transition: transform var(--transition), background var(--transition);
+}
+.v-switch input:checked + .v-slider {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.v-switch input:checked + .v-slider::before {
+  transform: translateX(18px);
+  background: var(--accent);
+}
+
+/* Área de meses */
+.validade-meses-area {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-elevated);
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  transition: opacity 0.25s ease;
+}
+.validade-meses-area.disabled-state {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.validade-meses-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.validade-meses-input {
+  width: 100px;
+  background: var(--bg-surface);
+  border: 2px solid var(--border-strong);
+  color: var(--accent);
+  padding: 10px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  text-align: center;
+  outline: none;
+  transition: border-color var(--transition), box-shadow var(--transition), color var(--transition);
+  -moz-appearance: textfield;
+}
+.validade-meses-input::-webkit-outer-spin-button,
+.validade-meses-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.validade-meses-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  color: var(--text-primary);
+}
+.validade-meses-input.has-error {
+  border-color: var(--red) !important;
+  color: var(--red);
+  box-shadow: 0 0 0 3px var(--red-soft);
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .dash-grid-main, .dash-grid-2, .dash-grid-2b { grid-template-columns: 1fr; }
