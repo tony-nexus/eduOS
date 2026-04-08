@@ -86,7 +86,7 @@ function renderTabela(cursos) {
       <td style="font-weight:500">${c.nome}</td>
       <td><span style="font-family:var(--font-mono);font-size:12px;color:var(--accent)">${c.codigo || '—'}</span></td>
       <td style="font-size:12.5px">${c.carga_horaria ? c.carga_horaria + 'h' : '—'}</td>
-      <td style="font-size:12.5px">${c.validade_meses ? c.validade_meses + ' meses' : '—'}</td>
+      <td style="font-size:12.5px">${c.validade_meses ? c.validade_meses + ' meses' : '<span class="badge badge-purple">Vitalício</span>'}</td>
       <td style="font-family:var(--font-mono);font-size:12.5px;color:var(--green)">${c.valor_padrao ? fmtMoney(c.valor_padrao) : '—'}</td>
       <td><span class="badge ${c.ativo !== false ? 'badge-green' : 'badge-gray'}">${c.ativo !== false ? 'Ativo' : 'Inativo'}</span></td>
       <td>
@@ -130,80 +130,133 @@ function parseBRL(str) {
 
 // ─── Modal Curso ───────────────────────────────────────────────────────────────
 function modalCurso(curso = null) {
-  const isEdit = !!curso;
-  // Valor formatado para exibição no campo
-  const valorStr = curso?.valor_padrao
+  const isEdit    = !!curso;
+  const vitalicio = isEdit && curso.validade_meses === null;
+  const valorStr  = curso?.valor_padrao
     ? curso.valor_padrao.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '';
 
   openModal(isEdit ? 'Editar Curso' : 'Novo Curso', `
     <div class="form-grid">
+
       <div class="form-group full">
-        <label>Nome do Curso *</label>
+        <label>Nome do Curso <span style="color:var(--red)" aria-hidden="true">*</span></label>
         <input id="f-nome" type="text" value="${curso?.nome || ''}" placeholder="Ex: NR-35 Trabalho em Altura">
       </div>
+
       <div class="form-group">
-        <label>Código (Sigla) *</label>
+        <label>Código (Sigla) <span style="color:var(--red)" aria-hidden="true">*</span></label>
         <input id="f-cod" type="text" value="${curso?.codigo || ''}" placeholder="Ex: NR35">
       </div>
+
       <div class="form-group">
-        <label>Carga Horária (h) *</label>
-        <input id="f-ch" type="number" value="${curso?.carga_horaria || ''}" placeholder="Ex: 8">
+        <label>Carga Horária (h) <span style="color:var(--red)" aria-hidden="true">*</span></label>
+        <input id="f-ch" type="number" min="1" max="9000"
+          value="${curso?.carga_horaria || ''}" placeholder="Ex: 8">
+        <small style="color:var(--text-tertiary);font-size:11px">Máximo: 9.000 horas</small>
       </div>
+
       <div class="form-group">
-        <label>Validade (meses) *</label>
-        <input id="f-val" type="number" value="${curso?.validade_meses || ''}" placeholder="Ex: 24">
-      </div>
-      <div class="form-group">
-        <label>Valor Padrão (R$) *</label>
+        <label>Valor Padrão (R$) <span style="color:var(--red)" aria-hidden="true">*</span></label>
         <input id="f-valor" type="text" inputmode="numeric" value="${valorStr}" placeholder="0,00"
           style="font-family:var(--font-mono)">
+        <small style="color:var(--text-tertiary);font-size:11px">Máximo: R$ 100.000,00</small>
       </div>
+
+      <div class="form-group full">
+        <label>Validade do Certificado <span style="color:var(--red)" aria-hidden="true">*</span></label>
+        <label class="radio-item" style="margin-bottom:10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:13px">
+          <input type="checkbox" id="f-vitalicio" ${vitalicio ? 'checked' : ''}>
+          Vitalício <span style="font-size:11.5px;color:var(--text-tertiary);font-family:var(--font-mono)">(sem prazo de expiração)</span>
+        </label>
+        <div id="f-val-wrap" ${vitalicio ? 'hidden' : ''}>
+          <input id="f-val" type="number" min="1" max="600"
+            value="${curso?.validade_meses ?? ''}" placeholder="Ex: 24">
+          <small style="color:var(--text-tertiary);font-size:11px">Em meses — máximo 600 (50 anos)</small>
+        </div>
+      </div>
+
       <div class="form-group">
         <label>Status</label>
         <select id="f-ativo">
-          <option value="true" ${curso?.ativo !== false ? 'selected' : ''}>Ativo</option>
-          <option value="false" ${curso?.ativo === false ? 'selected' : ''}>Inativo</option>
+          <option value="true"  ${curso?.ativo !== false ? 'selected' : ''}>Ativo</option>
+          <option value="false" ${curso?.ativo === false  ? 'selected' : ''}>Inativo</option>
         </select>
       </div>
+
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-      <button class="btn btn-primary" id="modal-save">${isEdit ? 'Salvar Alterações' : 'Criar Curso'}</button>
+      <button class="btn btn-primary"   id="modal-save">${isEdit ? 'Salvar Alterações' : 'Criar Curso'}</button>
     </div>
   `);
 
   aplicarMascaraReais(document.getElementById('f-valor'));
 
+  // Toggle vitalício
+  document.getElementById('f-vitalicio')?.addEventListener('change', e => {
+    const wrap = document.getElementById('f-val-wrap');
+    wrap.hidden = e.target.checked;
+    if (e.target.checked) {
+      const input = document.getElementById('f-val');
+      if (input) { input.value = ''; fieldOk('f-val'); }
+    }
+  });
+
   bindBlur('f-nome', 'Nome',          ['required']);
   bindBlur('f-cod',  'Código',        ['required']);
   bindBlur('f-ch',   'Carga horária', ['required', 'int_positive']);
-  bindBlur('f-val',  'Validade',      ['required', 'int_positive']);
-  // Valor: validação manual pois é text com máscara
+
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('modal-save')?.addEventListener('click', () => saveCurso(curso?.id));
+  document.getElementById('modal-save')?.addEventListener('click',   () => saveCurso(curso?.id));
 }
 
 // ─── Save ─────────────────────────────────────────────────────────────────────
 async function saveCurso(id) {
-  const nome    = document.getElementById('f-nome').value.trim();
-  const cod     = document.getElementById('f-cod').value.trim();
-  const ch      = parseInt(document.getElementById('f-ch').value) || null;
-  const validade = parseInt(document.getElementById('f-val').value) || null;
-  const valorRaw = document.getElementById('f-valor').value.trim();
-  const valor   = parseBRL(valorRaw);
-  const ativo   = document.getElementById('f-ativo').value === 'true';
+  const nome      = document.getElementById('f-nome').value.trim();
+  const cod       = document.getElementById('f-cod').value.trim();
+  const ch        = parseInt(document.getElementById('f-ch').value) || null;
+  const isVital   = document.getElementById('f-vitalicio')?.checked ?? false;
+  const validade  = isVital ? null : (parseInt(document.getElementById('f-val').value) || null);
+  const valorRaw  = document.getElementById('f-valor').value.trim();
+  const valor     = parseBRL(valorRaw);
+  const ativo     = document.getElementById('f-ativo').value === 'true';
 
-  const ok = validateForm([
-    { id: 'f-nome', value: nome,           rules: ['required'],            label: 'Nome' },
-    { id: 'f-cod',  value: cod,            rules: ['required'],            label: 'Código' },
-    { id: 'f-ch',   value: ch,             rules: ['required', 'int_positive'], label: 'Carga horária' },
-    { id: 'f-val',  value: validade,       rules: ['required', 'int_positive'], label: 'Validade' },
-  ]);
+  // Regras base sempre obrigatórias
+  const rules = [
+    { id: 'f-nome', value: nome, rules: ['required'],             label: 'Nome' },
+    { id: 'f-cod',  value: cod,  rules: ['required'],             label: 'Código' },
+    { id: 'f-ch',   value: ch,   rules: ['required', 'int_positive'], label: 'Carga horária' },
+  ];
+  // Validade obrigatória apenas se não for vitalício
+  if (!isVital) {
+    rules.push({ id: 'f-val', value: validade, rules: ['required', 'int_positive'], label: 'Validade' });
+  }
+
+  const ok = validateForm(rules);
   if (!ok) return;
 
+  // ── Limite: carga horária ≤ 9.000h ───────────────────────────────────────
+  if (ch > 9000) {
+    fieldError('f-ch', 'Carga horária não pode ultrapassar 9.000 horas.');
+    return;
+  }
+  fieldOk('f-ch');
+
+  // ── Limite: validade ≤ 600 meses (se não vitalício) ──────────────────────
+  if (!isVital && validade > 600) {
+    fieldError('f-val', 'Validade não pode ultrapassar 600 meses (50 anos).');
+    return;
+  }
+  if (!isVital) fieldOk('f-val');
+
+  // ── Valor obrigatório e ≤ R$ 100.000 ─────────────────────────────────────
   if (!valor || valor <= 0) {
     fieldError('f-valor', 'Informe o valor padrão do curso.');
+    return;
+  }
+  if (valor > 100000) {
+    fieldError('f-valor', 'Valor não pode ultrapassar R$ 100.000,00.');
     return;
   }
   fieldOk('f-valor');

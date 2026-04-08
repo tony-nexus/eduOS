@@ -391,6 +391,13 @@ function modalTurma(turma = null) {
     </div>
   `);
 
+  // ── Bloqueia seleção de datas passadas no calendário (apenas nova turma) ──
+  if (!isEdit) {
+    const hoje = new Date().toISOString().split('T')[0];
+    document.getElementById('f-inicio')?.setAttribute('min', hoje);
+    document.getElementById('f-fim')?.setAttribute('min', hoje);
+  }
+
   // ── Auto-geração de código apenas para turmas novas ──────────────────────
   async function triggerAutoCode() {
     if (isEdit) return; // código é chave - não sobrescreve em edições
@@ -458,6 +465,17 @@ async function saveTurma(id) {
     return;
   }
   fieldOk('f-fim');
+
+  // Datas retroativas só são bloqueadas na criação (edição mantém datas originais)
+  if (!id && inicio) {
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+    const di   = new Date(inicio + 'T00:00:00');
+    if (di < hoje) {
+      fieldError('f-inicio', 'Não é permitido criar turmas com data de início no passado.');
+      return;
+    }
+    fieldOk('f-inicio');
+  }
 
   if (vagas > 31) {
     fieldError('f-vagas', 'O limite máximo é 31 alunos por turma.');
