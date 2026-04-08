@@ -912,6 +912,45 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   font-size: 13px; line-height: 1.6;
 }
 
+/* ===== MASTER-DETAIL: Pipeline ===== */
+.pipe-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.pipe-master-panel {
+  width: 320px;
+  flex-shrink: 0;
+}
+.pipe-detail-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Kanban dentro do detail usa largura total com scroll horizontal */
+.pipe-kanban-detail {
+  min-height: 320px;
+}
+
+@media (max-width: 768px) {
+  .pipe-layout {
+    flex-direction: column;
+    gap: 0;
+  }
+  .pipe-master-panel,
+  .pipe-detail-panel {
+    width: 100%;
+  }
+  .pipe-master-panel.mob-hide,
+  .pipe-detail-panel.mob-hide {
+    display: none;
+  }
+  .pipe-master-panel #pipe-turma-list {
+    max-height: none !important;
+  }
+  .pipe-detail-panel .inst-back-btn { display: inline-flex; }
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .dash-grid-main, .dash-grid-2, .dash-grid-2b { grid-template-columns: 1fr; }

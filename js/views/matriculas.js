@@ -162,8 +162,9 @@ function applyFilter() {
       <td><span style="font-family:var(--font-mono);font-size:12px;color:var(--text-tertiary)">${esc(m.turma_codigo)}</span></td>
       <td style="font-size:12px;color:var(--text-tertiary)">${fmtDate(m.created_at)}</td>
       <td><span class="badge ${BADGE_MAP[m.status] ?? 'badge-gray'}">${LABEL_MAP[m.status] ?? m.status}</span></td>
-      <td>
+      <td style="white-space:nowrap">
         <button class="action-btn action-editar" data-id="${m.id}">Editar Status</button>
+        <button class="action-btn danger action-excluir" data-id="${m.id}" title="Excluir matrícula" style="margin-left:4px">Excluir</button>
       </td>
     </tr>
   `).join('');
@@ -174,6 +175,13 @@ function applyFilter() {
     btn.addEventListener('click', () => {
       const m = _matriculas.find(x => x.id === btn.dataset.id);
       if (m) modalEditar(m);
+    });
+  });
+
+  document.querySelectorAll('.action-excluir').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = _matriculas.find(x => x.id === btn.dataset.id);
+      if (m) modalExcluirMatricula(m);
     });
   });
 }
@@ -370,7 +378,6 @@ function modalEditar(m) {
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-update')?.addEventListener('click', async () => {
     const st      = document.getElementById('e-status')?.value;
-    const oldSt   = m.status;
     const btn     = document.getElementById('modal-update');
     btn.disabled  = true;
     try {
@@ -387,6 +394,42 @@ function modalEditar(m) {
     } catch (err) {
       toast('Erro ao atualizar.', 'error');
       btn.disabled = false;
+    }
+  });
+}
+
+// ─── Modal Excluir Matrícula ──────────────────────────────────────────────────
+function modalExcluirMatricula(m) {
+  openModal(`Excluir Matrícula`, `
+    <div style="margin-bottom:16px;padding:14px;background:var(--bg-elevated);border-radius:8px;font-size:13px;color:var(--text-secondary);border-left:3px solid var(--red)">
+      <strong style="color:var(--text-primary)">${esc(m.aluno_nome)}</strong><br>
+      ${esc(m.curso_nome)} · Turma <span style="font-family:var(--font-mono)">${esc(m.turma_codigo)}</span>
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:16px">
+      Esta ação é <strong>irreversível</strong>. A matrícula será removida permanentemente e as vagas ocupadas serão ajustadas automaticamente.
+    </p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+      <button class="btn btn-danger" id="modal-confirm-del">Excluir Matrícula</button>
+    </div>
+  `);
+
+  document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
+  document.getElementById('modal-confirm-del')?.addEventListener('click', async () => {
+    const btn = document.getElementById('modal-confirm-del');
+    btn.disabled = true;
+    btn.textContent = 'Excluindo...';
+    try {
+      const { error } = await supabase
+        .from('matriculas').delete().eq('id', m.id).eq('tenant_id', getTenantId());
+      if (error) throw error;
+      closeModal();
+      toast('Matrícula excluída.', 'success');
+      await loadMatriculas();
+    } catch (err) {
+      toast(`Erro ao excluir: ${err.message}`, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Excluir Matrícula';
     }
   });
 }

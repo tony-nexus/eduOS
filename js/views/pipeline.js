@@ -1,205 +1,378 @@
 /**
  * /js/views/pipeline.js
- * Kanban alimentado pela tabela de matriculas do Supabase.
- * Filtros: aluno, turma, curso, status da turma, data início (de/até)
+ * Pipeline Operacional — Master-Detail Layout
+ *
+ * Padrão:
+ *   ┌──────────────────┬──────────────────────────────────────────┐
+ *   │  MASTER (~35%)   │  DETAIL (~65%)                           │
+ *   │  Lista de turmas │  Kanban da turma selecionada             │
+ *   └──────────────────┴──────────────────────────────────────────┘
  */
 
 import { supabase, getTenantId } from '../core/supabase.js';
-import { setContent, toast, esc } from '../ui/components.js';
+import { setContent, toast, esc, fmtDate } from '../ui/components.js';
 import { navigate } from '../core/router.js';
 
-let _matriculas  = [];
-let _turmasList  = [];
-let _cursosList  = [];
+let _turmas     = [];
+let _matriculas = [];   // matrículas da turma ativa
+let _activeId   = null; // turma selecionada
 
+const STATUS_TURMA_BADGE = {
+  agendada:     'badge-blue',
+  em_andamento: 'badge-amber',
+  concluida:    'badge-green',
+  cancelada:    'badge-red',
+};
+const STATUS_TURMA_LABEL = {
+  agendada:     'Agendada',
+  em_andamento: 'Em Andamento',
+  concluida:    'Concluída',
+  cancelada:    'Cancelada',
+};
+
+const KANBAN_COLS = [
+  { key: 'matriculado',         label: 'Matriculados',  color: 'var(--blue)'   },
+  { key: 'aguardando_turma',    label: 'Ag. Turma',     color: 'var(--amber)'  },
+  { key: 'em_andamento',        label: 'Em Andamento',  color: 'var(--accent)' },
+  { key: 'reprovado',           label: 'Reprovados',    color: 'var(--red)'    },
+  { key: 'concluido',           label: 'Concluído',     color: 'var(--green)'  },
+  { key: 'certificado_emitido', label: 'Cert. Emitido', color: 'var(--purple)' },
+];
+
+// Transições de status válidas
+const TRANSICOES = {
+  matriculado:         ['aguardando_turma', 'em_andamento', 'cancelado'],
+  aguardando_turma:    ['matriculado', 'em_andamento', 'cancelado'],
+  em_andamento:        ['concluido', 'reprovado', 'cancelado'],
+  reprovado:           ['aguardando_turma'],
+  concluido:           ['certificado_emitido'],
+  certificado_emitido: [],
+};
+
+function _isMobile() { return window.innerWidth <= 768; }
+
+// ─── Render principal ─────────────────────────────────────────────────────────
 export async function render() {
+  _activeId = null;
+
   setContent(`
     <div class="page-header">
-      <div><h1>Pipeline Operacional</h1><p>Jornada completa do aluno</p></div>
+      <div><h1>Pipeline Operacional</h1><p>Jornada completa do aluno por turma</p></div>
       <div class="page-header-actions">
         <button class="btn btn-primary" id="btn-nova-mat-pipeline">Nova Matrícula</button>
       </div>
     </div>
-    <div class="table-toolbar" style="flex-wrap:wrap;gap:8px;margin-bottom:16px">
-      <div class="search-input-wrap">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-        <input type="text" id="filter-aluno" class="search-input" placeholder="Buscar aluno...">
+
+    <div class="pipe-layout">
+
+      <!-- ── MASTER: lista de turmas ──────────────────────────────── -->
+      <div class="pipe-master-panel">
+        <div class="table-wrap" style="padding:0;overflow:hidden">
+          <div class="table-toolbar" style="padding:10px 12px;border-bottom:1px solid var(--border-subtle)">
+            <div class="search-input-wrap" style="flex:1">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+              </svg>
+              <input class="search-input" id="search-turmas-pipe" placeholder="Buscar turma..." aria-label="Buscar turma">
+            </div>
+            <select class="select-input" id="filter-status-pipe" style="font-size:12px;padding:6px 8px;min-width:0">
+              <option value="">Todos</option>
+              <option value="agendada">Agendada</option>
+              <option value="em_andamento">Em Andamento</option>
+              <option value="concluida">Concluída</option>
+              <option value="cancelada">Cancelada</option>
+            </select>
+          </div>
+          <div id="pipe-turma-list" style="padding:10px 10px 4px;max-height:calc(100vh - 260px);overflow-y:auto">
+            ${Array(3).fill('<div class="skeleton" style="height:70px;border-radius:6px;margin-bottom:7px"></div>').join('')}
+          </div>
+          <div style="padding:8px 14px;border-top:1px solid var(--border-subtle)">
+            <span class="table-info" id="pipe-turma-count">—</span>
+          </div>
+        </div>
       </div>
-      <select class="select-input" id="filter-turma" style="min-width:140px">
-        <option value="">Todas as turmas</option>
-      </select>
-      <select class="select-input" id="filter-curso" style="min-width:140px">
-        <option value="">Todos os cursos</option>
-      </select>
-      <select class="select-input" id="filter-status-turma">
-        <option value="">Status da turma</option>
-        <option value="agendada">Agendada</option>
-        <option value="em_andamento">Em Andamento</option>
-        <option value="concluida">Concluída</option>
-        <option value="cancelada">Cancelada</option>
-      </select>
-      <div style="display:flex;align-items:center;gap:4px">
-        <span style="font-size:11.5px;color:var(--text-tertiary);white-space:nowrap">Início de</span>
-        <input type="date" class="select-input" id="filter-data-de" style="width:auto">
-        <span style="font-size:11.5px;color:var(--text-tertiary)">até</span>
-        <input type="date" class="select-input" id="filter-data-ate" style="width:auto">
+
+      <!-- ── DETAIL: kanban da turma selecionada ───────────────────── -->
+      <div class="pipe-detail-panel" id="pipe-detail-panel">
+        <div id="pipe-detail-content">${_renderDetailEmpty()}</div>
       </div>
-    </div>
-    <div class="kanban-board" id="kanban-board">
-      <div style="padding:40px;text-align:center;width:100%;color:var(--text-tertiary)">Carregando pipeline...</div>
+
     </div>
   `);
 
   document.getElementById('btn-nova-mat-pipeline')?.addEventListener('click', () => navigate('matriculas'));
 
-  ['filter-aluno','filter-turma','filter-curso','filter-status-turma','filter-data-de','filter-data-ate'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.addEventListener('input',  applyFilters);
-      el.addEventListener('change', applyFilters);
-    }
-  });
+  // Filtros do master
+  const applyMasterFilter = () => {
+    const q  = (document.getElementById('search-turmas-pipe')?.value || '').toLowerCase();
+    const st = document.getElementById('filter-status-pipe')?.value || '';
+    renderMasterList(_turmas.filter(t =>
+      (!q  || t.codigo.toLowerCase().includes(q) || (t.curso_nome ?? '').toLowerCase().includes(q)) &&
+      (!st || t.status === st)
+    ));
+  };
+  document.getElementById('search-turmas-pipe')?.addEventListener('input', applyMasterFilter);
+  document.getElementById('filter-status-pipe')?.addEventListener('change', applyMasterFilter);
 
-  await loadData();
-}
-
-async function loadData() {
-  try {
-    const [mRes, tRes, cRes] = await Promise.all([
-      supabase
-        .from('matriculas')
-        .select('*, aluno:aluno_id(nome), curso:curso_id(id,nome), turma:turma_id(id,codigo,status,data_inicio,data_fim)')
-        .eq('tenant_id', getTenantId()),
-      supabase
-        .from('turmas')
-        .select('id, codigo, status, data_inicio, data_fim')
-        .eq('tenant_id', getTenantId())
-        .order('codigo'),
-      supabase
-        .from('cursos')
-        .select('id, nome')
-        .eq('tenant_id', getTenantId())
-        .eq('ativo', true)
-        .order('nome'),
-    ]);
-
-    if (mRes.error) throw mRes.error;
-    _matriculas = mRes.data || [];
-    _turmasList = tRes.data  || [];
-    _cursosList = cRes.data  || [];
-  } catch (err) {
-    console.error(err);
-    toast('Erro ao carregar pipeline', 'error');
-    _matriculas = [];
+  if (_isMobile()) {
+    document.getElementById('pipe-detail-panel')?.classList.add('mob-hide');
   }
 
-  // Preenche dropdowns de filtro
-  const selTurma = document.getElementById('filter-turma');
-  if (selTurma) _turmasList.forEach(t => {
-    selTurma.innerHTML += `<option value="${t.id}">${esc(t.codigo)}</option>`;
-  });
-
-  const selCurso = document.getElementById('filter-curso');
-  if (selCurso) _cursosList.forEach(c => {
-    selCurso.innerHTML += `<option value="${c.id}">${esc(c.nome)}</option>`;
-  });
-
-  applyFilters();
+  await loadTurmas();
 }
 
-function applyFilters() {
-  const aluno       = (document.getElementById('filter-aluno')?.value || '').trim().toLowerCase();
-  const turmaId     = document.getElementById('filter-turma')?.value || '';
-  const cursoId     = document.getElementById('filter-curso')?.value || '';
-  const statusTurma = document.getElementById('filter-status-turma')?.value || '';
-  const dataDe      = document.getElementById('filter-data-de')?.value || '';
-  const dataAte     = document.getElementById('filter-data-ate')?.value || '';
+// ─── Fetch turmas ─────────────────────────────────────────────────────────────
+async function loadTurmas() {
+  try {
+    const { data, error } = await supabase
+      .from('turmas')
+      .select('id, codigo, status, vagas, ocupadas, data_inicio, data_fim, curso:curso_id(nome)')
+      .eq('tenant_id', getTenantId())
+      .order('data_inicio', { ascending: false });
 
-  const filtered = _matriculas.filter(m => {
-    if (aluno       && !(m.aluno?.nome || '').toLowerCase().includes(aluno))    return false;
-    if (turmaId     && m.turma_id !== turmaId)                                  return false;
-    if (cursoId     && m.curso?.id !== cursoId)                                 return false;
-    if (statusTurma && m.turma?.status !== statusTurma)                         return false;
-    if (dataDe      && m.turma?.data_inicio && m.turma.data_inicio < dataDe)    return false;
-    if (dataAte     && m.turma?.data_inicio && m.turma.data_inicio > dataAte)   return false;
-    return true;
-  });
-
-  renderKanban(filtered);
+    if (error) throw error;
+    _turmas = (data || []).map(t => ({ ...t, curso_nome: t.curso?.nome ?? '—' }));
+  } catch (err) {
+    console.error(err);
+    toast('Erro ao carregar turmas', 'error');
+    _turmas = [];
+  }
+  renderMasterList(_turmas);
 }
 
-function renderKanban(filtered = _matriculas) {
-  const board = document.getElementById('kanban-board');
-  if (!board) return;
+// ─── Render lista master ──────────────────────────────────────────────────────
+function renderMasterList(list) {
+  const el    = document.getElementById('pipe-turma-list');
+  const count = document.getElementById('pipe-turma-count');
+  if (!el) return;
 
-  const cols = [
-    { key: 'matriculado',         label: 'Matriculados',     color: 'var(--blue)',          items: [] },
-    { key: 'aguardando_turma',    label: 'Ag. Turma',        color: 'var(--amber)',          items: [] },
-    { key: 'em_andamento',        label: 'Em Andamento',     color: 'var(--accent)',         items: [] },
-    { key: 'reprovado',           label: 'Reprovados',       color: 'var(--red)',            items: [] },
-    { key: 'concluido',           label: 'Concluído',        color: 'var(--green)',          items: [] },
-    { key: 'certificado_emitido', label: 'Cert. Emitido',    color: 'var(--purple)',         items: [] },
-    { key: 'outros',              label: 'Outros',           color: 'var(--text-tertiary)',  items: [] },
-  ];
+  if (count) count.textContent = `${list.length} turma${list.length !== 1 ? 's' : ''}`;
 
-  filtered.forEach(m => {
-    const col = cols.find(c => c.key === m.status);
-    (col ?? cols[6]).items.push(m);
-  });
+  if (!list.length) {
+    el.innerHTML = `<p style="text-align:center;padding:28px 12px;color:var(--text-tertiary);font-size:13px">Nenhuma turma encontrada.</p>`;
+    return;
+  }
 
-  board.innerHTML = cols.map(c => `
-    <div class="kanban-col" data-status="${c.key}">
-      <div class="kanban-col-header">
-        <span class="kanban-col-title">
-          <span class="dot" style="background:${c.color}"></span>
-          ${c.label}
-        </span>
-        <span class="kanban-col-count">${c.items.length}</span>
-      </div>
-      <div class="kanban-col-body" data-status="${c.key}">
-        ${c.items.map(m => `
-          <div class="kanban-card" draggable="true" data-id="${m.id}"
-               data-nome="${esc(m.aluno?.nome||'—')}" data-curso="${esc(m.curso?.nome||'—')}">
-            <div class="kanban-card-name">${esc(m.aluno?.nome || '—')}</div>
-            <div class="kanban-card-meta" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-              <span class="badge badge-gray" style="font-size:10px">${esc(m.curso?.nome || '—')}</span>
-              ${m.turma?.codigo ? `<span style="font-family:var(--font-mono);font-size:10px;color:var(--accent)">${esc(m.turma.codigo)}</span>` : ''}
-            </div>
+  el.innerHTML = list.map(t => {
+    const pct      = t.vagas > 0 ? Math.round((t.ocupadas ?? 0) / t.vagas * 100) : 0;
+    const pctColor = pct >= 100 ? 'var(--red)' : pct >= 80 ? 'var(--amber)' : 'var(--accent)';
+    const isActive = t.id === _activeId;
+    return `
+      <div class="inst-item${isActive ? ' active' : ''}"
+           data-id="${t.id}" role="button" tabindex="0" aria-pressed="${isActive}">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
+            <span class="inst-item-name">${esc(t.codigo)}</span>
+            <span class="badge ${STATUS_TURMA_BADGE[t.status] ?? 'badge-gray'}"
+                  style="font-size:10px;padding:1px 6px">
+              ${STATUS_TURMA_LABEL[t.status] ?? t.status}
+            </span>
           </div>
-        `).join('')}
-        ${c.items.length === 0 ? '<div style="font-size:11px;color:var(--text-tertiary);text-align:center;padding:10px 0;">Vazio</div>' : ''}
-      </div>
-    </div>
-  `).join('');
+          <div class="inst-item-meta">${esc(t.curso_nome)}</div>
+          <div style="margin-top:5px;display:flex;align-items:center;gap:8px">
+            <div class="progress-bar" style="flex:1;height:3px">
+              <div class="progress-fill" style="width:${pct}%;background:${pctColor}"></div>
+            </div>
+            <span style="font-size:10.5px;color:var(--text-tertiary);font-family:var(--font-mono);flex-shrink:0">
+              ${t.ocupadas ?? 0}/${t.vagas}
+            </span>
+          </div>
+          <div style="font-size:10.5px;color:var(--text-tertiary);margin-top:2px">
+            ${t.data_inicio ? fmtDate(t.data_inicio) : '—'}${t.data_fim ? ' → ' + fmtDate(t.data_fim) : ''}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
 
-  setupDragAndDrop();
+  el.querySelectorAll('.inst-item').forEach(card => {
+    card.addEventListener('click', () => selecionarTurma(card.dataset.id));
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selecionarTurma(card.dataset.id); }
+    });
+  });
 }
 
-function setupDragAndDrop() {
-  const cards   = document.querySelectorAll('.kanban-card');
-  const columns = document.querySelectorAll('.kanban-col-body');
+// ─── Selecionar turma → carrega kanban ───────────────────────────────────────
+async function selecionarTurma(id) {
+  _activeId = id;
+
+  // Atualiza estado visual
+  document.querySelectorAll('#pipe-turma-list .inst-item').forEach(card => {
+    const active = card.dataset.id === id;
+    card.classList.toggle('active', active);
+    card.setAttribute('aria-pressed', String(active));
+  });
+
+  // Mobile: alterna painéis
+  if (_isMobile()) {
+    document.querySelector('.pipe-master-panel')?.classList.add('mob-hide');
+    document.getElementById('pipe-detail-panel')?.classList.remove('mob-hide');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // Skeleton
+  const detailContent = document.getElementById('pipe-detail-content');
+  if (detailContent) {
+    detailContent.innerHTML = `
+      <div style="min-height:300px;display:flex;align-items:center;justify-content:center;
+                  border:1px solid var(--border-subtle);border-radius:var(--radius-md);
+                  background:var(--bg-surface)">
+        <div style="display:flex;align-items:center;gap:10px;color:var(--text-tertiary);font-size:13px">
+          <div class="skeleton" style="width:18px;height:18px;border-radius:50%;flex-shrink:0"></div>
+          Carregando pipeline...
+        </div>
+      </div>`;
+  }
+
+  const turma = _turmas.find(t => t.id === id);
+  if (!turma) return;
+
+  try {
+    const { data, error } = await supabase
+      .from('matriculas')
+      .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
+      .eq('tenant_id', getTenantId())
+      .eq('turma_id', id);
+
+    if (error) throw error;
+    _matriculas = data || [];
+    renderDetailPanel(turma, _matriculas);
+  } catch (err) {
+    toast(`Erro ao carregar pipeline: ${err.message}`, 'error');
+    if (detailContent) detailContent.innerHTML = _renderDetailEmpty();
+  }
+}
+
+// ─── Estado vazio do detail ───────────────────────────────────────────────────
+function _renderDetailEmpty() {
+  return `
+    <div class="inst-detail-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" width="56" height="56">
+        <rect x="3" y="3" width="5" height="18" rx="1"/>
+        <rect x="10" y="3" width="5" height="12" rx="1"/>
+        <rect x="17" y="3" width="5" height="15" rx="1"/>
+      </svg>
+      <div style="font-weight:600;font-size:14px;color:var(--text-secondary)">Nenhuma turma selecionada</div>
+      <div>Clique em uma turma na lista ao lado para visualizar o pipeline de matrículas.</div>
+    </div>`;
+}
+
+// ─── Render painel de detalhe (kanban) ────────────────────────────────────────
+function renderDetailPanel(turma, matriculas) {
+  const detailContent = document.getElementById('pipe-detail-content');
+  if (!detailContent) return;
+
+  const pct      = turma.vagas > 0 ? Math.round((turma.ocupadas ?? 0) / turma.vagas * 100) : 0;
+  const pctColor = pct >= 100 ? 'var(--red)' : pct >= 80 ? 'var(--amber)' : 'var(--accent)';
+
+  // Header da turma
+  const header = `
+    <div class="card" style="padding:14px 18px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap">
+            <span style="font-weight:700;font-size:15px;font-family:var(--font-mono)">
+              ${esc(turma.codigo)}
+            </span>
+            <span class="badge ${STATUS_TURMA_BADGE[turma.status] ?? 'badge-gray'}">
+              ${STATUS_TURMA_LABEL[turma.status] ?? turma.status}
+            </span>
+          </div>
+          <div style="font-size:12.5px;color:var(--text-tertiary)">${esc(turma.curso_nome)}</div>
+        </div>
+        <div style="display:flex;gap:20px;text-align:center;flex-shrink:0;align-items:center">
+          <div>
+            <div style="font-size:20px;font-weight:700;color:var(--blue);line-height:1">${matriculas.length}</div>
+            <div style="font-size:10.5px;color:var(--text-tertiary);margin-top:2px">Matrículas</div>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;color:${pctColor};line-height:1;font-family:var(--font-mono)">${turma.ocupadas ?? 0}/${turma.vagas}</div>
+            <div style="font-size:10.5px;color:var(--text-tertiary);margin-top:2px">Vagas</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  // Kanban
+  const cols = KANBAN_COLS.map(c => {
+    const items = matriculas.filter(m => m.status === c.key);
+    return { ...c, items };
+  });
+
+  const kanban = `
+    <div class="kanban-board pipe-kanban-detail" id="kanban-board">
+      ${cols.map(c => `
+        <div class="kanban-col" data-status="${c.key}">
+          <div class="kanban-col-header">
+            <span class="kanban-col-title">
+              <span class="dot" style="background:${c.color}"></span>
+              ${c.label}
+            </span>
+            <span class="kanban-col-count">${c.items.length}</span>
+          </div>
+          <div class="kanban-col-body" data-status="${c.key}">
+            ${c.items.map(m => `
+              <div class="kanban-card" draggable="true" data-id="${m.id}"
+                   data-nome="${esc(m.aluno?.nome || '—')}">
+                <div class="kanban-card-name">${esc(m.aluno?.nome || '—')}</div>
+                <div class="kanban-card-meta">
+                  <span class="badge badge-gray" style="font-size:10px">${esc(m.curso?.nome || '—')}</span>
+                </div>
+              </div>
+            `).join('')}
+            ${c.items.length === 0
+              ? '<div style="font-size:11px;color:var(--text-tertiary);text-align:center;padding:10px 0">Vazio</div>'
+              : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+
+  detailContent.innerHTML = `
+    <button class="btn btn-secondary inst-back-btn" aria-label="Voltar à lista de turmas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+        <line x1="19" y1="12" x2="5" y2="12"/>
+        <polyline points="12 19 5 12 12 5"/>
+      </svg>
+      Voltar
+    </button>
+  ` + header + kanban;
+
+  // Botão voltar (mobile)
+  detailContent.querySelector('.inst-back-btn')?.addEventListener('click', () => {
+    _activeId = null;
+    document.querySelectorAll('#pipe-turma-list .inst-item').forEach(c => {
+      c.classList.remove('active');
+      c.setAttribute('aria-pressed', 'false');
+    });
+    document.querySelector('.pipe-master-panel')?.classList.remove('mob-hide');
+    document.getElementById('pipe-detail-panel')?.classList.add('mob-hide');
+    document.getElementById('pipe-detail-content').innerHTML = _renderDetailEmpty();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  setupDragAndDrop(turma);
+}
+
+// ─── Drag & Drop ─────────────────────────────────────────────────────────────
+function setupDragAndDrop(turma) {
+  const cards   = document.querySelectorAll('#pipe-detail-content .kanban-card');
+  const columns = document.querySelectorAll('#pipe-detail-content .kanban-col-body');
 
   cards.forEach(card => {
     card.addEventListener('dragstart', () => card.classList.add('dragging'));
     card.addEventListener('dragend',   () => card.classList.remove('dragging'));
-    card.addEventListener('click', () => {
-      toast(`Matrícula selecionada: ${card.dataset.nome}`, 'info');
-    });
   });
 
   columns.forEach(col => {
-    col.addEventListener('dragover', e => {
-      e.preventDefault();
-      col.classList.add('drag-over');
-    });
-
+    col.addEventListener('dragover',  e => { e.preventDefault(); col.classList.add('drag-over'); });
     col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
 
     col.addEventListener('drop', async e => {
       e.preventDefault();
       col.classList.remove('drag-over');
 
-      const draggingCard = document.querySelector('.dragging');
+      const draggingCard = document.querySelector('#pipe-detail-content .dragging');
       if (!draggingCard) return;
 
       const newStatus = col.dataset.status;
@@ -208,25 +381,27 @@ function setupDragAndDrop() {
       const matricula = _matriculas.find(m => m.id == cardId);
       if (!matricula || matricula.status === newStatus) return;
 
-      // ── Validação de transições ────────────────────────────────────────────
-      const VALIDAS = {
-        matriculado:         ['aguardando_turma', 'em_andamento'],
-        aguardando_turma:    ['matriculado', 'em_andamento'],
-        em_andamento:        ['concluido', 'reprovado'],
-        reprovado:           ['aguardando_turma'],
-        concluido:           ['certificado_emitido'],
-        certificado_emitido: [],   // estado terminal
-        outros:              ['matriculado'],
-      };
-      const permitidas = VALIDAS[matricula.status] ?? [];
+      // Valida transição
+      const permitidas = TRANSICOES[matricula.status] ?? [];
       if (!permitidas.includes(newStatus)) {
         toast(`Transição inválida: ${matricula.status} → ${newStatus}`, 'warning');
         return;
       }
 
-      const oldStatus = matricula.status;
+      // Valida vagas ao entrar em estados ativos
+      if (['matriculado', 'em_andamento'].includes(newStatus) &&
+          !['matriculado', 'em_andamento', 'aguardando_turma'].includes(matricula.status)) {
+        if ((turma.ocupadas ?? 0) >= turma.vagas) {
+          toast('Turma sem vagas disponíveis.', 'warning');
+          return;
+        }
+      }
+
+      const oldStatus  = matricula.status;
       matricula.status = newStatus;
-      applyFilters();
+
+      // Re-render otimista
+      renderDetailPanel(turma, _matriculas);
 
       try {
         const { error } = await supabase
@@ -239,7 +414,7 @@ function setupDragAndDrop() {
         toast(`${esc(draggingCard.dataset.nome)} → ${newStatus.replace(/_/g, ' ')}`, 'success');
       } catch (err) {
         matricula.status = oldStatus;
-        applyFilters();
+        renderDetailPanel(turma, _matriculas);
         toast('Erro ao alterar status.', 'error');
       }
     });

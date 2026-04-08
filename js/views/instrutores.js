@@ -54,133 +54,34 @@ const ALUNO_LABEL = {
   cancelado:           'Cancelado',
 };
 
-// ══════════════════════════════════════════════════════════════════════════════
-//  MOCK DATA — substitua pelas queries Supabase ao integrar o backend
-//  As estruturas de dados espelham exatamente o que o Supabase retornaria.
-// ══════════════════════════════════════════════════════════════════════════════
-// 4 conjuntos distintos — cada instrutor recebe um deles por ordem na lista
-const _MOCK_TURMA_SETS = [
-  // Set A
-  [
-    { id:'mt-a1', codigo:'NR35-2025-001', curso_nome:'NR-35 Trabalho em Altura',          status:'em_andamento', ocupadas:14, vagas:20, data_inicio:'2025-03-01', data_fim:'2025-03-08' },
-    { id:'mt-a2', codigo:'NR33-2025-001', curso_nome:'NR-33 Espaço Confinado',            status:'agendada',     ocupadas: 8, vagas:16, data_inicio:'2025-05-10', data_fim:'2025-05-13' },
-    { id:'mt-a3', codigo:'NR35-2024-008', curso_nome:'NR-35 Trabalho em Altura',          status:'concluida',    ocupadas:19, vagas:20, data_inicio:'2024-11-04', data_fim:'2024-11-11' },
-  ],
-  // Set B
-  [
-    { id:'mt-b1', codigo:'PS-2025-002',   curso_nome:'Primeiros Socorros',                status:'em_andamento', ocupadas:11, vagas:20, data_inicio:'2025-02-10', data_fim:'2025-02-11' },
-    { id:'mt-b2', codigo:'NR20-2025-001', curso_nome:'NR-20 Inflamáveis e Combustíveis', status:'agendada',     ocupadas: 4, vagas:16, data_inicio:'2025-06-05', data_fim:'2025-06-07' },
-    { id:'mt-b3', codigo:'NR20-2024-003', curso_nome:'NR-20 Inflamáveis e Combustíveis', status:'concluida',    ocupadas:16, vagas:16, data_inicio:'2024-12-02', data_fim:'2024-12-04' },
-    { id:'mt-b4', codigo:'PS-2024-005',   curso_nome:'Primeiros Socorros',                status:'concluida',    ocupadas:13, vagas:20, data_inicio:'2024-08-05', data_fim:'2024-08-06' },
-  ],
-  // Set C
-  [
-    { id:'mt-c1', codigo:'NR10-2025-001', curso_nome:'NR-10 Segurança em Eletricidade',  status:'agendada',     ocupadas: 5, vagas:20, data_inicio:'2025-06-15', data_fim:'2025-06-19' },
-    { id:'mt-c2', codigo:'NR12-2025-001', curso_nome:'NR-12 Segurança em Máquinas',      status:'agendada',     ocupadas: 3, vagas:16, data_inicio:'2025-07-07', data_fim:'2025-07-10' },
-    { id:'mt-c3', codigo:'NR35-2024-011', curso_nome:'NR-35 Trabalho em Altura',          status:'concluida',    ocupadas:20, vagas:20, data_inicio:'2024-10-14', data_fim:'2024-10-21' },
-  ],
-  // Set D — instrutor sem turmas (testa estado vazio)
-  [],
-];
-
-const _MOCK_ALUNOS = {
-  // Set A
-  'mt-a1': [
-    { id:'a01', nome:'João Carlos Melo',      doc:'CPF: 321.654.987-00', status:'em_andamento' },
-    { id:'a02', nome:'Ana Paula Rodrigues',   doc:'CPF: 456.789.012-34', status:'em_andamento' },
-    { id:'a03', nome:'Bruno Henrique Lima',   doc:'RNM: V123456-J',      status:'em_andamento' },
-    { id:'a04', nome:'Carla Souza Ferreira',  doc:'CPF: 789.012.345-67', status:'em_andamento' },
-    { id:'a05', nome:'Diego Martins Pereira', doc:'CPF: 012.345.678-90', status:'em_andamento' },
-  ],
-  'mt-a2': [
-    { id:'a06', nome:'Elaine Borges',         doc:'CPF: 135.246.357-80', status:'matriculado' },
-    { id:'a07', nome:'Fábio Correia',         doc:'CPF: 246.357.468-91', status:'matriculado' },
-    { id:'a08', nome:'Gabriela Santos',       doc:'CPF: 357.468.579-02', status:'matriculado' },
-  ],
-  'mt-a3': [
-    { id:'a09', nome:'Henrique Costa',        doc:'CPF: 468.579.680-13', status:'concluido' },
-    { id:'a10', nome:'Igor Lima',             doc:'CPF: 579.680.791-24', status:'concluido' },
-    { id:'a11', nome:'Júlia Viana',           doc:'CPF: 680.791.802-35', status:'reprovado'  },
-  ],
-  // Set B
-  'mt-b1': [
-    { id:'b01', nome:'Kaio Teixeira',         doc:'CNH: 01234567890',    status:'em_andamento' },
-    { id:'b02', nome:'Larissa Almeida',       doc:'CPF: 791.802.913-46', status:'em_andamento' },
-    { id:'b03', nome:'Marcos Freitas',        doc:'CPF: 802.913.024-57', status:'em_andamento' },
-    { id:'b04', nome:'Natália Rocha',         doc:'CPF: 913.024.135-68', status:'em_andamento' },
-  ],
-  'mt-b2': [
-    { id:'b05', nome:'Otávio Barbosa',        doc:'CPF: 024.135.246-79', status:'matriculado' },
-    { id:'b06', nome:'Patrícia Castro',       doc:'CPF: 135.246.357-80', status:'matriculado' },
-  ],
-  'mt-b3': [
-    { id:'b07', nome:'Rafael Mendes',         doc:'RNM: A654321-B',      status:'concluido' },
-    { id:'b08', nome:'Sabrina Luz',           doc:'CPF: 246.357.468-91', status:'concluido' },
-    { id:'b09', nome:'Thiago Reis',           doc:'CPF: 357.468.579-02', status:'concluido' },
-  ],
-  'mt-b4': [
-    { id:'b10', nome:'Ursula Gomes',          doc:'CPF: 468.579.680-13', status:'concluido' },
-    { id:'b11', nome:'Vitor Cardoso',         doc:'CPF: 579.680.791-24', status:'concluido' },
-  ],
-  // Set C
-  'mt-c1': [
-    { id:'c01', nome:'Wesley Andrade',        doc:'CPF: 100.200.300-40', status:'matriculado' },
-    { id:'c02', nome:'Xuxa Pereira',          doc:'CPF: 200.300.400-50', status:'matriculado' },
-    { id:'c03', nome:'Yara Fontes',           doc:'CPF: 300.400.500-60', status:'matriculado' },
-  ],
-  'mt-c2': [
-    { id:'c04', nome:'Zilda Monteiro',        doc:'CPF: 400.500.600-70', status:'matriculado' },
-    { id:'c05', nome:'Alan Braga',            doc:'RNM: C789012-D',      status:'matriculado' },
-  ],
-  'mt-c3': [
-    { id:'c06', nome:'Beatriz Tavares',       doc:'CPF: 500.600.700-80', status:'concluido' },
-    { id:'c07', nome:'Caio Neves',            doc:'CPF: 600.700.800-90', status:'concluido' },
-    { id:'c08', nome:'Débora Pinheiro',       doc:'CPF: 700.800.900-01', status:'concluido' },
-    { id:'c09', nome:'Eduardo Magalhães',     doc:'CPF: 800.900.001-12', status:'reprovado'  },
-  ],
-};
-
-// ─── Fetch turmas do instrutor ────────────────────────────────────────────────
-/**
- * TODO: Supabase — substituir o bloco mock pela query abaixo:
- *
- * const { data, error } = await supabase
- *   .from('turmas')
- *   .select('id, codigo, status, ocupadas, vagas, data_inicio, data_fim, curso:curso_id(nome)')
- *   .eq('tenant_id', getTenantId())
- *   .eq('instrutor_id', instrutorId)
- *   .order('data_inicio', { ascending: false });
- * if (error) throw error;
- * return (data || []).map(t => ({ ...t, curso_nome: t.curso?.nome ?? '—' }));
- */
+// ─── Fetch turmas do instrutor (Supabase) ────────────────────────────────────
 async function loadTurmasDoInstrutor(instrutorId) {
-  // Mock: cada instrutor recebe um conjunto diferente pela posição na lista
-  const idx = _cache.findIndex(i => i.id === instrutorId);
-  return _MOCK_TURMA_SETS[(idx >= 0 ? idx : 0) % _MOCK_TURMA_SETS.length];
+  const { data, error } = await supabase
+    .from('turmas')
+    .select('id, codigo, status, ocupadas, vagas, data_inicio, data_fim, curso:curso_id(nome)')
+    .eq('tenant_id', getTenantId())
+    .eq('instrutor_id', instrutorId)
+    .order('data_inicio', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(t => ({ ...t, curso_nome: t.curso?.nome ?? '—' }));
 }
 
-// ─── Fetch alunos de uma turma ────────────────────────────────────────────────
-/**
- * TODO: Supabase — substituir o bloco mock pela query abaixo:
- *
- * const { data, error } = await supabase
- *   .from('matriculas')
- *   .select('id, status, aluno:aluno_id(nome, cpf, rnm)')
- *   .eq('tenant_id', getTenantId())
- *   .eq('turma_id', turmaId)
- *   .neq('status', 'cancelado')
- *   .order('aluno(nome)');
- * if (error) throw error;
- * return (data || []).map(m => ({
- *   id:     m.id,
- *   nome:   m.aluno?.nome ?? '—',
- *   doc:    m.aluno?.cpf  ? `CPF: ${m.aluno.cpf}`
- *         : m.aluno?.rnm  ? `RNM: ${m.aluno.rnm}` : '—',
- *   status: m.status,
- * }));
- */
+// ─── Fetch alunos de uma turma (Supabase) ────────────────────────────────────
 async function loadAlunosDaTurma(turmaId) {
-  return _MOCK_ALUNOS[turmaId] ?? [];
+  const { data, error } = await supabase
+    .from('matriculas')
+    .select('id, status, aluno:aluno_id(nome, cpf, rnm)')
+    .eq('tenant_id', getTenantId())
+    .eq('turma_id', turmaId)
+    .neq('status', 'cancelado');
+  if (error) throw error;
+  return (data || []).map(m => ({
+    id:     m.id,
+    nome:   m.aluno?.nome ?? '—',
+    doc:    m.aluno?.cpf ? `CPF: ${m.aluno.cpf}`
+          : m.aluno?.rnm ? `RNM: ${m.aluno.rnm}` : '—',
+    status: m.status,
+  }));
 }
 
 // ─── Render principal ─────────────────────────────────────────────────────────

@@ -97,7 +97,7 @@ async function renderKPIs() {
     const [pAlunos, pMatriculas, pCerts, pPags, pAlertas] = await Promise.all([
       supabase.from('alunos').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant).eq('status', 'ativo'),
       supabase.from('matriculas').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant).eq('status', 'em_andamento'),
-      supabase.from('certificados').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant),
+      supabase.from('certificados').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant).in('status', ['valido', 'a_vencer']),
       supabase.from('pagamentos').select('valor').eq('tenant_id', tenant).eq('status', 'recebido'),
       supabase.from('certificados').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant).in('status', ['a_vencer', 'vencido'])
     ]);
@@ -122,7 +122,7 @@ async function renderKPIs() {
   const kpis = [
     { label:'Alunos Ativos',       value: String(alunosAtivos),   delta:'Total cadastrado', up:null,  color:'var(--blue)',   page:'alunos' },
     { label:'Em Treinamento',      value: String(emTreinamento),  delta:'Turmas ativas',    up:null,  color:'var(--accent)', page:'pipeline' },
-    { label:'Certificados (total)',value: String(certificadosCount), delta:'Emitidos',      up:null,  color:'var(--purple)', page:'certificados' },
+    { label:'Certificados Ativos', value: String(certificadosCount), delta:'Válidos + A vencer', up:null, color:'var(--purple)', page:'certificados' },
     { label:'Recebido',            value: fmtMoney(recebido),     delta:'Pagamentos pagos', up:null, color:'var(--green)',  page:'financeiro' },
     { label:'Alertas Renovação',   value: String(alertas),        delta:'A vencer / Vencidos', up:false, color:'var(--red)', page:'renovacoes' },
   ];
@@ -365,7 +365,7 @@ async function renderTurmas() {
               <div style="font-size:12.5px;font-weight:500">${t.curso}</div>
               <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px">${t.codigo} · ${t.instrutor}</div>
             </div>
-            <span class="badge ${t.status==='em_andamento'?'badge-accent':t.status==='agendada'?'badge-blue':'badge-green'}">${t.status==='em_andamento'?'Ativo':t.status==='agendada'?'Agendado':'Concluído'}</span>
+            <span class="badge ${t.status==='em_andamento'?'badge-amber':t.status==='agendada'?'badge-blue':'badge-green'}">${t.status==='em_andamento'?'Ativo':t.status==='agendada'?'Agendado':'Concluído'}</span>
           </div>
           <div style="margin-top:8px">
             <div class="progress-bar">
