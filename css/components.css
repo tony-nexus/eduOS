@@ -821,6 +821,63 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   box-shadow: 0 0 0 3px var(--red-soft);
 }
 
+/* ===== MASTER-DETAIL: Instrutores ===== */
+.inst-layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+.inst-master-panel {
+  width: 320px;
+  flex-shrink: 0;
+}
+.inst-detail-panel {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Card da lista master */
+.inst-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+  margin-bottom: 7px;
+  user-select: none;
+  outline: none;
+}
+.inst-item:last-child    { margin-bottom: 0; }
+.inst-item:hover         { border-color: var(--border-strong); background: var(--bg-hover); }
+.inst-item:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.inst-item.active        { border-color: var(--accent); background: var(--accent-soft); }
+
+.inst-item-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--blue), var(--purple));
+  display: grid; place-items: center;
+  font-size: 14px; font-weight: 600; color: #fff; flex-shrink: 0;
+}
+.inst-item.active .inst-item-avatar {
+  background: linear-gradient(135deg, var(--accent), var(--blue));
+}
+.inst-item-info  { flex: 1; min-width: 0; }
+.inst-item-name  { font-weight: 500; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); }
+.inst-item-meta  { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+
+/* Empty state do detalhe */
+.inst-detail-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 400px; padding: 40px 24px; text-align: center; gap: 14px;
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+  background: var(--bg-surface); color: var(--text-tertiary);
+  font-size: 13px; line-height: 1.6;
+}
+
 /* ===== RESPONSIVE ===== */
 @media (max-width: 900px) {
   .dash-grid-main, .dash-grid-2, .dash-grid-2b { grid-template-columns: 1fr; }

@@ -368,7 +368,7 @@ function _loadScript(src) {
 
 function modalEmitir() {
   const aluOpts = _alunos.map(a => `<option value="${a.id}">${esc(a.nome)}</option>`).join('');
-  const curOpts = _cursos.map(c => `<option value="${c.id}" data-val="${c.validade_meses||0}">${esc(c.nome)}</option>`).join('');
+  const curOpts = _cursos.map(c => `<option value="${c.id}" data-val="${c.validade_meses ?? 'null'}">${esc(c.nome)}</option>`).join('');
 
   openModal('Emitir Certificado', `
     <div class="form-grid">
@@ -403,13 +403,26 @@ function modalEmitir() {
   `);
 
   document.getElementById('f-curso')?.addEventListener('change', function() {
-    const months = parseInt(this.options[this.selectedIndex]?.dataset.val) || 0;
-    if (months > 0) {
+    const rawVal = this.options[this.selectedIndex]?.dataset.val;
+    const months = parseInt(rawVal) || 0;
+    const help   = document.getElementById('f-validade-help');
+    const input  = document.getElementById('f-validade');
+
+    if (rawVal === 'null' || rawVal === '' || rawVal === '0') {
+      // Curso vitalício — sem data de validade
+      input.value    = '';
+      input.disabled = true;
+      if (help) help.innerHTML = '<span style="color:var(--accent);font-family:var(--font-mono)">Vitalício — certificado sem prazo de expiração.</span>';
+    } else if (months > 0) {
+      input.disabled = false;
       const d = new Date(document.getElementById('f-emissao').value || new Date());
       d.setMonth(d.getMonth() + months);
-      document.getElementById('f-validade').value = d.toISOString().split('T')[0];
+      input.value = d.toISOString().split('T')[0];
+      if (help) help.textContent = `Calculado automaticamente: ${months} meses após a emissão.`;
     } else {
-      document.getElementById('f-validade').value = '';
+      input.disabled = false;
+      input.value    = '';
+      if (help) help.textContent = 'Preencha manualmente ou selecione um curso.';
     }
   });
 

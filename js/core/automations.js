@@ -144,10 +144,13 @@ export async function autoEmitirCertificados() {
         .eq('id', m.curso_id)
         .single();
 
-      const hoje         = new Date();
-      const meses        = curso?.validade_meses ?? 12;
-      const dataValidade = new Date(hoje);
-      dataValidade.setMonth(dataValidade.getMonth() + meses);
+      const hoje   = new Date();
+      const meses  = curso?.validade_meses ?? null; // null = vitalício
+      let dataValidade = null;
+      if (meses !== null) {
+        dataValidade = new Date(hoje);
+        dataValidade.setMonth(dataValidade.getMonth() + meses);
+      }
 
       // Gera código único de verificação
       const codigo =
@@ -161,7 +164,7 @@ export async function autoEmitirCertificados() {
         aluno_id:           m.aluno_id,
         curso_id:           m.curso_id,
         data_emissao:       hoje.toISOString().split('T')[0],
-        data_validade:      dataValidade.toISOString().split('T')[0],
+        data_validade:      dataValidade ? dataValidade.toISOString().split('T')[0] : null,
         status:             'valido',
         codigo_verificacao: codigo,
       });
