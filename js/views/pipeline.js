@@ -13,9 +13,11 @@ import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, toast, esc, fmtDate } from '../ui/components.js';
 import { navigate } from '../core/router.js';
 
-let _turmas     = [];
-let _matriculas = [];   // matrículas da turma ativa
-let _activeId   = null; // turma selecionada
+let _turmas        = [];
+let _matriculas    = [];   // matrículas da turma ativa
+let _activeId      = null; // turma selecionada
+let _refreshTimer  = null; // ID do setInterval de auto-refresh
+const REFRESH_INTERVAL_MS = 30_000; // 30 segundos
 
 const STATUS_TURMA_BADGE = {
   agendada:     'badge-blue',
@@ -51,13 +53,84 @@ const TRANSICOES = {
 
 function _isMobile() { return window.innerWidth <= 768; }
 
+// ─── Limpa timer ao sair da página ───────────────────────────────────────────
+function stopRefresh() {
+  if (_refreshTimer) {
+    clearInterval(_refreshTimer);
+    _refreshTimer = null;
+  }
+}
+
+function startRefresh() {
+  stopRefresh();
+  _refreshTimer = setInterval(async () => {
+    // Atualiza silenciosamente a turma ativa (sem esqueleto)
+    if (_activeId) {
+      try {
+        const { data, error } = await supabase
+          .from('matriculas')
+          .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
+          .eq('tenant_id', getTenantId())
+          .eq('turma_id', _activeId);
+        if (!error && data) {
+          _matriculas = data;
+          const turma = _turmas.find(t => t.id === _activeId);
+          if (turma) renderDetailPanel(turma, _matriculas);
+        }
+      } catch (_) { /* silencioso */ }
+    }
+    // Atualiza contadores do master (vagas ocupadas podem ter mudado)
+    try {
+      const { data } = await supabase
+        .from('turmas')
+        .select('id, status, vagas, ocupadas')
+        .eq('tenant_id', getTenantId());
+      if (data) {
+        data.forEach(t => {
+          const cached = _turmas.find(c => c.id === t.id);
+          if (cached) {
+            cached.status   = t.status;
+            cached.vagas    = t.vagas;
+            cached.ocupadas = t.ocupadas;
+          }
+        });
+        // Re-renderiza lista master silenciosamente
+        const q  = (document.getElementById('search-turmas-pipe')?.value || '').toLowerCase();
+        const st = document.getElementById('filter-status-pipe')?.value || '';
+        renderMasterList(_turmas.filter(t =>
+          (!q  || t.codigo.toLowerCase().includes(q) || (t.curso_nome ?? '').toLowerCase().includes(q)) &&
+          (!st || t.status === st)
+        ));
+      }
+    } catch (_) { /* silencioso */ }
+
+    _updateLastRefresh();
+  }, REFRESH_INTERVAL_MS);
+}
+
+function _updateLastRefresh() {
+  const el = document.getElementById('pipe-last-refresh');
+  if (el) el.textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
 // ─── Render principal ─────────────────────────────────────────────────────────
 export async function render() {
+  stopRefresh(); // limpa timer anterior caso o usuário navegue de volta
   _activeId = null;
 
   setContent(`
     <div class="page-header">
-      <div><h1>Pipeline Operacional</h1><p>Jornada completa do aluno por turma</p></div>
+      <div>
+        <h1>Pipeline Operacional</h1>
+        <p style="display:flex;align-items:center;gap:8px">
+          Jornada completa do aluno por turma
+          <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--green)">
+            <span style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite"></span>
+            Automático
+          </span>
+          <span id="pipe-last-refresh" style="font-size:11px;color:var(--text-tertiary)"></span>
+        </p>
+      </div>
       <div class="page-header-actions">
         <button class="btn btn-primary" id="btn-nova-mat-pipeline">Nova Matrícula</button>
       </div>
@@ -138,6 +211,8 @@ async function loadTurmas() {
     _turmas = [];
   }
   renderMasterList(_turmas);
+  _updateLastRefresh();
+  startRefresh();
 }
 
 // ─── Render lista master ──────────────────────────────────────────────────────
