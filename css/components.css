@@ -112,7 +112,7 @@
   width: 14px; height: 14px; color: var(--text-tertiary); pointer-events: none;
 }
 .search-input {
-  background: var(--bg-elevated); border: 1px solid var(--border-default);
+  background: var(--bg-input-solid); border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm); padding: 8px 12px 8px 32px;
   font-family: var(--font-mono); font-size: 12px; color: var(--text-primary);
   outline: none; width: 240px; transition: var(--transition);
@@ -121,12 +121,12 @@
 .search-input::placeholder { color: var(--text-tertiary); }
 
 .select-input {
-  background: var(--bg-input-solid); border: 1px solid var(--border-default);
+  background: var(--bg-input-solid); border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm); padding: 8px 12px;
   font-family: var(--font-mono); font-size: 12px; color: var(--text-primary);
   outline: none; cursor: pointer; transition: var(--transition);
 }
-.select-input:focus { border-color: var(--accent); }
+.select-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .select-input option {
   background: var(--bg-input-solid);
   color: var(--text-primary);
@@ -203,6 +203,9 @@ tbody td { padding: 12px 16px; font-size: 13px; color: var(--text-primary); }
   box-shadow: var(--card-shadow);
   transform: translateY(20px) scale(0.97); transition: transform 250ms cubic-bezier(0.16,1,0.3,1);
 }
+/* Glass themes: modal precisa de fundo sólido para os inputs serem legíveis */
+[data-theme="neon-glass"] .modal  { background: rgba(10, 11, 10, 0.92); }
+[data-theme="ocean-glass"] .modal { background: rgba(5, 11, 20, 0.93); }
 .modal-backdrop.open .modal { transform: translateY(0) scale(1); }
 .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
 .modal-title  { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
@@ -215,27 +218,32 @@ tbody td { padding: 12px 16px; font-size: 13px; color: var(--text-primary); }
 /* ===== FORMS ===== */
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .form-grid .full { grid-column: 1 / -1; }
-.form-group { display: flex; flex-direction: column; gap: 7px; }
+.form-group { display: flex; flex-direction: column; gap: 6px; }
 .form-group label {
-  font-size: 10px; font-weight: 600; color: var(--text-secondary);
-  text-transform: uppercase; letter-spacing: 0.8px; line-height: 1.2;
-  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 600; color: var(--text-primary);
+  text-transform: uppercase; letter-spacing: 0.7px; line-height: 1.3;
+  font-family: var(--font-mono); opacity: 0.78;
 }
+
+/* Inputs e textarea: fundo sempre sólido — corrige glass themes */
 .form-group input,
 .form-group select,
 .form-group textarea {
-  background: var(--bg-elevated); border: 1px solid var(--border-default);
+  background: var(--bg-input-solid);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm); padding: 11px 14px;
-  font-family: var(--font-sans); font-size: 13px; color: var(--text-primary);
-  outline: none; transition: var(--transition); line-height: 1.4;
+  font-family: var(--font-sans); font-size: 13.5px; color: var(--text-primary);
+  outline: none; transition: var(--transition); line-height: 1.5;
 }
-/* select/option: browsers ignoram rgba — precisa de fundo sólido */
-.form-group select { background: var(--bg-input-solid); }
+.form-group input::placeholder,
+.form-group textarea::placeholder { color: var(--text-tertiary); }
 .form-group select option { background: var(--bg-input-solid); color: var(--text-primary); }
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
-  border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--bg-input-solid);
 }
 .form-group textarea { resize: vertical; min-height: 88px; }
 .form-group small { font-size: 11px; color: var(--text-tertiary); line-height: 1.4; font-family: var(--font-mono); }
@@ -446,15 +454,17 @@ tbody td { padding: 12px 16px; font-size: 13px; color: var(--text-primary); }
 
 /* ===== FORM: FIELDSET ===== */
 .form-fieldset {
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
   padding: 16px 18px 18px;
   margin-bottom: 16px;
+  background: rgba(255,255,255,0.015);
 }
+[data-theme="light"] .form-fieldset { background: rgba(0,0,0,0.018); }
 .form-fieldset:last-of-type { margin-bottom: 0; }
 .form-fieldset legend {
   padding: 0 8px;
-  font-size: 10px; font-weight: 700;
+  font-size: 11px; font-weight: 700;
   color: var(--accent);
   text-transform: uppercase; letter-spacing: 1px;
   font-family: var(--font-mono);

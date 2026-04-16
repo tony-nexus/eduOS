@@ -201,7 +201,7 @@ function modalNovaMatricula() {
       <div class="form-group full">
         <label>Aluno(s) <span aria-hidden="true" style="color:var(--red)">*</span></label>
         <div id="aluno-picker"
-          style="border:1px solid var(--border);border-radius:8px;background:var(--bg-elevated);padding:6px 10px;min-height:42px;cursor:text"
+          style="border:1px solid var(--border-default);border-radius:8px;background:var(--bg-input-solid);padding:6px 10px;min-height:42px;cursor:text"
           onclick="document.getElementById('aluno-search-input').focus()">
           <div id="aluno-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:2px"></div>
           <input id="aluno-search-input" type="text" autocomplete="off" spellcheck="false"
@@ -210,7 +210,7 @@ function modalNovaMatricula() {
         </div>
         <div style="position:relative">
           <div id="aluno-results" hidden
-            style="position:absolute;top:2px;left:0;right:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:300;max-height:220px;overflow-y:auto">
+            style="position:absolute;top:2px;left:0;right:0;background:var(--bg-input-solid);border:1px solid var(--border-default);border-radius:8px;box-shadow:var(--shadow-lg);z-index:300;max-height:220px;overflow-y:auto">
           </div>
         </div>
         <small style="color:var(--text-tertiary);font-size:11px">Selecione múltiplos alunos para matrícula em massa.</small>
@@ -267,16 +267,18 @@ function modalNovaMatricula() {
   document.getElementById('modal-save')?.addEventListener('click', () => saveMatricula());
 }
 
-// ─── Search de alunos com multi-seleção ──────────────────────────────────────
+// ─── Search de alunos com multi-seleção e navegação por teclado ──────────────
 function bindSearchAluno() {
   const input   = document.getElementById('aluno-search-input');
   const results = document.getElementById('aluno-results');
   const tagsEl  = document.getElementById('aluno-tags');
   if (!input) return;
 
+  let highlightIdx = -1;
+
   function renderTags() {
     tagsEl.innerHTML = _selectedAlunos.map(a => `
-      <span style="display:inline-flex;align-items:center;gap:4px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border);border-radius:20px;padding:2px 8px 2px 10px;font-size:12px;font-weight:500;white-space:nowrap">
+      <span style="display:inline-flex;align-items:center;gap:4px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-default);border-radius:20px;padding:2px 8px 2px 10px;font-size:12px;font-weight:500;white-space:nowrap">
         ${esc(a.nome)}
         <button type="button" data-id="${a.id}"
           style="background:none;border:none;cursor:pointer;color:var(--accent);padding:0 0 0 2px;font-size:16px;line-height:1"
@@ -291,7 +293,14 @@ function bindSearchAluno() {
     });
   }
 
+  function setHighlight(rows, idx) {
+    rows.forEach((r, i) => {
+      r.style.background = i === idx ? 'var(--bg-elevated)' : '';
+    });
+  }
+
   function showResults(query) {
+    highlightIdx = -1;
     const q       = (query || '').trim();
     const qLower  = q.toLowerCase();
     const qDigits = q.replace(/\D/g, '');
@@ -310,35 +319,45 @@ function bindSearchAluno() {
 
     if (!filtered.length) {
       results.innerHTML = `<div style="padding:12px 14px;font-size:13px;color:var(--text-tertiary)">Nenhum aluno encontrado.</div>`;
-    } else {
-      results.innerHTML = filtered.map(a => {
-        const docs = [];
-        if (a.cpf)     docs.push(`<span class="badge badge-blue"   style="font-size:9px">CPF</span> ${esc(a.cpf)}`);
-        if (a.rnm)     docs.push(`<span class="badge badge-purple" style="font-size:9px">RNM</span> ${esc(a.rnm)}`);
-        if (a.cnh_num) docs.push(`<span class="badge badge-amber"  style="font-size:9px">CNH</span> ${esc(a.cnh_num)}`);
-        return `
-          <div class="aluno-result-row" data-id="${a.id}"
-            style="padding:8px 14px;cursor:pointer;border-bottom:1px solid var(--border-subtle)">
-            <div style="font-size:13px;font-weight:500;color:var(--text-primary)">${esc(a.nome)}</div>
-            ${docs.length ? `<div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono);display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">${docs.join('')}</div>` : ''}
-          </div>`;
-      }).join('');
-
-      results.querySelectorAll('.aluno-result-row').forEach(row => {
-        row.addEventListener('mouseenter', () => row.style.background = 'var(--bg-elevated)');
-        row.addEventListener('mouseleave', () => row.style.background = '');
-        row.addEventListener('click', () => {
-          const aluno = _alunos.find(a => a.id === row.dataset.id);
-          if (aluno && !_selectedAlunos.some(s => s.id === aluno.id)) {
-            _selectedAlunos.push(aluno);
-            renderTags();
-          }
-          input.value = '';
-          results.hidden = true;
-          input.focus();
-        });
-      });
+      results.hidden = false;
+      return;
     }
+
+    results.innerHTML = filtered.map(a => {
+      const docs = [];
+      if (a.cpf)     docs.push(`<span class="badge badge-blue"   style="font-size:9px">CPF</span> ${esc(a.cpf)}`);
+      if (a.rnm)     docs.push(`<span class="badge badge-purple" style="font-size:9px">RNM</span> ${esc(a.rnm)}`);
+      if (a.cnh_num) docs.push(`<span class="badge badge-amber"  style="font-size:9px">CNH</span> ${esc(a.cnh_num)}`);
+      return `
+        <div class="aluno-result-row" data-id="${a.id}"
+          style="padding:8px 14px;cursor:pointer;border-bottom:1px solid var(--border-subtle)">
+          <div style="font-size:13px;font-weight:500;color:var(--text-primary)">${esc(a.nome)}</div>
+          ${docs.length ? `<div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono);display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">${docs.join('')}</div>` : ''}
+        </div>`;
+    }).join('');
+
+    results.querySelectorAll('.aluno-result-row').forEach(row => {
+      const allRows = () => [...results.querySelectorAll('.aluno-result-row')];
+      row.addEventListener('mouseenter', () => {
+        highlightIdx = allRows().indexOf(row);
+        setHighlight(allRows(), highlightIdx);
+      });
+      row.addEventListener('mouseleave', () => row.style.background = '');
+      // mousedown: impede que o input perca foco ao clicar no resultado
+      row.addEventListener('mousedown', e => e.preventDefault());
+      row.addEventListener('click', e => {
+        e.stopPropagation(); // bloqueia o outsideClick do documento
+        const aluno = _alunos.find(a => a.id === row.dataset.id);
+        if (aluno && !_selectedAlunos.some(s => s.id === aluno.id)) {
+          _selectedAlunos.push(aluno);
+          renderTags();
+        }
+        input.value = '';
+        showResults(''); // reabre imediatamente com lista atualizada
+        input.focus();
+      });
+    });
+
     results.hidden = false;
   }
 
@@ -347,8 +366,31 @@ function bindSearchAluno() {
     showResults(input.value);
   });
 
-  input.addEventListener('focus', () => {
-    showResults(input.value);
+  input.addEventListener('focus', () => showResults(input.value));
+
+  input.addEventListener('keydown', e => {
+    if (results.hidden) return;
+    const rows = [...results.querySelectorAll('.aluno-result-row')];
+    if (!rows.length) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      highlightIdx = Math.min(highlightIdx + 1, rows.length - 1);
+      setHighlight(rows, highlightIdx);
+      rows[highlightIdx]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      highlightIdx = Math.max(highlightIdx - 1, 0);
+      setHighlight(rows, highlightIdx);
+      rows[highlightIdx]?.scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const idx = highlightIdx >= 0 ? highlightIdx : 0;
+      rows[idx]?.click();
+    } else if (e.key === 'Escape') {
+      results.hidden = true;
+      highlightIdx = -1;
+    }
   });
 
   document.addEventListener('click', function outsideClick(e) {
@@ -357,6 +399,7 @@ function bindSearchAluno() {
     if (!picker || !drop) { document.removeEventListener('click', outsideClick); return; }
     if (!picker.contains(e.target) && !drop.contains(e.target)) {
       drop.hidden = true;
+      highlightIdx = -1;
     }
   });
 }
