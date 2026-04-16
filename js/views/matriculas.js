@@ -12,6 +12,7 @@
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
+import { datasConflitam } from '../core/automations.js';
 
 let _matriculas     = [];
 let _alunos         = [];
@@ -85,11 +86,11 @@ async function loadAux() {
     const [r1, r2, r3] = await Promise.all([
       supabase.from('alunos').select('id, nome, cpf, rnm, cnh_num').eq('tenant_id', getTenantId()).eq('status', 'ativo').order('nome'),
       supabase.from('cursos').select('id, nome, valor_padrao').eq('tenant_id', getTenantId()).eq('ativo', true).order('nome'),
-      // CORREÇÃO BUG #3: campo correto é 'data_inicio', não 'inicio'
-      supabase.from('turmas').select('id, codigo, curso_id, vagas, ocupadas, status')
+      // Apenas turmas agendadas aceitam novas matrículas — inclui datas para verificação de conflito
+      supabase.from('turmas').select('id, codigo, curso_id, vagas, ocupadas, status, data_inicio, data_fim')
         .eq('tenant_id', getTenantId())
-        .in('status', ['agendada', 'em_andamento'])
-        .order('data_inicio', { ascending: false }),
+        .eq('status', 'agendada')
+        .order('data_inicio', { ascending: true }),
     ]);
     _alunos = r1.data || [];
     _cursos = r2.data || [];
@@ -416,7 +417,16 @@ async function saveMatricula() {
   // Status gerado automaticamente pela automação
   const status = turma_id ? 'matriculado' : 'aguardando_turma';
 
-  // Guard client-side: alunos já matriculados nesta turma
+  // Guard: turma em_andamento não aceita novas matrículas
+  if (turma_id) {
+    const turma = _turmas.find(t => t.id === turma_id);
+    if (turma && turma.status === 'em_andamento') {
+      toast('Turmas em andamento não aceitam novas matrículas.', 'warning');
+      return;
+    }
+  }
+
+  // Guard: duplicatas na mesma turma
   if (turma_id) {
     const dups = _selectedAlunos
       .filter(a => _matriculas.some(m => m.aluno_id === a.id && m.turma_id === turma_id && m.status !== 'cancelado'))
@@ -424,6 +434,36 @@ async function saveMatricula() {
     if (dups.length) {
       toast(`Já matriculado(s) nesta turma: ${dups.join(', ')}`, 'warning');
       return;
+    }
+  }
+
+  // Guard: conflito de datas com turmas ativas dos alunos selecionados
+  if (turma_id) {
+    const turmaSel = _turmas.find(t => t.id === turma_id);
+    if (turmaSel?.data_inicio) {
+      const alunoIds = _selectedAlunos.map(a => a.id);
+      const { data: mAtivas } = await supabase
+        .from('matriculas')
+        .select('aluno_id, turma:turma_id(id, codigo, data_inicio, data_fim)')
+        .in('aluno_id', alunoIds)
+        .in('status', ['em_andamento', 'matriculado'])
+        .not('turma_id', 'is', null)
+        .neq('turma_id', turma_id)
+        .eq('tenant_id', getTenantId());
+
+      const conflitos = [];
+      for (const aluno of _selectedAlunos) {
+        const ativas = (mAtivas ?? []).filter(m => m.aluno_id === aluno.id);
+        for (const m of ativas) {
+          if (datasConflitam(turmaSel.data_inicio, turmaSel.data_fim, m.turma?.data_inicio, m.turma?.data_fim)) {
+            conflitos.push(`${aluno.nome.split(' ')[0]} ↔ turma ${m.turma?.codigo}`);
+          }
+        }
+      }
+      if (conflitos.length) {
+        toast(`Conflito de datas detectado: ${conflitos.slice(0, 3).join(' | ')}`, 'warning');
+        return;
+      }
     }
   }
 

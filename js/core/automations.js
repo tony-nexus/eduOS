@@ -18,6 +18,15 @@
 
 import { supabase, getTenantId } from './supabase.js';
 
+// ─── Helper: verifica sobreposição de datas entre duas turmas ─────────────────
+// Retorna true se os períodos se sobrepõem (= conflito de horário)
+// data_fim null = turma sem data de encerramento → assume vigência infinita
+export function datasConflitam(inicio1, fim1, inicio2, fim2) {
+  if (!inicio1 || !inicio2) return false;
+  const FAR = '2099-12-31';
+  return inicio1 <= (fim2 || FAR) && inicio2 <= (fim1 || FAR);
+}
+
 // ─── Executor geral ───────────────────────────────────────────────────────────
 export async function runAutomations() {
   const [tResult, cResult] = await Promise.allSettled([
@@ -189,7 +198,8 @@ export async function autoEmitirCertificados() {
 // ─── 3. Auto-enroll de alunos em espera ──────────────────────────────────────
 /**
  * Quando uma nova turma é criada, procura matrículas com status='aguardando_turma'
- * para o mesmo curso e vincula-as automaticamente (respeitando o limite de vagas).
+ * para o mesmo curso e vincula-as automaticamente (FIFO, respeitando vagas e
+ * conflito de datas com outras turmas ativas do aluno).
  *
  * Retorna quantas matrículas foram vinculadas.
  */
@@ -198,18 +208,47 @@ export async function autoEnrollAguardando(turmaId, cursoId, vagas) {
   let   count  = 0;
 
   try {
+    // Carrega dados completos da turma destino (precisa das datas)
+    const { data: turmaDestino } = await supabase
+      .from('turmas')
+      .select('id, data_inicio, data_fim, status')
+      .eq('id', turmaId)
+      .eq('tenant_id', tenant)
+      .single();
+
+    if (!turmaDestino || turmaDestino.status !== 'agendada') return 0;
+
+    // Busca alunos em espera para este curso (FIFO)
     const { data: aguardando } = await supabase
       .from('matriculas')
-      .select('id')
+      .select('id, aluno_id')
       .eq('tenant_id', tenant)
       .eq('curso_id', cursoId)
       .eq('status', 'aguardando_turma')
       .is('turma_id', null)
+      .order('created_at', { ascending: true })
       .limit(vagas);
 
     if (!aguardando?.length) return 0;
 
     for (const m of aguardando) {
+      // Verifica conflito de datas com turmas ativas do aluno
+      if (turmaDestino.data_inicio) {
+        const { data: mAtivas } = await supabase
+          .from('matriculas')
+          .select('turma:turma_id(data_inicio, data_fim)')
+          .eq('tenant_id', tenant)
+          .eq('aluno_id', m.aluno_id)
+          .in('status', ['em_andamento', 'matriculado'])
+          .not('turma_id', 'is', null);
+
+        const turmasAtivas = (mAtivas ?? []).map(r => r.turma).filter(Boolean);
+        const conflito = turmasAtivas.some(ta =>
+          datasConflitam(turmaDestino.data_inicio, turmaDestino.data_fim, ta.data_inicio, ta.data_fim)
+        );
+        if (conflito) continue; // mantém em aguardando, não vincula
+      }
+
       const { error } = await supabase
         .from('matriculas')
         .update({ turma_id: turmaId, status: 'matriculado' })
@@ -276,16 +315,33 @@ export async function criarMatriculaAutomatica(alunoId, cursoId) {
   const tenant = getTenantId();
 
   try {
-    // Verifica se há turma aberta para este curso
+    // Turmas agendadas com vaga (em_andamento nunca aceita novas matrículas)
     const { data: turmas } = await supabase
       .from('turmas')
-      .select('id, codigo, vagas, ocupadas')
+      .select('id, codigo, vagas, ocupadas, data_inicio, data_fim')
       .eq('tenant_id', tenant)
       .eq('curso_id', cursoId)
-      .in('status', ['agendada', 'em_andamento'])
+      .eq('status', 'agendada')
       .order('data_inicio', { ascending: true });
 
-    const turmaDisponivel = (turmas ?? []).find(t => (t.ocupadas ?? 0) < (t.vagas ?? 0));
+    // Turmas ativas do aluno para detectar conflito de datas
+    const { data: mAtivas } = await supabase
+      .from('matriculas')
+      .select('turma:turma_id(data_inicio, data_fim)')
+      .eq('tenant_id', tenant)
+      .eq('aluno_id', alunoId)
+      .in('status', ['em_andamento', 'matriculado'])
+      .not('turma_id', 'is', null);
+
+    const turmasAtivas = (mAtivas ?? []).map(r => r.turma).filter(Boolean);
+
+    // Primeira turma com vaga e sem conflito de datas
+    const turmaDisponivel = (turmas ?? []).find(t => {
+      if ((t.ocupadas ?? 0) >= (t.vagas ?? 0)) return false;
+      return !turmasAtivas.some(ta =>
+        datasConflitam(t.data_inicio, t.data_fim, ta.data_inicio, ta.data_fim)
+      );
+    });
 
     const payload = {
       tenant_id: tenant,
