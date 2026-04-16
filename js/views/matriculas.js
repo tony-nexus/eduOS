@@ -13,10 +13,11 @@
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
 
-let _matriculas = [];
-let _alunos     = [];
-let _cursos     = [];
-let _turmas     = [];
+let _matriculas     = [];
+let _alunos         = [];
+let _cursos         = [];
+let _turmas         = [];
+let _selectedAlunos = [];
 
 const BADGE_MAP = { matriculado:'badge-blue', aguardando_turma:'badge-amber', em_andamento:'badge-accent', concluido:'badge-green', certificado_emitido:'badge-purple', cancelado:'badge-red', reprovado:'badge-red' };
 const LABEL_MAP = { matriculado:'Matriculado', aguardando_turma:'Ag. Turma', em_andamento:'Em Andamento', concluido:'Concluído', certificado_emitido:'Cert. Emitido', cancelado:'Cancelado', reprovado:'Reprovado' };
@@ -82,7 +83,7 @@ export async function render() {
 async function loadAux() {
   try {
     const [r1, r2, r3] = await Promise.all([
-      supabase.from('alunos').select('id, nome').eq('tenant_id', getTenantId()).eq('status', 'ativo').order('nome'),
+      supabase.from('alunos').select('id, nome, cpf, rnm, cnh_num').eq('tenant_id', getTenantId()).eq('status', 'ativo').order('nome'),
       supabase.from('cursos').select('id, nome, valor_padrao').eq('tenant_id', getTenantId()).eq('ativo', true).order('nome'),
       // CORREÇÃO BUG #3: campo correto é 'data_inicio', não 'inicio'
       supabase.from('turmas').select('id, codigo, curso_id, vagas, ocupadas, status')
@@ -188,166 +189,245 @@ function applyFilter() {
 
 // ─── Modal Nova Matrícula ─────────────────────────────────────────────────────
 function modalNovaMatricula() {
-  const aluOpts = _alunos.map(a => `<option value="${a.id}">${esc(a.nome)}</option>`).join('');
+  _selectedAlunos = [];
+
   const curOpts = _cursos.map(c =>
-    `<option value="${c.id}" data-valor="${c.valor_padrao || 0}">${esc(c.nome)}</option>`
+    `<option value="${c.id}">${esc(c.nome)}</option>`
   ).join('');
 
   openModal('Nova Matrícula', `
     <div class="form-grid">
+
       <div class="form-group full">
-        <label>Aluno *</label>
-        <select id="f-aluno">
-          <option value="">— Selecionar aluno —</option>
-          ${aluOpts}
-        </select>
+        <label>Aluno(s) <span aria-hidden="true" style="color:var(--red)">*</span></label>
+        <div id="aluno-picker"
+          style="border:1px solid var(--border);border-radius:8px;background:var(--bg-elevated);padding:6px 10px;min-height:42px;cursor:text"
+          onclick="document.getElementById('aluno-search-input').focus()">
+          <div id="aluno-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:2px"></div>
+          <input id="aluno-search-input" type="text" autocomplete="off" spellcheck="false"
+            placeholder="Buscar por nome, CPF, CNH ou RNM..."
+            style="border:none;background:transparent;outline:none;width:100%;min-width:140px;font-size:13px;color:var(--text-primary);padding:4px 0">
+        </div>
+        <div style="position:relative">
+          <div id="aluno-results" hidden
+            style="position:absolute;top:2px;left:0;right:0;background:var(--bg-surface);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:300;max-height:220px;overflow-y:auto">
+          </div>
+        </div>
+        <small style="color:var(--text-tertiary);font-size:11px">Selecione múltiplos alunos para matrícula em massa.</small>
       </div>
+
       <div class="form-group full">
-        <label>Curso *</label>
+        <label>Curso <span aria-hidden="true" style="color:var(--red)">*</span></label>
         <select id="f-curso">
           <option value="">— Selecionar curso —</option>
           ${curOpts}
         </select>
       </div>
+
       <div class="form-group full">
-        <label>Turma (opcional)</label>
+        <label>Turma <span style="font-size:11px;color:var(--text-tertiary);font-weight:400">(opcional)</span></label>
         <select id="f-turma">
           <option value="">— Sem turma / Aguardando —</option>
         </select>
-        <small style="color:var(--text-tertiary);font-size:11px">Apenas turmas abertas do curso selecionado.</small>
+        <small style="color:var(--text-tertiary);font-size:11px">
+          Turmas abertas do curso selecionado. Sem turma → status <strong>Aguardando Turma</strong>.
+        </small>
       </div>
-      <div class="form-group">
-        <label>Valor Cobrado (R$)</label>
-        <input id="f-valor" type="number" step="0.01" placeholder="0,00">
-      </div>
-      <div class="form-group">
-        <label>Status Inicial</label>
-        <select id="f-status">
-          <option value="matriculado">Matriculado</option>
-          <option value="aguardando_turma">Aguardando Turma</option>
-          <option value="em_andamento">Em Andamento</option>
-        </select>
-      </div>
+
       <div class="form-group full">
         <label>Observações</label>
         <textarea id="f-obs" placeholder="Informações adicionais..."></textarea>
       </div>
+
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-      <button class="btn btn-primary" id="modal-save">Salvar Matrícula</button>
+      <button class="btn btn-primary" id="modal-save">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+        Salvar Matrícula
+      </button>
     </div>
   `);
 
-  // Atualiza lista de turmas ao trocar curso + preenche valor padrão
+  bindSearchAluno();
+
   document.getElementById('f-curso')?.addEventListener('change', function() {
-    const cursoId = this.value;
-    const valorPadrao = this.options[this.selectedIndex]?.dataset.valor || '';
-    document.getElementById('f-valor').value = valorPadrao;
-
+    const cursoId    = this.value;
     const turmaSelect = document.getElementById('f-turma');
-    const turmasFiltradas = _turmas.filter(t => t.curso_id === cursoId);
+    const filtradas   = _turmas.filter(t => t.curso_id === cursoId);
     turmaSelect.innerHTML = '<option value="">— Sem turma / Aguardando —</option>' +
-      turmasFiltradas.map(t => {
-        const disponivel = (t.vagas || 0) - (t.ocupadas || 0);
-        const label = `${t.codigo} (${disponivel} vaga${disponivel !== 1 ? 's' : ''})`;
-        return `<option value="${t.id}" ${disponivel <= 0 ? 'disabled' : ''}>${esc(label)}</option>`;
+      filtradas.map(t => {
+        const disp  = (t.vagas || 0) - (t.ocupadas || 0);
+        const label = `${t.codigo} (${disp} vaga${disp !== 1 ? 's' : ''})`;
+        return `<option value="${t.id}" ${disp <= 0 ? 'disabled' : ''}>${esc(label)}</option>`;
       }).join('');
-
-    // Auto-seleciona status
-    const st = document.getElementById('f-status');
-    if (turmasFiltradas.length === 0 && st) st.value = 'aguardando_turma';
   });
 
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => saveMatricula());
 }
 
+// ─── Search de alunos com multi-seleção ──────────────────────────────────────
+function bindSearchAluno() {
+  const input   = document.getElementById('aluno-search-input');
+  const results = document.getElementById('aluno-results');
+  const tagsEl  = document.getElementById('aluno-tags');
+  if (!input) return;
+
+  function renderTags() {
+    tagsEl.innerHTML = _selectedAlunos.map(a => `
+      <span style="display:inline-flex;align-items:center;gap:4px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border);border-radius:20px;padding:2px 8px 2px 10px;font-size:12px;font-weight:500;white-space:nowrap">
+        ${esc(a.nome)}
+        <button type="button" data-id="${a.id}"
+          style="background:none;border:none;cursor:pointer;color:var(--accent);padding:0 0 0 2px;font-size:16px;line-height:1"
+          aria-label="Remover ${esc(a.nome)}">×</button>
+      </span>
+    `).join('');
+    tagsEl.querySelectorAll('button[data-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        _selectedAlunos = _selectedAlunos.filter(a => a.id !== btn.dataset.id);
+        renderTags();
+      });
+    });
+  }
+
+  function showResults(query) {
+    const q       = (query || '').trim();
+    const qLower  = q.toLowerCase();
+    const qDigits = q.replace(/\D/g, '');
+
+    const filtered = _alunos
+      .filter(a => {
+        if (_selectedAlunos.some(s => s.id === a.id)) return false;
+        if (!q) return true;
+        if (a.nome.toLowerCase().includes(qLower)) return true;
+        if (qDigits && (a.cpf     || '').replace(/\D/g, '').includes(qDigits)) return true;
+        if (qDigits && (a.cnh_num || '').includes(qDigits)) return true;
+        if ((a.rnm   || '').toLowerCase().includes(qLower)) return true;
+        return false;
+      })
+      .slice(0, 12);
+
+    if (!filtered.length) {
+      results.innerHTML = `<div style="padding:12px 14px;font-size:13px;color:var(--text-tertiary)">Nenhum aluno encontrado.</div>`;
+    } else {
+      results.innerHTML = filtered.map(a => {
+        const docs = [];
+        if (a.cpf)     docs.push(`<span class="badge badge-blue"   style="font-size:9px">CPF</span> ${esc(a.cpf)}`);
+        if (a.rnm)     docs.push(`<span class="badge badge-purple" style="font-size:9px">RNM</span> ${esc(a.rnm)}`);
+        if (a.cnh_num) docs.push(`<span class="badge badge-amber"  style="font-size:9px">CNH</span> ${esc(a.cnh_num)}`);
+        return `
+          <div class="aluno-result-row" data-id="${a.id}"
+            style="padding:8px 14px;cursor:pointer;border-bottom:1px solid var(--border-subtle)">
+            <div style="font-size:13px;font-weight:500;color:var(--text-primary)">${esc(a.nome)}</div>
+            ${docs.length ? `<div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono);display:flex;gap:10px;flex-wrap:wrap;margin-top:2px">${docs.join('')}</div>` : ''}
+          </div>`;
+      }).join('');
+
+      results.querySelectorAll('.aluno-result-row').forEach(row => {
+        row.addEventListener('mouseenter', () => row.style.background = 'var(--bg-elevated)');
+        row.addEventListener('mouseleave', () => row.style.background = '');
+        row.addEventListener('click', () => {
+          const aluno = _alunos.find(a => a.id === row.dataset.id);
+          if (aluno && !_selectedAlunos.some(s => s.id === aluno.id)) {
+            _selectedAlunos.push(aluno);
+            renderTags();
+          }
+          input.value = '';
+          results.hidden = true;
+          input.focus();
+        });
+      });
+    }
+    results.hidden = false;
+  }
+
+  input.addEventListener('input', () => {
+    if (!input.value.trim()) { results.hidden = true; return; }
+    showResults(input.value);
+  });
+
+  input.addEventListener('focus', () => {
+    showResults(input.value);
+  });
+
+  document.addEventListener('click', function outsideClick(e) {
+    const picker = document.getElementById('aluno-picker');
+    const drop   = document.getElementById('aluno-results');
+    if (!picker || !drop) { document.removeEventListener('click', outsideClick); return; }
+    if (!picker.contains(e.target) && !drop.contains(e.target)) {
+      drop.hidden = true;
+    }
+  });
+}
+
 // ─── Save ─────────────────────────────────────────────────────────────────────
 async function saveMatricula() {
-  const aluno_id = document.getElementById('f-aluno')?.value;
   const curso_id = document.getElementById('f-curso')?.value;
   const turma_id = document.getElementById('f-turma')?.value || null;
-  const valor    = parseFloat(document.getElementById('f-valor')?.value) || null;
-  const status   = document.getElementById('f-status')?.value;
-  let obs        = document.getElementById('f-obs')?.value.trim() || null;
+  const obs      = document.getElementById('f-obs')?.value.trim() || null;
 
-  if (!aluno_id) { toast('Selecione um aluno.', 'warning'); return; }
-  if (!curso_id) { toast('Selecione um curso.', 'warning'); return; }
+  if (!_selectedAlunos.length) { toast('Selecione pelo menos um aluno.', 'warning'); return; }
+  if (!curso_id)                { toast('Selecione um curso.', 'warning'); return; }
 
-  // Guard client-side: verifica se o aluno já está matriculado nesta turma
+  // Status gerado automaticamente pela automação
+  const status = turma_id ? 'matriculado' : 'aguardando_turma';
+
+  // Guard client-side: alunos já matriculados nesta turma
   if (turma_id) {
-    const duplicado = _matriculas.find(m =>
-      m.aluno_id === aluno_id && m.turma_id === turma_id && m.status !== 'cancelado'
-    );
-    if (duplicado) {
-      toast('Este aluno já está matriculado nesta turma.', 'warning');
+    const dups = _selectedAlunos
+      .filter(a => _matriculas.some(m => m.aluno_id === a.id && m.turma_id === turma_id && m.status !== 'cancelado'))
+      .map(a => a.nome.split(' ')[0]);
+    if (dups.length) {
+      toast(`Já matriculado(s) nesta turma: ${dups.join(', ')}`, 'warning');
       return;
     }
   }
 
   const btn = document.getElementById('modal-save');
   btn.disabled = true;
-  btn.textContent = 'Verificando Inteligência...';
-
-  // --- INTELIGÊNCIA DE MATRÍCULAS ---
-  try {
-    const { data: auth, error: rpcErr } = await supabase.rpc('autorizar_matricula', {
-      p_aluno_id: aluno_id,
-      p_curso_id: curso_id
-    });
-    if (rpcErr) throw rpcErr;
-    if (auth && !auth.autorizado) {
-      toast(auth.motivo || 'Matrícula bloqueada pela regras de negócio.', 'warning');
-      btn.disabled = false;
-      btn.textContent = 'Salvar Matrícula';
-      return;
-    }
-    if (auth && auth.tipo_matricula && auth.tipo_matricula !== 'Nova Matrícula') {
-      obs = obs ? `${obs}\n\n[Tipo: ${auth.tipo_matricula}]` : `[Tipo: ${auth.tipo_matricula}]`;
-      toast(`Classificada como: ${auth.tipo_matricula}`, 'info');
-    }
-  } catch(e) {
-    console.warn("RPC autorizar_matricula falhou. Prosseguindo fallback.", e);
-  }
-
   btn.textContent = 'Salvando...';
 
-  try {
-    const { data: novaMat, error } = await supabase.from('matriculas').insert({
-      tenant_id: getTenantId(),
-      aluno_id, curso_id, turma_id, status,
-      observacoes: obs,
-    }).select('id').single();
-    if (error) {
-      if (error.code === '23505') throw new Error('Matrícula duplicada para este aluno nesta turma.');
-      throw error;
-    }
+  let ok = 0, erros = 0;
 
-    // A trigger do banco (fn_sync_turma_ocupadas) já incrementa a ocupada do BD.
-    // O frontend não deve fazer manualmente para não causar salto duplo (ex: 1/20 virar 2/20 no visual)
+  for (const aluno of _selectedAlunos) {
+    try {
+      // RPC de autorização — silencioso em caso de falha
+      try {
+        const { data: auth, error: rpcErr } = await supabase.rpc('autorizar_matricula', {
+          p_aluno_id: aluno.id,
+          p_curso_id: curso_id,
+        });
+        if (!rpcErr && auth && !auth.autorizado) {
+          toast(`${aluno.nome.split(' ')[0]}: ${auth.motivo || 'Bloqueado pelas regras de negócio.'}`, 'warning');
+          erros++;
+          continue;
+        }
+      } catch (_) { /* fallback */ }
 
-    // Registra pagamento inicial se informado valor
-    if (valor && valor > 0 && novaMat?.id) {
-      await supabase.from('pagamentos').insert({
-        tenant_id: getTenantId(),
-        matricula_id: novaMat.id,
-        aluno_id,
+      const { error } = await supabase.from('matriculas').insert({
+        tenant_id:   getTenantId(),
+        aluno_id:    aluno.id,
         curso_id,
-        valor,
-        data_vencimento: new Date().toISOString().split('T')[0],
-        status: 'pendente',
+        turma_id,
+        status,
+        observacoes: obs,
       });
+      if (error) {
+        if (error.code === '23505') throw new Error(`${aluno.nome.split(' ')[0]} já matriculado nesta turma.`);
+        throw error;
+      }
+      ok++;
+    } catch (err) {
+      toast(`Erro: ${err.message}`, 'error');
+      erros++;
     }
-
-    closeModal();
-    toast('Matrícula registrada com sucesso!', 'success');
-    await loadMatriculas();
-  } catch (err) {
-    toast(`Erro: ${err.message}`, 'error');
-    btn.disabled = false;
-    btn.textContent = 'Salvar Matrícula';
   }
+
+  closeModal();
+  if (ok > 0)    toast(`${ok} matrícula${ok > 1 ? 's registradas' : ' registrada'} com sucesso!`, 'success');
+  if (erros > 0) toast(`${erros} falha${erros > 1 ? 's' : ''} ao matricular.`, 'error');
+  await loadMatriculas();
 }
 
 // ─── Atualização de Vagas via BD Automático ─────────────────────────────────

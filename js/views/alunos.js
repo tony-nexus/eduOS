@@ -866,39 +866,39 @@ function modalNovoAluno() {
 
         <div class="input-row">
           <div class="form-group">
-            <label for="f-cep">CEP</label>
-            <input id="f-cep" name="cep" type="text" placeholder="00000-000" autocomplete="postal-code">
+            <label for="f-cep">CEP <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="f-cep" name="cep" type="text" placeholder="00000-000" autocomplete="postal-code" aria-required="true">
           </div>
           <div class="form-group flex-2">
-            <label for="f-rua">Logradouro</label>
-            <input id="f-rua" name="rua" type="text" autocomplete="street-address">
+            <label for="f-rua">Logradouro <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="f-rua" name="rua" type="text" autocomplete="street-address" aria-required="true">
           </div>
         </div>
 
         <div class="input-row">
           <div class="form-group">
-            <label for="f-numero">Número</label>
-            <input id="f-numero" name="numero" type="text">
+            <label for="f-numero">Número <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="f-numero" name="numero" type="text" aria-required="true">
           </div>
           <div class="form-group">
             <label for="f-complemento">Complemento</label>
             <input id="f-complemento" name="complemento" type="text">
           </div>
           <div class="form-group">
-            <label for="f-bairro">Bairro</label>
-            <input id="f-bairro" name="bairro" type="text">
+            <label for="f-bairro">Bairro <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="f-bairro" name="bairro" type="text" aria-required="true">
           </div>
         </div>
 
         <div class="input-row">
           <div class="form-group flex-2">
-            <label for="f-cidade">Cidade</label>
-            <input id="f-cidade" name="cidade" type="text" autocomplete="address-level2">
+            <label for="f-cidade">Cidade <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="f-cidade" name="cidade" type="text" autocomplete="address-level2" aria-required="true">
           </div>
           <div class="form-group">
-            <label for="f-uf">UF</label>
+            <label for="f-uf">UF <span aria-hidden="true" style="color:var(--red)">*</span></label>
             <input id="f-uf" name="uf" type="text" maxlength="2"
-                   autocomplete="address-level1" style="text-transform:uppercase">
+                   autocomplete="address-level1" style="text-transform:uppercase" aria-required="true">
           </div>
         </div>
       </fieldset>
@@ -1027,9 +1027,15 @@ async function salvarNovoAluno() {
   }
   fieldOk('f-empresa');
 
-  const rawCep = (cep || '').replace(/\D/g, '');
-  if (rawCep && rawCep.length !== 8) { fieldError('f-cep', 'CEP deve ter 8 dígitos.'); return; }
-  fieldOk('f-cep');
+  if (!cep) { fieldError('f-cep', 'CEP é obrigatório.'); return; }
+  const rawCep = cep.replace(/\D/g, '');
+  if (rawCep.length !== 8) { fieldError('f-cep', 'CEP deve ter 8 dígitos.'); return; }
+  if (!rua)    { fieldError('f-rua',    'Logradouro é obrigatório.'); return; }
+  if (!numero) { fieldError('f-numero', 'Número é obrigatório.');     return; }
+  if (!bairro) { fieldError('f-bairro', 'Bairro é obrigatório.');     return; }
+  if (!cidade) { fieldError('f-cidade', 'Cidade é obrigatória.');     return; }
+  if (!uf)     { fieldError('f-uf',     'UF é obrigatória.');         return; }
+  fieldOk('f-cep'); fieldOk('f-rua'); fieldOk('f-numero'); fieldOk('f-bairro'); fieldOk('f-cidade'); fieldOk('f-uf');
 
   if (nascimento) {
     const age = (new Date() - new Date(nascimento)) / (1000 * 60 * 60 * 24 * 365.25);
@@ -1181,36 +1187,36 @@ function modalEditarAluno(aluno) {
         <legend>Endereço</legend>
         <div class="input-row">
           <div class="form-group">
-            <label for="e-cep">CEP</label>
-            <input id="e-cep" type="text" placeholder="00000-000" value="${esc(aluno.cep || '')}">
+            <label for="e-cep">CEP <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="e-cep" type="text" placeholder="00000-000" value="${esc(aluno.cep || '')}" aria-required="true">
           </div>
           <div class="form-group flex-2">
-            <label for="e-rua">Logradouro</label>
-            <input id="e-rua" type="text" value="${esc(aluno.rua || '')}">
+            <label for="e-rua">Logradouro <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="e-rua" type="text" value="${esc(aluno.rua || '')}" aria-required="true">
           </div>
         </div>
         <div class="input-row">
           <div class="form-group">
-            <label for="e-numero">Número</label>
-            <input id="e-numero" type="text" value="${esc(aluno.numero || '')}">
+            <label for="e-numero">Número <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="e-numero" type="text" value="${esc(aluno.numero || '')}" aria-required="true">
           </div>
           <div class="form-group">
             <label for="e-complemento">Complemento</label>
             <input id="e-complemento" type="text" value="${esc(aluno.complemento || '')}">
           </div>
           <div class="form-group">
-            <label for="e-bairro">Bairro</label>
-            <input id="e-bairro" type="text" value="${esc(aluno.bairro || '')}">
+            <label for="e-bairro">Bairro <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="e-bairro" type="text" value="${esc(aluno.bairro || '')}" aria-required="true">
           </div>
         </div>
         <div class="input-row">
           <div class="form-group flex-2">
-            <label for="e-cidade">Cidade</label>
-            <input id="e-cidade" type="text" value="${esc(aluno.cidade || '')}">
+            <label for="e-cidade">Cidade <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="e-cidade" type="text" value="${esc(aluno.cidade || '')}" aria-required="true">
           </div>
           <div class="form-group">
-            <label for="e-uf">UF</label>
-            <input id="e-uf" type="text" maxlength="2" value="${esc(aluno.uf || '')}">
+            <label for="e-uf">UF <span aria-hidden="true" style="color:var(--red)">*</span></label>
+            <input id="e-uf" type="text" maxlength="2" value="${esc(aluno.uf || '')}" aria-required="true">
           </div>
         </div>
       </fieldset>
@@ -1303,21 +1309,22 @@ async function atualizarAluno(id, alunoOriginal = {}) {
   }
 
   // ── Validação CEP ─────────────────────────────────────────────────────────
-  const rawCep = (cep || '').replace(/\D/g, '');
-  if (rawCep && rawCep.length !== 8) { fieldError('e-cep', 'CEP inválido.'); return; }
+  if (!cep) { fieldError('e-cep', 'CEP é obrigatório.'); return; }
+  const rawCep = cep.replace(/\D/g, '');
+  if (rawCep.length !== 8) { fieldError('e-cep', 'CEP inválido.'); return; }
   fieldOk('e-cep');
 
-  // ── Campos de endereço: se já tinham valor, não podem ficar em branco ─────
+  // ── Campos de endereço obrigatórios ───────────────────────────────────────
   const enderecoFields = [
-    { id: 'e-rua',    value: rua,    original: alunoOriginal.rua,    label: 'Logradouro' },
-    { id: 'e-numero', value: numero, original: alunoOriginal.numero, label: 'Número' },
-    { id: 'e-bairro', value: bairro, original: alunoOriginal.bairro, label: 'Bairro' },
-    { id: 'e-cidade', value: cidade, original: alunoOriginal.cidade, label: 'Cidade' },
-    { id: 'e-uf',     value: uf,     original: alunoOriginal.uf,     label: 'UF' },
+    { id: 'e-rua',    value: rua,    label: 'Logradouro' },
+    { id: 'e-numero', value: numero, label: 'Número' },
+    { id: 'e-bairro', value: bairro, label: 'Bairro' },
+    { id: 'e-cidade', value: cidade, label: 'Cidade' },
+    { id: 'e-uf',     value: uf,     label: 'UF' },
   ];
   let enderecoOk = true;
   for (const f of enderecoFields) {
-    if (f.original && !f.value) {
+    if (!f.value) {
       fieldError(f.id, `${f.label} é obrigatório.`);
       enderecoOk = false;
     } else {
