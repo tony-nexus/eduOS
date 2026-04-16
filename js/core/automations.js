@@ -29,13 +29,20 @@ export function datasConflitam(inicio1, fim1, inicio2, fim2) {
 
 // ─── Executor geral ───────────────────────────────────────────────────────────
 export async function runAutomations() {
+  // Ordem importa: envelhecer certs antes de emitir novos; renovações após emissão
+  await autoMarkCertsStatus();
+
   const [tResult, cResult] = await Promise.allSettled([
     autoSyncTurmaStatus(),
     autoEmitirCertificados(),
   ]);
+
+  const rResult = await Promise.allSettled([autoCreateRenovacoes()]);
+
   return {
     turmasAvancadas: tResult.status === 'fulfilled' ? (tResult.value ?? 0) : 0,
     certEmitidos:    cResult.status === 'fulfilled' ? (cResult.value ?? 0) : 0,
+    renovacoesCriadas: rResult[0].status === 'fulfilled' ? (rResult[0].value ?? 0) : 0,
   };
 }
 
@@ -263,7 +270,91 @@ export async function autoEnrollAguardando(turmaId, cursoId, vagas) {
   return count;
 }
 
-// ─── 4. Cria matrícula de renovação ──────────────────────────────────────────
+// ─── 4. Envelhece certificados por data ──────────────────────────────────────
+/**
+ * valido → a_vencer  (vence em até 30 dias)
+ * valido/a_vencer → vencido (data_validade já passou)
+ * Espelho de fn_mark_certs_status (fallback frontend).
+ */
+export async function autoMarkCertsStatus() {
+  const tenant = getTenantId();
+  const hoje   = new Date().toISOString().split('T')[0];
+  const limite = new Date();
+  limite.setDate(limite.getDate() + 30);
+  const limiteStr = limite.toISOString().split('T')[0];
+
+  try {
+    await supabase
+      .from('certificados')
+      .update({ status: 'vencido' })
+      .eq('tenant_id', tenant)
+      .in('status', ['valido', 'a_vencer'])
+      .not('data_validade', 'is', null)
+      .lt('data_validade', hoje);
+
+    await supabase
+      .from('certificados')
+      .update({ status: 'a_vencer' })
+      .eq('tenant_id', tenant)
+      .eq('status', 'valido')
+      .not('data_validade', 'is', null)
+      .gte('data_validade', hoje)
+      .lte('data_validade', limiteStr);
+  } catch (err) {
+    console.warn('[Automations] autoMarkCertsStatus falhou:', err.message);
+  }
+}
+
+// ─── 5. Auto-cria renovações para certificados a_vencer ──────────────────────
+/**
+ * Para cada certificado a_vencer sem matrícula ativa no mesmo curso,
+ * cria matrícula com aguardando_turma.
+ * O trigger fn_auto_enroll_aguardando (M15) vincula à turma disponível.
+ * Retorna quantas renovações foram criadas.
+ */
+export async function autoCreateRenovacoes() {
+  const tenant = getTenantId();
+  let   count  = 0;
+
+  try {
+    const { data: certs } = await supabase
+      .from('certificados')
+      .select('aluno_id, curso_id')
+      .eq('tenant_id', tenant)
+      .eq('status', 'a_vencer')
+      .limit(100);
+
+    if (!certs?.length) return 0;
+
+    for (const c of certs) {
+      const { count: ativa } = await supabase
+        .from('matriculas')
+        .select('id', { count: 'exact', head: true })
+        .eq('tenant_id', tenant)
+        .eq('aluno_id', c.aluno_id)
+        .eq('curso_id', c.curso_id)
+        .in('status', ['matriculado', 'aguardando_turma', 'em_andamento']);
+
+      if (ativa > 0) continue;
+
+      const { error } = await supabase.from('matriculas').insert({
+        tenant_id:   tenant,
+        aluno_id:    c.aluno_id,
+        curso_id:    c.curso_id,
+        status:      'aguardando_turma',
+        observacoes: 'Renovação automática — certificado a vencer',
+      });
+
+      if (!error) count++;
+    }
+  } catch (err) {
+    console.warn('[Automations] autoCreateRenovacoes falhou:', err.message);
+  }
+
+  return count;
+}
+
+// ─── 7. Cria matrícula de renovação (manual via renovacoes.js) ───────────────
 /**
  * Usado em renovacoes.js para criar uma nova matrícula de renovação
  * para um aluno com certificado vencido/crítico.
@@ -303,7 +394,7 @@ export async function criarRenovacao(alunoId, cursoId) {
   }
 }
 
-// ─── 5. Cria matrícula automática ao cadastrar aluno ─────────────────────────
+// ─── 8. Cria matrícula automática ao cadastrar aluno ─────────────────────────
 /**
  * Chamado por alunos.js quando um novo aluno é criado com "Curso de Interesse".
  * Se houver turma disponível → vincula imediatamente.
