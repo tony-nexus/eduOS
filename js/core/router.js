@@ -133,9 +133,11 @@ export async function navigate(page) {
 
   _currentPage = page;
 
-  // Atualiza nav-items
+  // Atualiza nav-items + aria-current para leitores de tela
   document.querySelectorAll('.nav-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.page === page);
+    const isActive = el.dataset.page === page;
+    el.classList.toggle('active', isActive);
+    el.setAttribute('aria-current', isActive ? 'page' : 'false');
   });
 
   // Atualiza topbar

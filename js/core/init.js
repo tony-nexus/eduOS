@@ -49,12 +49,16 @@ function registerEventListeners() {
 
   // ── Navegação sidebar + sheet + bottom nav ────────────────────────────────
   document.querySelectorAll('.nav-item[data-page]').forEach(item => {
-    item.addEventListener('click', () => {
+    const doNav = () => {
       navigate(item.dataset.page);
-      // Fecha drawer mobile e bottom sheet após navegar
       document.getElementById('sidebar')?.classList.remove('open');
       document.getElementById('sidebar-overlay')?.classList.remove('open');
       _closeSheet();
+    };
+    item.addEventListener('click', doNav);
+    // Suporte a teclado: Enter e Space acionam como clique (role="button")
+    item.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doNav(); }
     });
   });
 

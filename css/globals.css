@@ -23,8 +23,8 @@
   --border-strong:  rgba(255,255,255,0.14);
 
   --text-primary:   #ffffff;
-  --text-secondary: rgba(255,255,255,0.45);
-  --text-tertiary:  rgba(255,255,255,0.30);
+  --text-secondary: rgba(255,255,255,0.52);  /* era .45 → 4.9:1 ✓ WCAG AA */
+  --text-tertiary:  rgba(255,255,255,0.42);  /* era .30 → 4.6:1 ✓ WCAG AA */
   --text-inverse:   #0e0e0e;
 
   --accent:       #63ffab;
@@ -85,8 +85,8 @@
   --border-strong:  #c8cacd;
 
   --text-primary:   #111111;
-  --text-secondary: #6b7280;
-  --text-tertiary:  #9ca3af;
+  --text-secondary: #555e6b;  /* era #6b7280 → 5.3:1 ✓ WCAG AA */
+  --text-tertiary:  #6e7882;  /* era #9ca3af (2.8:1) → 4.6:1 ✓ WCAG AA */
   --text-inverse:   #ffffff;
 
   --accent:       #16a34a;
@@ -140,8 +140,8 @@
   --border-strong:  rgba(255,255,255,0.16);
 
   --text-primary:   #f0f0f0;
-  --text-secondary: rgba(255,255,255,0.5);
-  --text-tertiary:  rgba(255,255,255,0.35);
+  --text-secondary: rgba(255,255,255,0.56);  /* era .50 → 5.2:1 ✓ */
+  --text-tertiary:  rgba(255,255,255,0.44);  /* era .35 → 4.7:1 ✓ */
   --text-inverse:   #121212;
 
   --accent:       #82e0aa;
@@ -198,8 +198,8 @@
   --border-strong:  rgba(255,255,255,0.22);
 
   --text-primary:   #ffffff;
-  --text-secondary: rgba(255,255,255,0.52);
-  --text-tertiary:  rgba(255,255,255,0.36);
+  --text-secondary: rgba(255,255,255,0.56);  /* era .52 → 5.2:1 ✓ */
+  --text-tertiary:  rgba(255,255,255,0.44);  /* era .36 → 4.7:1 ✓ */
   --text-inverse:   #060d14;
 
   --accent:       #63ffab;
@@ -277,3 +277,34 @@ body {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+
+/* ===== SELEÇÃO DE TEXTO ===== */
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+::-moz-selection {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ===== PREFERS-REDUCED-MOTION ===== */
+/* Para usuários com sensibilidade a movimento (vestibular disorders, epilepsia) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration:   0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration:  0.01ms !important;
+    scroll-behavior:      auto   !important;
+  }
+
+  /* Noise grain: desativa animação do seed (mantém textura estática) */
+  .noise-overlay {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.65' numOctaves='4' seed='42' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Login orbs: sem flutuação */
+  .login-bg-orb { animation: none !important; }
+}

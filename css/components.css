@@ -3,6 +3,180 @@
    Design: meta3 (glass morphism, 4 temas)
    ============================================================ */
 
+/* =====================================================================
+   ACESSIBILIDADE — WCAG 2.1 AA
+   1. Skip link (teclado / leitores de tela)
+   2. Focus-visible em todos os elementos interativos
+   3. ARIA states: disabled, invalid, expanded, selected
+   ===================================================================== */
+
+/* ── 1. Skip link ────────────────────────────────────────────────────── */
+.skip-link {
+  position: fixed;
+  top: -100%;
+  left: 16px;
+  z-index: 10000;
+  background: var(--accent);
+  color: var(--text-inverse);
+  padding: 10px 20px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  font-family: var(--font-mono);
+  box-shadow: var(--shadow-lg);
+  transition: top 0.15s ease;
+  white-space: nowrap;
+}
+.skip-link:focus {
+  top: 16px;
+  outline: 2px solid var(--text-inverse);
+  outline-offset: 2px;
+}
+
+/* ── 2. Focus-visible global ─────────────────────────────────────────── */
+/* Remove o outline padrão do browser e substitui por um ring consistente */
+:focus { outline: none; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Elementos que já têm box-shadow de foco: desativa outline duplicado */
+.form-group input:focus-visible,
+.form-group select:focus-visible,
+.form-group textarea:focus-visible,
+.search-input:focus-visible,
+.select-input:focus-visible,
+.danger-confirm-input:focus-visible,
+.validade-meses-input:focus-visible {
+  outline: none; /* box-shadow já fornece indicador visível */
+}
+
+/* Botões: anel accent + sombra externa */
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.btn-danger:focus-visible {
+  outline-color: var(--red);
+  box-shadow: 0 0 0 4px var(--red-soft);
+}
+
+/* Action buttons */
+.action-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Tabs */
+.tab-btn:focus-visible,
+.fin-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Paginação */
+.pag-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
+/* Modal close */
+.modal-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  background: var(--bg-hover);
+}
+
+/* Cards clicáveis */
+.stat-card:focus-visible,
+.kanban-card:focus-visible,
+.cert-card:focus-visible,
+.alert-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
+/* Check / radio items */
+.doc-check-item:focus-visible,
+.radio-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
+/* Validade toggle */
+.validade-toggle-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+}
+
+/* Links genéricos */
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* ── 3. ARIA states ──────────────────────────────────────────────────── */
+
+/* Disabled (via atributo ou aria) */
+[aria-disabled="true"],
+[disabled],
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Invalid (aria-invalid="true" ou .has-error aplicada via JS) */
+[aria-invalid="true"] {
+  border-color: var(--red) !important;
+  box-shadow: 0 0 0 3px var(--red-soft) !important;
+}
+
+/* Required visual: já implementado via <span style="color:var(--red)">*</span>
+   Reforça o campo em si quando vazio e required */
+input:required:user-invalid,
+select:required:user-invalid,
+textarea:required:user-invalid {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px var(--red-soft);
+}
+
+/* Expanded (dropdowns, accordions com aria-expanded) */
+[aria-expanded="true"] > svg,
+[aria-expanded="true"] .chevron {
+  transform: rotate(180deg);
+  transition: transform var(--transition);
+}
+
+/* Selected (tabs, nav items com aria-selected) */
+[aria-selected="true"] {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Current page nav (aria-current="page") */
+[aria-current="page"] {
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
 /* ===== PAGE HEADER ===== */
 .page-header {
   display: flex; align-items: flex-start; justify-content: space-between;
