@@ -67,7 +67,7 @@ export async function doLogin(email, password) {
     _syncGlobal();
 
     showApp();
-    navigate('dashboard');
+    navigate(perfil.role === 'aluno' ? 'portal-aluno' : 'dashboard');
     loadAndApplyBranding(); // White-label: aplica cores/logo do tenant
     showLoadingScreen();
 
@@ -226,8 +226,9 @@ function showNavForPerfil(perfil) {
     renovacoes:    ['secretaria', 'comercial', 'coordenador'],
     financeiro:    ['financeiro'],
     relatorios:    ['financeiro', 'coordenador'],
-    rbac:          [],
-    configuracoes: [],
+    rbac:           [],
+    configuracoes:  [],
+    'portal-aluno': ['aluno'],
   };
 
   document.querySelectorAll('.nav-item[data-page]').forEach(item => {

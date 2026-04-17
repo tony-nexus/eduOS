@@ -25,7 +25,8 @@ const ROUTES = {
   financeiro:    () => import('../views/financeiro.js'),
   relatorios:    () => import('../views/relatorios.js'),
   rbac:          () => import('../views/rbac.js'),
-  configuracoes: () => import('../views/configuracoes.js'),
+  configuracoes:  () => import('../views/configuracoes.js'),
+  'portal-aluno': () => import('../views/portal-aluno.js'),
 };
 
 // ─── Títulos do topbar ────────────────────────────────────────────────────────
@@ -43,7 +44,8 @@ const PAGE_TITLES = {
   financeiro:    'Financeiro',
   relatorios:    'Relatórios',
   rbac:          'Permissões RBAC',
-  configuracoes: 'Configurações',
+  configuracoes:  'Configurações',
+  'portal-aluno': 'Meu Portal',
 };
 
 // ─── [FIX CRÍTICO] Permissões por perfil ─────────────────────────────────────
@@ -62,8 +64,9 @@ const ROUTE_PERMISSIONS = {
   renovacoes:    ['secretaria', 'comercial', 'coordenador'],
   financeiro:    ['financeiro'],
   relatorios:    ['financeiro', 'coordenador'],
-  rbac:          [],          // só admin/super_admin
-  configuracoes: [],          // só admin/super_admin
+  rbac:           [],               // só admin/super_admin
+  configuracoes:  [],               // só admin/super_admin
+  'portal-aluno': ['aluno'],        // exclusivo para perfil aluno
 };
 
 /** Verifica se o usuário logado pode acessar a rota */
