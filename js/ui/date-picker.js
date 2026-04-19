@@ -373,28 +373,28 @@ function _injectThemeOverride() {
   style.id = 'esseal-dp-hlv-theme';
   style.textContent = `
     .dp-container {
-      background: var(--bg-elevated) !important;
-      border: 1px solid var(--border-default) !important;
+      background: var(--bg-input-solid) !important;
+      border: 1px solid var(--border-strong) !important;
       color: var(--text-primary) !important;
-      box-shadow: 0 16px 40px rgba(0,0,0,.45), 0 0 0 1px var(--border-subtle) !important;
+      box-shadow: 0 16px 40px rgba(0,0,0,.55), 0 0 0 1px var(--border-default) !important;
       border-radius: 10px !important;
     }
     .dp-nav-btn { color: var(--text-secondary) !important; border-radius: 6px !important; }
-    .dp-nav-btn:hover { background: var(--bg-hover) !important; color: var(--text-primary) !important; }
+    .dp-nav-btn:hover { background: var(--border-subtle) !important; color: var(--text-primary) !important; }
     .dp-title { color: var(--text-primary) !important; font-size: 13px !important; border-radius: 6px !important; }
-    .dp-title:hover { background: var(--bg-hover) !important; }
+    .dp-title:hover { background: var(--border-subtle) !important; }
     .dp-label { color: var(--text-tertiary) !important; font-size: 10.5px !important; font-weight: 600 !important; letter-spacing: .05em; }
     .dp-cell { font-size: 12.5px !important; border-radius: 6px !important; }
-    .dp-cell:not(.dp-label):not(.dp-disabled):hover { background: var(--bg-hover) !important; }
-    .dp-other-month { color: var(--text-tertiary) !important; opacity: .35; }
+    .dp-cell:not(.dp-label):not(.dp-disabled):hover { background: var(--border-subtle) !important; }
+    .dp-other-month { color: var(--text-tertiary) !important; opacity: .4; }
     .dp-disabled { color: var(--text-tertiary) !important; }
-    .dp-footer { border-top-color: var(--border-subtle) !important; }
+    .dp-footer { border-top-color: var(--border-default) !important; }
     .dp-btn-cancel {
-      background: var(--bg-overlay) !important;
+      background: var(--bg-input-solid) !important;
       color: var(--text-secondary) !important;
-      border-color: var(--border-default) !important;
+      border-color: var(--border-strong) !important;
     }
-    .dp-btn-cancel:hover { background: var(--bg-active) !important; }
+    .dp-btn-cancel:hover { background: var(--border-subtle) !important; }
     .dp-input { cursor: pointer !important; }
     .dp-input:focus { outline: 2px solid var(--accent) !important; outline-offset: 2px; }
   `;
