@@ -1,65 +1,123 @@
 /**
- * /js/ui/loading.js
- * Tela de loading pós-login — animação de barra + mensagens de sistema.
- * Disparada apenas no fluxo de doLogin() (não na restauração de sessão).
+ * /js/ui/branding.js
+ * Aplica as configurações de White-label do tenant ao DOM e às variáveis CSS.
+ * Chamado após login e ao salvar configurações de aparência.
  */
 
-const MESSAGES = [
-  '> autenticando_sessão...',
-  '> carregando_perfil...',
-  '> sincronizando_dados...',
-  '> verificando_permissões...',
-  '> montando_módulos...',
-  '> preparando_interface...',
-  '> sistema_pronto.',
-];
+const STYLE_ID = 'tenant-branding';
 
-export function showLoadingScreen() {
-  const screen  = document.getElementById('loading-screen');
-  const barFill = document.getElementById('ls-bar-fill');
-  const status  = document.getElementById('ls-status');
-  const percent = document.getElementById('ls-percent');
+/**
+ * Busca dados do tenant e aplica o branding.
+ * Requer currentUser já populado em globalThis.__eduos_auth.
+ */
+export async function loadAndApplyBranding() {
+  try {
+    const { supabase, getTenantId } = await import('../core/supabase.js');
+    const tenantId = getTenantId();
+    if (!tenantId) return;
 
-  if (!screen) return;
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('nome, logo_url, cor_primaria, cor_secundaria, tema_padrao')
+      .eq('id', tenantId)
+      .single();
 
-  // Reseta estado
-  screen.style.display = 'flex';
-  screen.classList.remove('ls-fade-out');
-  barFill.style.width = '0%';
-  percent.textContent = '0%';
-  status.textContent  = MESSAGES[0];
+    if (tenant) applyBranding(tenant);
+  } catch (_) { /* branding não crítico */ }
+}
 
-  let progress = 0;
-  let msgIdx   = 0;
+/**
+ * Aplica um objeto tenant ao DOM (pode ser chamado para preview em tempo real).
+ * @param {Object} tenant - { nome, logo_url, cor_primaria, cor_secundaria, tema_padrao }
+ */
+export function applyBranding(tenant) {
+  if (!tenant) return;
 
-  const interval = setInterval(() => {
-    progress += Math.floor(Math.random() * 12) + 3;
+  _applyColors(tenant.cor_primaria, tenant.cor_secundaria);
+  _applyLogo(tenant.logo_url, tenant.nome);
+  _applyTheme(tenant.tema_padrao);
+}
 
-    if (progress >= 100) {
-      progress = 100;
-      clearInterval(interval);
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-      barFill.style.width  = '100%';
-      percent.textContent  = '100%';
-      status.textContent   = MESSAGES[MESSAGES.length - 1];
+function _applyColors(primary, secondary) {
+  let style = document.getElementById(STYLE_ID);
+  if (!style) {
+    style = document.createElement('style');
+    style.id = STYLE_ID;
+    document.head.appendChild(style);
+  }
 
-      setTimeout(() => {
-        screen.classList.add('ls-fade-out');
-        setTimeout(() => {
-          screen.style.display = 'none';
-          screen.classList.remove('ls-fade-out');
-        }, 600);
-      }, 400);
+  const rules = [];
 
-    } else {
-      barFill.style.width = `${progress}%`;
-      percent.textContent = `${progress}%`;
-
-      const expectedIdx = Math.floor((progress / 100) * (MESSAGES.length - 1));
-      if (expectedIdx !== msgIdx && expectedIdx < MESSAGES.length) {
-        msgIdx = expectedIdx;
-        status.textContent = MESSAGES[msgIdx];
+  if (primary && /^#[0-9a-fA-F]{6}$/.test(primary)) {
+    const soft = _hexToRgba(primary, 0.12);
+    rules.push(`
+      :root,
+      [data-theme="dark"],
+      [data-theme="light"],
+      [data-theme="neon-glass"],
+      [data-theme="ocean-glass"] {
+        --accent:       ${primary};
+        --accent-soft:  ${soft};
+        --accent-hover: ${primary};
+        --green:        ${primary};
+        --green-soft:   ${soft};
       }
-    }
-  }, 180);
+    `);
+  }
+
+  if (secondary && /^#[0-9a-fA-F]{6}$/.test(secondary)) {
+    const softSec = _hexToRgba(secondary, 0.12);
+    rules.push(`
+      :root,
+      [data-theme="dark"],
+      [data-theme="light"],
+      [data-theme="neon-glass"],
+      [data-theme="ocean-glass"] {
+        --blue:      ${secondary};
+        --blue-soft: ${softSec};
+      }
+    `);
+  }
+
+  style.textContent = rules.join('\n');
+}
+
+function _applyLogo(logoUrl, nome) {
+  const letter = (nome?.[0] ?? 'E').toUpperCase();
+
+  const brandIcon  = document.querySelector('.sidebar-brand-icon');
+  const loginIcon  = document.querySelector('.login-logo-icon');
+
+  if (logoUrl) {
+    const imgStyle = 'width:28px;height:28px;object-fit:contain;border-radius:4px;display:block;';
+    if (brandIcon) brandIcon.innerHTML = `<img src="${logoUrl}" alt="Logo" style="${imgStyle}">`;
+    if (loginIcon) loginIcon.innerHTML = `<img src="${logoUrl}" alt="Logo" style="${imgStyle}">`;
+  } else {
+    if (brandIcon) brandIcon.textContent = letter;
+    if (loginIcon) loginIcon.textContent = letter;
+  }
+
+  // Atualiza o nome na sidebar se couber sem truncar demais
+  const brandName = document.querySelector('.sidebar-brand-name');
+  if (brandName && nome) {
+    const display = nome.length <= 14 ? nome : nome.substring(0, 13) + '…';
+    brandName.innerHTML = display;
+  }
+}
+
+function _applyTheme(tema) {
+  if (!tema) return;
+  // Só aplica se o usuário não tiver uma preferência pessoal salva
+  if (!localStorage.getItem('eduos-theme')) {
+    document.documentElement.setAttribute('data-theme', tema);
+  }
+}
+
+function _hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

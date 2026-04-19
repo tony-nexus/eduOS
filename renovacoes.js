@@ -1,815 +1,469 @@
 /**
- * /js/views/instrutores.js  v2 — Master-Detail Layout
- *
- * Estrutura de tela:
- *   ┌─────────────────┬──────────────────────────────────────┐
- *   │  MASTER (~35%)  │  DETAIL (~65%)                       │
- *   │  Lista de       │  Turmas do instrutor selecionado     │
- *   │  instrutores    │  + Modal de alunos por turma         │
- *   └─────────────────┴──────────────────────────────────────┘
- *
- * Dados de turmas e alunos usam mock enquanto as queries
- * Supabase do detalhe não estão configuradas.
- * Para integrar: substitua as funções marcadas com "TODO: Supabase".
+ * /js/views/dashboard.js
+ * View do Dashboard — KPIs, Pipeline, Alertas, Financeiro, Turmas, Matrículas, Certificados.
+ * Refatorado para usar dados reais do Supabase, skeletons e toasts de erro.
  */
 
-import { supabase, getTenantId }                   from '../core/supabase.js';
-import { setContent, openModal, closeModal, toast,
-         fmtDate, esc }                            from '../ui/components.js';
-import { validateForm, bindBlur }                  from '../ui/validate.js';
+import { supabase, getTenantId } from '../core/supabase.js';
+import { setContent, fmtDate, fmtMoney, toast } from '../ui/components.js';
+import { navigate } from '../core/router.js';
+import { runAutomations } from '../core/automations.js';
 
-// ─── State do módulo ──────────────────────────────────────────────────────────
-let _cache    = [];    // instrutores do tenant (via Supabase)
-let _activeId = null;  // ID do instrutor selecionado no momento
-
-// ─── Maps de status (consistentes com turmas.js) ──────────────────────────────
-const STATUS_BADGE = {
-  agendada:     'badge-blue',
-  em_andamento: 'badge-amber',
-  concluida:    'badge-green',
-  cancelada:    'badge-red',
-};
-const STATUS_LABEL = {
-  agendada:     'Agendada',
-  em_andamento: 'Em Andamento',
-  concluida:    'Concluída',
-  cancelada:    'Cancelada',
-};
-const ALUNO_BADGE = {
-  matriculado:         'badge-blue',
-  aguardando_turma:    'badge-amber',
-  em_andamento:        'badge-amber',
-  concluido:           'badge-green',
-  certificado_emitido: 'badge-purple',
-  reprovado:           'badge-red',
-  cancelado:           'badge-gray',
-};
-const ALUNO_LABEL = {
-  matriculado:         'Matriculado',
-  aguardando_turma:    'Ag. Turma',
-  em_andamento:        'Em Andamento',
-  concluido:           'Concluído',
-  certificado_emitido: 'Cert. Emitido',
-  reprovado:           'Reprovado',
-  cancelado:           'Cancelado',
-};
-
-// ─── Fetch turmas do instrutor (Supabase) ────────────────────────────────────
-async function loadTurmasDoInstrutor(instrutorId) {
-  const { data, error } = await supabase
-    .from('turmas')
-    .select('id, codigo, status, ocupadas, vagas, data_inicio, data_fim, curso:curso_id(nome)')
-    .eq('tenant_id', getTenantId())
-    .eq('instrutor_id', instrutorId)
-    .order('data_inicio', { ascending: false });
-  if (error) throw error;
-  return (data || []).map(t => ({ ...t, curso_nome: t.curso?.nome ?? '—' }));
-}
-
-// ─── Fetch alunos de uma turma (Supabase) ────────────────────────────────────
-async function loadAlunosDaTurma(turmaId) {
-  const { data, error } = await supabase
-    .from('matriculas')
-    .select('id, status, aluno:aluno_id(nome, cpf, rnm)')
-    .eq('tenant_id', getTenantId())
-    .eq('turma_id', turmaId)
-    .neq('status', 'cancelado');
-  if (error) throw error;
-  return (data || []).map(m => ({
-    id:     m.id,
-    nome:   m.aluno?.nome ?? '—',
-    doc:    m.aluno?.cpf ? `CPF: ${m.aluno.cpf}`
-          : m.aluno?.rnm ? `RNM: ${m.aluno.rnm}` : '—',
-    status: m.status,
-  }));
-}
-
-// ─── Render principal ─────────────────────────────────────────────────────────
+// ─── Render principal ────────────────────────────────────────────────────────
 export async function render() {
-  _activeId = null;
-
   setContent(`
     <div class="page-header">
       <div>
-        <h1>Instrutores</h1>
-        <p>Cadastro e vínculo com turmas</p>
+        <h1>Visão Geral</h1>
+        <p id="dash-time" style="font-size:12px;color:var(--text-tertiary);margin-top:3px"></p>
       </div>
       <div class="page-header-actions">
-        <button class="btn btn-primary" id="btn-novo-inst">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-               stroke-width="2" width="13" height="13" aria-hidden="true">
-            <line x1="12" y1="5" x2="12" y2="19"/>
-            <line x1="5"  y1="12" x2="19" y2="12"/>
-          </svg>
-          Novo Instrutor
+        <button class="btn btn-secondary" id="dash-refresh-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          Atualizar
         </button>
       </div>
     </div>
-
-    <div class="inst-layout">
-
-      <!-- ── MASTER: lista de instrutores ──────────────────────────────── -->
-      <div class="inst-master-panel">
-        <div class="table-wrap" style="padding:0;overflow:hidden">
-
-          <div class="table-toolbar"
-               style="padding:10px 12px;border-bottom:1px solid var(--border-subtle)">
-            <div class="search-input-wrap" style="flex:1">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"/>
-                <path d="M21 21l-4.35-4.35"/>
-              </svg>
-              <input class="search-input" id="search-inst"
-                     placeholder="Buscar instrutor..."
-                     aria-label="Buscar instrutor">
-            </div>
-          </div>
-
-          <div id="inst-list"
-               style="padding:10px 10px 4px;max-height:calc(100vh - 260px);overflow-y:auto">
-            ${Array(3).fill(
-              '<div class="skeleton" style="height:60px;border-radius:6px;margin-bottom:7px"></div>'
-            ).join('')}
-          </div>
-
-          <div style="padding:8px 14px;border-top:1px solid var(--border-subtle)">
-            <span class="table-info" id="inst-count">—</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── DETAIL: turmas do instrutor selecionado ───────────────────── -->
-      <div class="inst-detail-panel" id="inst-detail-panel">
-        <div id="detail-content">${_renderDetailEmpty()}</div>
-      </div>
-
+    <div class="stats-row" id="dash-kpis"></div>
+    <div class="dash-grid-main" style="margin-bottom:16px">
+      <div class="card" id="card-pipeline"></div>
+      <div class="card" id="card-alerts"></div>
+    </div>
+    <div class="dash-grid-2" style="margin-bottom:16px">
+      <div class="card" id="card-financeiro"></div>
+      <div class="card" id="card-turmas-ativas"></div>
+    </div>
+    <div class="dash-grid-2b">
+      <div class="card" id="card-ultimas-mat"></div>
+      <div class="card" id="card-certs-vencer"></div>
     </div>
   `);
 
-  // No mobile, o detail começa oculto (só aparece após selecionar instrutor)
-  if (window.innerWidth <= 768) {
-    document.getElementById('inst-detail-panel')?.classList.add('mob-hide');
+  document.getElementById('dash-time').textContent = 'Atualizado em ' + new Date().toLocaleString('pt-BR');
+  document.getElementById('dash-refresh-btn')?.addEventListener('click', () => render());
+
+  setSkeletons();
+
+  // ── Automações em background (não bloqueia o render) ──────────────────────
+  runAutomations().then(({ turmasAvancadas, certEmitidos }) => {
+    const msgs = [];
+    if (turmasAvancadas > 0) msgs.push(`${turmasAvancadas} turma(s) avançada(s)`);
+    if (certEmitidos    > 0) msgs.push(`${certEmitidos} certificado(s) emitido(s)`);
+    if (msgs.length) {
+      toast(`Automações: ${msgs.join(' · ')}`, 'success');
+      // Re-renderiza KPIs após automações para refletir novo estado
+      renderKPIs();
+      renderPipeline();
+    }
+  });
+
+  try {
+    await Promise.all([
+      renderKPIs(),
+      renderPipeline(),
+      renderAlerts(),
+      renderFinanceiro(),
+      renderTurmas(),
+      renderMatriculas(),
+      renderCerts(),
+    ]);
+  } catch (err) {
+    toast('Ocorreu um erro ao carregar o dashboard.', 'error');
+    console.error('[Dashboard] Erro de renderização:', err);
   }
-
-  document.getElementById('btn-novo-inst')
-    ?.addEventListener('click', () => modalInstrutor());
-
-  document.getElementById('search-inst')
-    ?.addEventListener('input', e => {
-      const q = e.target.value.toLowerCase();
-      renderMasterList(
-        _cache.filter(i =>
-          i.nome.toLowerCase().includes(q) ||
-          (i.email ?? '').toLowerCase().includes(q)
-        )
-      );
-    });
-
-  await loadData();
 }
 
-// ─── Fetch instrutores (Supabase) ─────────────────────────────────────────────
-async function loadData() {
+function setSkeletons() {
+  const ids = ['dash-kpis', 'card-pipeline', 'card-alerts', 'card-financeiro', 'card-turmas-ativas', 'card-ultimas-mat', 'card-certs-vencer'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (id === 'dash-kpis') {
+        el.innerHTML = Array(5).fill('<div class="stat-card"><div class="skeleton" style="height:60px;width:100%;border-radius:4px"></div></div>').join('');
+      } else {
+        el.innerHTML = `<div class="card-body" style="padding:16px"><div class="skeleton" style="height:120px;width:100%;border-radius:6px"></div></div>`;
+      }
+    }
+  });
+}
+
+// ─── KPIs ────────────────────────────────────────────────────────────────────
+async function renderKPIs() {
+  let alunosAtivos = 0, emTreinamento = 0, certificadosCount = 0, recebido = 0, alertas = 0;
+  
+  try {
+    const tenant = getTenantId();
+    
+    const [pAlunos, pMatriculas, pCerts, pPags, pAlertas] = await Promise.all([
+      supabase.from('alunos').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant).eq('status', 'ativo'),
+      supabase.from('matriculas').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant).eq('status', 'em_andamento'),
+      supabase.from('certificados').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant).in('status', ['valido', 'a_vencer']),
+      supabase.from('pagamentos').select('valor').eq('tenant_id', tenant).eq('status', 'recebido'),
+      supabase.from('certificados').select('*', { count: 'exact', head: true }).eq('tenant_id', tenant).in('status', ['a_vencer', 'vencido'])
+    ]);
+
+    if (pAlunos.error) throw pAlunos.error;
+    if (pMatriculas.error) throw pMatriculas.error;
+    if (pCerts.error) throw pCerts.error;
+    if (pPags.error) throw pPags.error;
+    if (pAlertas.error) throw pAlertas.error;
+
+    alunosAtivos = pAlunos.count || 0;
+    emTreinamento = pMatriculas.count || 0;
+    certificadosCount = pCerts.count || 0;
+    recebido = pPags.data ? pPags.data.reduce((acc, p) => acc + (p.valor || 0), 0) : 0;
+    alertas = pAlertas.count || 0;
+
+  } catch (err) {
+    console.error('[KPIs] Erro ao buscar', err);
+    toast('Erro ao carregar KPIs', 'error');
+  }
+
+  const kpis = [
+    { label:'Alunos Ativos',       value: String(alunosAtivos),   delta:'Total cadastrado', up:null,  color:'var(--blue)',   page:'alunos' },
+    { label:'Em Treinamento',      value: String(emTreinamento),  delta:'Turmas ativas',    up:null,  color:'var(--accent)', page:'pipeline' },
+    { label:'Certificados Ativos', value: String(certificadosCount), delta:'Válidos + A vencer', up:null, color:'var(--purple)', page:'certificados' },
+    { label:'Recebido',            value: fmtMoney(recebido),     delta:'Pagamentos pagos', up:null, color:'var(--green)',  page:'financeiro' },
+    { label:'Alertas Renovação',   value: String(alertas),        delta:'A vencer / Vencidos', up:false, color:'var(--red)', page:'renovacoes' },
+  ];
+
+  const el = document.getElementById('dash-kpis');
+  if (!el) return;
+  el.innerHTML = kpis.map(k => `
+    <div class="stat-card" data-page="${k.page}" style="cursor:pointer">
+      <div class="stat-label">${k.label}</div>
+      <div class="stat-value" style="color:${k.color}">${k.value}</div>
+      <div class="stat-delta ${k.up===true?'up':k.up===false?'down':''}">${k.delta}</div>
+    </div>
+  `).join('');
+
+  el.querySelectorAll('.stat-card[data-page]').forEach(card => {
+    card.addEventListener('click', () => navigate(card.dataset.page));
+  });
+}
+
+// ─── Pipeline ────────────────────────────────────────────────────────────────
+async function renderPipeline() {
+  let stats = { matriculado: 0, aguardando_turma: 0, em_andamento: 0, concluido: 0, certificado_emitido: 0 };
+  let total = 0;
+
   try {
     const { data, error } = await supabase
-      .from('instrutores')
-      .select('*')
-      .eq('tenant_id', getTenantId())
-      .order('nome');
+      .from('matriculas')
+      .select('status')
+      .eq('tenant_id', getTenantId());
+      
     if (error) throw error;
-    _cache = data || [];
+    
+    if (data) {
+      data.forEach(m => {
+        if (stats[m.status] !== undefined) stats[m.status]++;
+        total++;
+      });
+    }
   } catch (err) {
-    console.error(err);
-    toast('Erro ao carregar instrutores', 'error');
-    _cache = [];
+    console.error('[Pipeline] Erro:', err);
+    toast('Erro ao carregar pipeline', 'error');
   }
 
-  renderMasterList(_cache);
+  const steps = [
+    { label:'Matriculado',   count: stats.matriculado,         color:'var(--blue)' },
+    { label:'Ag. Turma',     count: stats.aguardando_turma,    color:'var(--amber)' },
+    { label:'Em Andamento',  count: stats.em_andamento,        color:'var(--accent)' },
+    { label:'Concluído',     count: stats.concluido,           color:'var(--green)' },
+    { label:'Cert. Emitido', count: stats.certificado_emitido, color:'var(--purple)' },
+  ];
 
-  // Reseleciona o instrutor ativo após re-fetch (ex: pós-edição)
-  if (_activeId && _cache.find(i => i.id === _activeId)) {
-    selecionarInstrutor(_activeId);
-  }
+  const el = document.getElementById('card-pipeline');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="card-header">
+      <span class="card-title">Pipeline Operacional</span>
+      <span style="font-size:11px;color:var(--text-tertiary)">${total} total</span>
+    </div>
+    <div class="card-body">
+      ${steps.map(s => `
+        <div class="pipeline-bar-row">
+          <div class="pipeline-bar-meta">
+            <span class="label"><span class="dot" style="background:${s.color};display:inline-block;margin-right:6px;vertical-align:middle"></span>${s.label}</span>
+            <span class="count">${s.count}</span>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width:${total > 0 ? (s.count/total*100) : 0}%;background:${s.color}"></div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
 }
 
-// ─── Render lista master ──────────────────────────────────────────────────────
-function renderMasterList(inst) {
-  const list  = document.getElementById('inst-list');
-  const count = document.getElementById('inst-count');
-  if (!list) return;
-
-  if (count) {
-    count.textContent = `${inst.length} instrutor${inst.length !== 1 ? 'es' : ''}`;
+// ─── Alertas ─────────────────────────────────────────────────────────────────
+async function renderAlerts() {
+  let alerts = [];
+  try {
+    const { data, error } = await supabase
+      .from('certificados')
+      .select('aluno:aluno_id(nome), curso:curso_id(nome), data_validade, status')
+      .eq('tenant_id', getTenantId())
+      .in('status', ['a_vencer', 'vencido'])
+      .order('data_validade', { ascending: true })
+      .limit(6);
+      
+    if (error) throw error;
+    
+    if (data) {
+      alerts = data.map(c => ({
+        label: `${c.aluno?.nome || '—'} — ${c.curso?.nome || '—'}`,
+        sub: `Validade: ${fmtDate(c.data_validade)}`,
+        color: c.status === 'vencido' ? 'var(--red)' : 'var(--amber)',
+        bg: c.status === 'vencido' ? 'var(--red-soft)' : 'var(--amber-soft)'
+      }));
+    }
+  } catch (err) {
+    console.error('[Alerts] Erro:', err);
+    toast('Erro ao carregar alertas', 'error');
   }
 
-  if (!inst.length) {
-    list.innerHTML = `
-      <p style="text-align:center;padding:28px 12px;
-                color:var(--text-tertiary);font-size:13px">
-        Nenhum instrutor encontrado.
-      </p>`;
+  const el = document.getElementById('card-alerts');
+  if (!el) return;
+
+  if (alerts.length === 0) {
+    el.innerHTML = `
+      <div class="card-header">
+        <span class="card-title">Alertas de Renovação</span>
+      </div>
+      <div class="card-body empty-state" style="padding:24px;min-height:160px;display:flex;flex-direction:column;justify-content:center">
+        <p style="text-align:center;color:var(--text-tertiary);font-size:13px">Nenhum alerta de vencimento.</p>
+      </div>`;
     return;
   }
 
-  list.innerHTML = inst.map(i => {
-    const isActive = i.id === _activeId;
-    const inicialNome = esc(i.nome.charAt(0).toUpperCase());
-
-    return `
-      <div class="inst-item${isActive ? ' active' : ''}"
-           data-id="${i.id}"
-           role="button" tabindex="0"
-           aria-pressed="${isActive}"
-           aria-label="${esc(i.nome)}">
-
-        <div class="inst-item-avatar" aria-hidden="true">${inicialNome}</div>
-
-        <div class="inst-item-info">
-          <div class="inst-item-name">${esc(i.nome)}</div>
-          <div class="inst-item-meta">${esc(i.email ?? 'Sem e-mail')}</div>
+  el.innerHTML = `
+    <div class="card-header">
+      <span class="card-title">Alertas de Renovação</span>
+      <button class="btn btn-ghost" id="btn-ver-alertas" style="font-size:12px;padding:4px 8px">Ver todos</button>
+    </div>
+    <div class="card-body" style="padding:12px">
+      ${alerts.map(a => `
+        <div class="alert-item" data-page="renovacoes">
+          <div class="alert-icon" style="background:${a.bg};color:${a.color}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+          </div>
+          <div>
+            <div style="font-size:12.5px;font-weight:500">${a.label}</div>
+            <div style="font-size:11px;color:${a.color};margin-top:2px">${a.sub}</div>
+          </div>
         </div>
+      `).join('')}
+    </div>`;
 
-        <div style="display:flex;gap:3px;flex-shrink:0">
-          <button class="action-btn inst-editar"
-                  data-id="${i.id}"
-                  title="Editar instrutor"
-                  aria-label="Editar ${esc(i.nome)}"
-                  style="padding:5px">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" width="12" height="12" aria-hidden="true">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-          </button>
-          <button class="action-btn danger inst-excluir"
-                  data-id="${i.id}"
-                  title="Excluir instrutor"
-                  aria-label="Excluir ${esc(i.nome)}"
-                  style="padding:5px">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                 stroke-width="2" width="12" height="12" aria-hidden="true">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-            </svg>
-          </button>
-        </div>
-      </div>`;
-  }).join('');
-
-  // ── Click no card (exceto nos botões internos) ────────────────────────────
-  list.querySelectorAll('.inst-item').forEach(card => {
-    card.addEventListener('click', e => {
-      if (e.target.closest('.inst-editar, .inst-excluir')) return;
-      selecionarInstrutor(card.dataset.id);
-    });
-    card.addEventListener('keydown', e => {
-      if ((e.key === 'Enter' || e.key === ' ') &&
-          !e.target.closest('.inst-editar, .inst-excluir')) {
-        e.preventDefault();
-        selecionarInstrutor(card.dataset.id);
-      }
-    });
+  el.querySelectorAll('.alert-item').forEach(item => {
+    item.addEventListener('click', () => navigate('renovacoes'));
   });
-
-  list.querySelectorAll('.inst-editar').forEach(btn =>
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const i = _cache.find(x => x.id == btn.dataset.id);
-      if (i) modalInstrutor(i);
-    })
-  );
-
-  list.querySelectorAll('.inst-excluir').forEach(btn =>
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      const i = _cache.find(x => x.id == btn.dataset.id);
-      if (i) confirmarExclusaoInstrutor(i);
-    })
-  );
+  el.querySelector('#btn-ver-alertas')?.addEventListener('click', () => navigate('renovacoes'));
 }
 
-// ─── Selecionar instrutor → atualiza detail ───────────────────────────────────
-function _isMobile() { return window.innerWidth <= 768; }
-
-async function selecionarInstrutor(id) {
-  _activeId = id;
-
-  // Atualiza estado visual de todos os cards da lista
-  document.querySelectorAll('.inst-item').forEach(card => {
-    const isActive = card.dataset.id === id;
-    card.classList.toggle('active', isActive);
-    card.setAttribute('aria-pressed', String(isActive));
-  });
-
-  // Mobile: esconde lista, exibe detalhe
-  if (_isMobile()) {
-    document.querySelector('.inst-master-panel')?.classList.add('mob-hide');
-    document.getElementById('inst-detail-panel')?.classList.remove('mob-hide');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  // Skeleton de carregamento no detail
-  const detail = document.getElementById('detail-content');
-  if (detail) {
-    detail.innerHTML = `
-      <div style="min-height:300px;display:flex;align-items:center;
-                  justify-content:center;border:1px solid var(--border-subtle);
-                  border-radius:var(--radius-md);background:var(--bg-surface)">
-        <div style="display:flex;align-items:center;gap:10px;
-                    color:var(--text-tertiary);font-size:13px">
-          <div class="skeleton"
-               style="width:18px;height:18px;border-radius:50%;flex-shrink:0">
-          </div>
-          Carregando turmas...
-        </div>
-      </div>`;
-  }
-
-  const instrutor = _cache.find(i => i.id === id);
-  if (!instrutor) return;
-
+// ─── Financeiro ───────────────────────────────────────────────────────────────
+async function renderFinanceiro() {
+  let pendente = 0, atraso = 0, pago = 0;
+  
   try {
-    const turmas = await loadTurmasDoInstrutor(id);
-    renderDetailPanel(instrutor, turmas);
+    const { data, error } = await supabase
+      .from('pagamentos')
+      .select('valor, status')
+      .eq('tenant_id', getTenantId());
+      
+    if (error) throw error;
+    
+    if (data) {
+      data.forEach(p => {
+        if (p.status === 'pendente') pendente += (p.valor || 0);
+        else if (p.status === 'atraso') atraso += (p.valor || 0);
+        else if (p.status === 'recebido') pago += (p.valor || 0);
+      });
+    }
   } catch (err) {
-    toast(`Erro ao carregar turmas: ${err.message}`, 'error');
-    if (detail) detail.innerHTML = _renderDetailEmpty();
+    console.error('[Financeiro] Erro:', err);
+    toast('Erro ao carregar resumo financeiro', 'error');
   }
-}
 
-// ─── Detail: estado vazio ─────────────────────────────────────────────────────
-function _renderDetailEmpty() {
-  return `
-    <div class="inst-detail-empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="1.2" width="56" height="56" aria-hidden="true">
-        <circle cx="18" cy="18" r="3"/>
-        <circle cx="6"  cy="6"  r="3"/>
-        <circle cx="6"  cy="18" r="3"/>
-        <circle cx="18" cy="6"  r="3"/>
-        <line x1="9"  y1="6"  x2="15" y2="6"/>
-        <line x1="9"  y1="18" x2="15" y2="18"/>
-        <line x1="6"  y1="9"  x2="6"  y2="15"/>
-      </svg>
-      <div style="font-weight:600;font-size:14px;color:var(--text-secondary)">
-        Nenhum instrutor selecionado
-      </div>
-      <div>
-        Clique em um instrutor na lista ao lado para visualizar
-        suas turmas e os alunos matriculados.
+  const el = document.getElementById('card-financeiro');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="card-header">
+      <span class="card-title">Resumo Financeiro</span>
+    </div>
+    <div class="card-body" style="padding:20px">
+      <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:4px">Total Recebido</div>
+      <div style="font-size:24px;font-weight:600;font-family:var(--font-mono);letter-spacing:-1px;color:var(--green);margin-bottom:24px">${fmtMoney(pago)}</div>
+      
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border-subtle)">
+          <span style="font-size:13px;color:var(--text-secondary)">Pendente</span>
+          <span style="font-size:14px;font-weight:600;color:var(--amber);font-family:var(--font-mono)">${fmtMoney(pendente)}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;color:var(--text-secondary)">Em atraso</span>
+          <span style="font-size:14px;font-weight:600;color:var(--red);font-family:var(--font-mono)">${fmtMoney(atraso)}</span>
+        </div>
       </div>
     </div>`;
 }
 
-// ─── Detail: painel completo ──────────────────────────────────────────────────
-function renderDetailPanel(instrutor, turmas) {
-  const detail = document.getElementById('detail-content');
-  if (!detail) return;
+// ─── Turmas ativas ────────────────────────────────────────────────────────────
+async function renderTurmas() {
+  let turmas = [];
+  try {
+    const { data, error } = await supabase
+      .from('turmas')
+      .select('codigo, curso_id(nome), instrutor_id(nome), vagas, ocupadas, status')
+      .eq('tenant_id', getTenantId())
+      .in('status', ['em_andamento', 'agendada'])
+      .limit(3);
+      
+    if (error) throw error;
+    
+    if (data) {
+      turmas = data.map(t => ({
+        codigo: t.codigo,
+        curso: t.curso_id?.nome || '—',
+        instrutor: t.instrutor_id?.nome || '—',
+        status: t.status,
+        vagas: t.vagas || 0,
+        ocupadas: t.ocupadas ?? 0 // CORRIGIDO: lê coluna real do banco
+      }));
+    }
+  } catch (err) {
+    console.error('[Turmas] Erro:', err);
+    toast('Erro ao carregar turmas', 'error');
+  }
 
-  // Especialidades
-  let esps = [];
-  if (Array.isArray(instrutor.especialidades))        esps = instrutor.especialidades;
-  else if (typeof instrutor.especialidades === 'string')
-    esps = instrutor.especialidades.split(',').map(s => s.trim()).filter(Boolean);
-
-  // KPIs
-  const nTotal   = turmas.length;
-  const nAtivas  = turmas.filter(t => ['agendada','em_andamento'].includes(t.status)).length;
-  const nAlunos  = turmas.reduce((s, t) => s + (t.ocupadas || 0), 0);
-
-  // ── Header do instrutor ───────────────────────────────────────────────────
-  const header = `
-    <div class="card" style="padding:20px 24px;margin-bottom:14px">
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-
-        <div style="width:52px;height:52px;border-radius:50%;flex-shrink:0;
-                    background:linear-gradient(135deg,var(--blue),var(--purple));
-                    display:grid;place-items:center;
-                    font-size:20px;font-weight:700;color:#fff"
-             aria-hidden="true">
-          ${esc(instrutor.nome.charAt(0).toUpperCase())}
-        </div>
-
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:16px;margin-bottom:2px">
-            ${esc(instrutor.nome)}
-          </div>
-          <div style="font-size:12.5px;color:var(--text-tertiary);margin-bottom:8px">
-            ${esc(instrutor.email ?? '—')}
-            ${instrutor.telefone ? ` &nbsp;·&nbsp; ${esc(instrutor.telefone)}` : ''}
-          </div>
-          <div style="display:flex;flex-wrap:wrap;gap:5px">
-            ${esps.map(e => `<span class="badge badge-accent">${esc(e)}</span>`).join('')}
-            ${!esps.length
-              ? '<span style="font-size:11px;color:var(--text-tertiary)">Sem especialidades cadastradas</span>'
-              : ''}
-          </div>
-        </div>
-
-        <div style="display:flex;gap:24px;flex-shrink:0;text-align:center">
-          <div>
-            <div style="font-size:24px;font-weight:700;color:var(--blue);line-height:1">
-              ${nTotal}
-            </div>
-            <div style="font-size:11px;color:var(--text-tertiary);margin-top:3px">Turmas</div>
-          </div>
-          <div>
-            <div style="font-size:24px;font-weight:700;color:var(--accent);line-height:1">
-              ${nAtivas}
-            </div>
-            <div style="font-size:11px;color:var(--text-tertiary);margin-top:3px">Ativas</div>
-          </div>
-          <div>
-            <div style="font-size:24px;font-weight:700;color:var(--amber);line-height:1">
-              ${nAlunos}
-            </div>
-            <div style="font-size:11px;color:var(--text-tertiary);margin-top:3px">Alunos</div>
-          </div>
-        </div>
-
+  const el = document.getElementById('card-turmas-ativas');
+  if (!el) return;
+  
+  if (turmas.length === 0) {
+    el.innerHTML = `
+      <div class="card-header">
+        <span class="card-title">Turmas em Andamento</span>
       </div>
-    </div>`;
+      <div class="card-body empty-state" style="padding:24px;display:flex;justify-content:center;align-items:center;min-height:160px">
+        <p style="font-size:13px;color:var(--text-tertiary)">Não há turmas ativas/agendadas.</p>
+      </div>
+    `;
+    return;
+  }
 
-  // ── Tabela de turmas ──────────────────────────────────────────────────────
-  let tableHtml;
-
-  if (!turmas.length) {
-    tableHtml = `
-      <div class="table-wrap">
-        <p style="text-align:center;padding:48px;
-                  color:var(--text-tertiary);font-size:13px">
-          Este instrutor não possui turmas cadastradas.
-        </p>
-      </div>`;
-  } else {
-    const rows = turmas.map(t => {
-      const pct   = t.vagas > 0 ? Math.round((t.ocupadas / t.vagas) * 100) : 0;
-      const pctColor = pct >= 100 ? 'var(--red)'
-                     : pct >= 80  ? 'var(--amber)'
-                     : 'var(--accent)';
-      return `
-        <tr>
-          <td>
-            <span class="badge ${STATUS_BADGE[t.status] ?? 'badge-gray'}">
-              ${STATUS_LABEL[t.status] ?? esc(t.status)}
-            </span>
-          </td>
-          <td style="font-weight:500;font-size:13px">${esc(t.curso_nome)}</td>
-          <td>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div class="progress-bar" style="width:52px">
-                <div class="progress-fill"
-                     style="width:${pct}%;background:${pctColor}"></div>
-              </div>
-              <span style="font-size:11.5px;color:var(--text-tertiary);
-                           font-family:var(--font-mono)">
-                ${t.ocupadas ?? 0}/${t.vagas ?? 0}
-              </span>
+  el.innerHTML = `
+    <div class="card-header">
+      <span class="card-title">Turmas em Andamento</span>
+      <button class="btn btn-ghost" id="btn-ver-turmas" style="font-size:12px;padding:4px 8px">Ver todas</button>
+    </div>
+    <div class="card-body" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+      ${turmas.map(t => `
+        <div style="padding:10px 12px;background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:var(--radius-sm)">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:12.5px;font-weight:500">${t.curso}</div>
+              <div style="font-size:11px;color:var(--text-tertiary);margin-top:2px">${t.codigo} · ${t.instrutor}</div>
             </div>
-          </td>
-          <td style="font-size:12.5px;white-space:nowrap">
-            ${t.data_inicio ? fmtDate(t.data_inicio) : '—'}
-          </td>
-          <td style="font-size:12.5px;white-space:nowrap">
-            ${t.data_fim ? fmtDate(t.data_fim) : '—'}
-          </td>
-          <td>
-            <button class="action-btn inst-ver-alunos"
-                    data-turma-id="${t.id}"
-                    data-turma-codigo="${esc(t.codigo)}"
-                    title="Ver alunos matriculados"
-                    aria-label="Ver alunos da turma ${esc(t.codigo)}">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2" width="12" height="12" aria-hidden="true">
-                <circle cx="11" cy="11" r="8"/>
-                <path d="M21 21l-4.35-4.35"/>
-              </svg>
-              Alunos
-            </button>
-          </td>
-        </tr>`;
-    }).join('');
+            <span class="badge ${t.status==='em_andamento'?'badge-amber':t.status==='agendada'?'badge-blue':'badge-green'}">${t.status==='em_andamento'?'Ativo':t.status==='agendada'?'Agendado':'Concluído'}</span>
+          </div>
+          <div style="margin-top:8px">
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:${t.vagas > 0 ? Math.round(t.ocupadas/t.vagas*100) : 0}%;background:var(--accent)"></div>
+            </div>
+            <div style="font-size:10.5px;color:var(--text-tertiary);margin-top:3px">${t.ocupadas}/${t.vagas} alunos</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+  el.querySelector('#btn-ver-turmas')?.addEventListener('click', () => navigate('turmas'));
+}
 
-    tableHtml = `
-      <div class="table-wrap">
-        <div class="table-toolbar">
-          <span style="font-size:12.5px;color:var(--text-secondary);
-                       font-family:var(--font-mono)">
-            ${nTotal} turma${nTotal !== 1 ? 's' : ''} encontrada${nTotal !== 1 ? 's' : ''}
+// ─── Últimas matrículas ───────────────────────────────────────────────────────
+async function renderMatriculas() {
+  let alunos = [];
+  try {
+    const { data, error } = await supabase
+      .from('matriculas')
+      .select('status, aluno:aluno_id(nome), curso:curso_id(nome)')
+      .eq('tenant_id', getTenantId())
+      .order('created_at', { ascending: false })
+      .limit(5);
+      
+    if (error) throw error;
+    if (data) alunos = data.map(m => ({ nome: m.aluno?.nome ?? '—', curso: m.curso?.nome ?? '—', status: m.status }));
+  } catch (err) {
+    console.error('[Matriculas] Erro:', err);
+    toast('Erro ao carregar matrículas', 'error');
+  }
+
+  const el = document.getElementById('card-ultimas-mat');
+  if (!el) return;
+  
+  el.innerHTML = `
+    <div class="card-header">
+      <span class="card-title">Últimas Matrículas</span>
+      <button class="btn btn-ghost" id="btn-ver-mats" style="font-size:12px;padding:4px 8px">Ver todas</button>
+    </div>
+    <div style="overflow:hidden">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr>
+          <th style="padding:10px 16px;font-size:10.5px;color:var(--text-tertiary);text-align:left;border-bottom:1px solid var(--border-subtle);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Aluno</th>
+          <th style="padding:10px 16px;font-size:10.5px;color:var(--text-tertiary);text-align:left;border-bottom:1px solid var(--border-subtle);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Curso</th>
+          <th style="padding:10px 16px;font-size:10.5px;color:var(--text-tertiary);text-align:left;border-bottom:1px solid var(--border-subtle);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Status</th>
+        </tr></thead>
+        <tbody>
+          ${alunos.length > 0 ? alunos.map(a => `
+            <tr style="border-bottom:1px solid var(--border-subtle)">
+              <td style="padding:10px 16px;font-size:13px">${a.nome}</td>
+              <td style="padding:10px 16px;font-size:12px;color:var(--text-secondary)">${a.curso}</td>
+              <td style="padding:10px 16px"><span class="badge badge-gray" style="font-size:10.5px">${a.status.replace('_', ' ')}</span></td>
+            </tr>
+          `).join('') : `<tr><td colspan="3" style="text-align:center;padding:20px;font-size:13px;color:var(--text-tertiary)">Nenhuma matrícula recente.</td></tr>`}
+        </tbody>
+      </table>
+    </div>`;
+  el.querySelector('#btn-ver-mats')?.addEventListener('click', () => navigate('matriculas'));
+}
+
+// ─── Certificados ─────────────────────────────────────────────────────────────
+async function renderCerts() {
+  let certs = [];
+  try {
+    const { data, error } = await supabase
+      .from('certificados')
+      .select('aluno:aluno_id(nome), curso:curso_id(nome), data_validade, status')
+      .eq('tenant_id', getTenantId())
+      .order('data_validade', { ascending: true })
+      .limit(4);
+      
+    if (error) throw error;
+    if (data) certs = data.map(c => ({ aluno: c.aluno?.nome ?? '—', curso: c.curso?.nome ?? '—', validade: c.data_validade, status: c.status }));
+  } catch (err) {
+    console.error('[Certs] Erro:', err);
+    toast('Erro ao carregar certificados', 'error');
+  }
+
+  const el = document.getElementById('card-certs-vencer');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="card-header">
+      <span class="card-title">Certificados Recentes/Próximos</span>
+    </div>
+    <div class="card-body" style="padding:12px">
+      ${certs.length > 0 ? certs.map(c => `
+        <div class="cert-card">
+          <div class="cert-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+          </div>
+          <div class="cert-info">
+            <div class="cert-name">${c.aluno}</div>
+            <div class="cert-meta">${c.curso} · Val: ${fmtDate(c.validade)}</div>
+          </div>
+          <span class="badge ${c.status==='valido'?'badge-green':c.status==='a_vencer'?'badge-amber':'badge-red'}">
+            ${c.status==='valido'?'Válido':c.status==='a_vencer'?'A vencer':'Vencido'}
           </span>
         </div>
-        <div style="overflow-x:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Curso</th>
-                <th>Alunos</th>
-                <th>Início</th>
-                <th>Fim</th>
-                <th>Ações</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      </div>`;
-  }
-
-  detail.innerHTML = `
-    <button class="btn btn-secondary inst-back-btn" aria-label="Voltar à lista de instrutores">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" width="14" height="14" aria-hidden="true">
-        <line x1="19" y1="12" x2="5" y2="12"/>
-        <polyline points="12 19 5 12 12 5"/>
-      </svg>
-      Voltar
-    </button>
-  ` + header + tableHtml;
-
-  // Botão voltar (mobile)
-  detail.querySelector('.inst-back-btn')?.addEventListener('click', () => {
-    _activeId = null;
-    document.querySelectorAll('.inst-item').forEach(c => {
-      c.classList.remove('active');
-      c.setAttribute('aria-pressed', 'false');
-    });
-    document.querySelector('.inst-master-panel')?.classList.remove('mob-hide');
-    document.getElementById('inst-detail-panel')?.classList.add('mob-hide');
-    document.getElementById('detail-content').innerHTML = _renderDetailEmpty();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-
-  // ── Bind: lupa → modal de alunos por turma ────────────────────────────────
-  detail.querySelectorAll('.inst-ver-alunos').forEach(btn =>
-    btn.addEventListener('click', () =>
-      abrirAlunosDaTurma(btn.dataset.turmaId, btn.dataset.turmaCodigo)
-    )
-  );
-}
-
-// ─── Modal: Alunos matriculados na turma ──────────────────────────────────────
-async function abrirAlunosDaTurma(turmaId, turmaCodigo) {
-  openModal(`Alunos — Turma ${esc(turmaCodigo)}`, `
-    <div style="display:flex;align-items:center;justify-content:center;
-                padding:40px;gap:10px;color:var(--text-tertiary);font-size:13px">
-      <div class="skeleton"
-           style="width:18px;height:18px;border-radius:50%;flex-shrink:0"></div>
-      Carregando alunos...
-    </div>
-  `);
-
-  try {
-    const alunos = await loadAlunosDaTurma(turmaId);
-    const body   = document.getElementById('modal-body');
-    if (!body) return;
-
-    if (!alunos.length) {
-      body.innerHTML = `
-        <p style="text-align:center;padding:40px;
-                  color:var(--text-tertiary);font-size:13px">
-          Nenhum aluno matriculado nesta turma.
-        </p>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" id="modal-cancel">Fechar</button>
-        </div>`;
-      document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-      return;
-    }
-
-    // Contadores de status para o resumo
-    const counts = alunos.reduce((acc, a) => {
-      acc[a.status] = (acc[a.status] || 0) + 1;
-      return acc;
-    }, {});
-
-    const resumoPills = Object.entries(counts)
-      .map(([st, n]) =>
-        `<span class="badge ${ALUNO_BADGE[st] ?? 'badge-gray'}">
-           ${n} ${ALUNO_LABEL[st] ?? st}
-         </span>`)
-      .join('');
-
-    body.innerHTML = `
-      <!-- Barra de resumo -->
-      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;
-                  padding:12px 16px;background:var(--bg-elevated);
-                  border-bottom:1px solid var(--border-subtle)">
-        <span style="font-size:11.5px;color:var(--text-secondary);
-                     font-family:var(--font-mono);margin-right:4px">
-          ${alunos.length} aluno${alunos.length !== 1 ? 's' : ''}
-        </span>
-        ${resumoPills}
-      </div>
-
-      <!-- Lista de alunos -->
-      <div style="max-height:420px;overflow-y:auto">
-        ${alunos.map((a, idx) => `
-          <div style="display:flex;align-items:center;gap:12px;
-                      padding:11px 16px;
-                      border-bottom:1px solid var(--border-subtle);
-                      ${idx % 2 === 0 ? 'background:var(--bg-base)' : ''}">
-
-            <div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;
-                        background:linear-gradient(135deg,var(--accent-soft),var(--blue-soft));
-                        border:1px solid var(--border-default);
-                        display:grid;place-items:center;
-                        font-size:12px;font-weight:600;color:var(--text-primary)"
-                 aria-hidden="true">
-              ${esc(a.nome.charAt(0).toUpperCase())}
-            </div>
-
-            <div style="flex:1;min-width:0">
-              <div style="font-weight:500;font-size:13px;
-                          white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-                ${esc(a.nome)}
-              </div>
-              <div style="font-size:11.5px;color:var(--text-tertiary);
-                          font-family:var(--font-mono);margin-top:1px">
-                ${esc(a.doc)}
-              </div>
-            </div>
-
-            <span class="badge ${ALUNO_BADGE[a.status] ?? 'badge-gray'}">
-              ${ALUNO_LABEL[a.status] ?? esc(a.status)}
-            </span>
-
-          </div>`).join('')}
-      </div>
-
-      <div class="modal-footer">
-        <button class="btn btn-secondary" id="modal-cancel">Fechar</button>
-      </div>`;
-
-    document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-
-  } catch (err) {
-    toast(`Erro ao carregar alunos: ${err.message}`, 'error');
-    closeModal();
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-//  CRUD — Novo / Editar / Excluir Instrutor (sem alterações funcionais)
-// ══════════════════════════════════════════════════════════════════════════════
-
-// ─── Modal Instrutor ──────────────────────────────────────────────────────────
-function modalInstrutor(inst = null) {
-  const isEdit = !!inst;
-
-  let espString = '';
-  if (inst) {
-    if (Array.isArray(inst.especialidades))          espString = inst.especialidades.join(', ');
-    else if (typeof inst.especialidades === 'string') espString = inst.especialidades;
-  }
-
-  openModal(isEdit ? 'Editar Instrutor' : 'Novo Instrutor', `
-    <div class="form-grid">
-      <div class="form-group full">
-        <label>Nome Completo <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-nome" type="text" value="${inst?.nome || ''}"
-               placeholder="Ex: Carlos Eduardo Lima" autocomplete="name">
-      </div>
-      <div class="form-group">
-        <label>E-mail <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-email" type="email" value="${inst?.email || ''}"
-               placeholder="instrutor@email.com" autocomplete="email" inputmode="email">
-      </div>
-      <div class="form-group">
-        <label>Telefone <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-tel" type="text" value="${inst?.telefone || ''}"
-               placeholder="(11) 99999-9999" autocomplete="tel" inputmode="tel">
-      </div>
-      <div class="form-group full">
-        <label>Especialidades <span style="color:var(--red)" aria-hidden="true">*</span>
-          <span style="font-weight:400;color:var(--text-tertiary)">(separadas por vírgula)</span>
-        </label>
-        <input id="f-esp" type="text" value="${espString}"
-               placeholder="Ex: NR-35, NR-33, Primeiros Socorros">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-      <button class="btn btn-primary"   id="modal-save">
-        ${isEdit ? 'Salvar Alterações' : 'Criar Instrutor'}
-      </button>
-    </div>
-  `);
-
-  bindBlur('f-nome',  'Nome',           ['required']);
-  bindBlur('f-email', 'E-mail',         ['required', 'email']);
-  bindBlur('f-tel',   'Telefone',       ['required', 'phone']);
-  bindBlur('f-esp',   'Especialidades', ['required']);
-
-  document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('modal-save')?.addEventListener('click',   () => saveInstrutor(inst?.id));
-}
-
-// ─── Save ─────────────────────────────────────────────────────────────────────
-async function saveInstrutor(id) {
-  const nome   = document.getElementById('f-nome').value.trim();
-  const email  = document.getElementById('f-email').value.trim();
-  const tel    = document.getElementById('f-tel').value.trim();
-  const espRaw = document.getElementById('f-esp').value.trim();
-
-  const ok = validateForm([
-    { id: 'f-nome',  value: nome,   rules: ['required'],          label: 'Nome' },
-    { id: 'f-email', value: email,  rules: ['required', 'email'], label: 'E-mail' },
-    { id: 'f-tel',   value: tel,    rules: ['required', 'phone'], label: 'Telefone' },
-    { id: 'f-esp',   value: espRaw, rules: ['required'],          label: 'Especialidades' },
-  ]);
-  if (!ok) return;
-
-  const especialidades = espRaw.split(',').map(s => s.trim()).filter(Boolean);
-
-  const payload = {
-    tenant_id: getTenantId(),
-    nome, email,
-    telefone:      tel,
-    especialidades,
-  };
-
-  const btn = document.getElementById('modal-save');
-  btn.disabled    = true;
-  btn.textContent = 'Salvando...';
-
-  try {
-    let error;
-    if (id) {
-      ({ error } = await supabase
-        .from('instrutores').update(payload)
-        .eq('id', id).eq('tenant_id', getTenantId()));
-    } else {
-      ({ error } = await supabase.from('instrutores').insert(payload));
-    }
-    if (error) throw error;
-    closeModal();
-    toast(id ? 'Instrutor atualizado!' : 'Instrutor cadastrado!', 'success');
-    await loadData();
-  } catch (err) {
-    console.error(err);
-    toast('Erro ao salvar instrutor', 'error');
-    btn.disabled    = false;
-    btn.textContent = id ? 'Salvar Alterações' : 'Criar Instrutor';
-  }
-}
-
-// ─── Excluir Instrutor ────────────────────────────────────────────────────────
-function confirmarExclusaoInstrutor(inst) {
-  openModal('Excluir Instrutor', `
-    <div class="danger-banner">
-      <div class="danger-banner-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" width="22" height="22">
-          <polyline points="3 6 5 6 21 6"/>
-          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
-          <path d="M10 11v6M14 11v6"/>
-          <path d="M9 6V4h6v2"/>
-        </svg>
-      </div>
-      <div class="danger-banner-info">
-        <div class="danger-banner-title">Excluir instrutor permanentemente</div>
-        <div class="danger-banner-sub">${esc(inst.nome)}</div>
-      </div>
-    </div>
-    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;line-height:1.6">
-      Esta ação é irreversível. Turmas vinculadas a este instrutor
-      <strong style="color:var(--red)">perderão o vínculo</strong>.
-    </p>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-      <button class="btn btn-danger"    id="btn-confirmar-exclusao">Excluir Instrutor</button>
-    </div>
-  `);
-  document.getElementById('modal-cancel')
-    ?.addEventListener('click', () => closeModal());
-  document.getElementById('btn-confirmar-exclusao')
-    ?.addEventListener('click', () => excluirInstrutor(inst.id));
-}
-
-async function excluirInstrutor(id) {
-  const btn = document.getElementById('btn-confirmar-exclusao');
-  btn.disabled    = true;
-  btn.textContent = 'Excluindo...';
-  try {
-    const { error } = await supabase
-      .from('instrutores').delete()
-      .eq('id', id).eq('tenant_id', getTenantId());
-    if (error) throw error;
-
-    // Se o instrutor excluído era o selecionado, limpa o detail
-    if (_activeId === id) {
-      _activeId = null;
-      const detail = document.getElementById('detail-content');
-      if (detail) detail.innerHTML = _renderDetailEmpty();
-    }
-
-    closeModal();
-    toast('Instrutor excluído com sucesso.', 'success');
-    await loadData();
-  } catch (err) {
-    toast(`Erro ao excluir: ${err.message}`, 'error');
-    btn.disabled    = false;
-    btn.textContent = 'Excluir Instrutor';
-  }
+      `).join('') : `<p style="text-align:center;padding:20px;color:var(--text-tertiary);font-size:13px">Nenhum certificado encontrado.</p>`}
+    </div>`;
 }

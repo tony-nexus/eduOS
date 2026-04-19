@@ -1,1051 +1,566 @@
-/**
- * /js/views/turmas.js
- * CRUD real para Turmas via Supabase.
- *
- * MELHORIAS APLICADAS:
- *  - Código da turma gerado AUTOMATICAMENTE no padrão: SIGLA-ANO-SEQ (ex: NR35-2025-003)
- *  - Campo código readonly no modal → gerado ao selecionar curso + data início
- *  - Ocupação real lida da coluna 'ocupadas' (sem mock de 80%)
- *  - Filtro de turmas por curso no modal de matrícula exportado via _turmasCache
- *  - XSS escape em valores interpolados no HTML
- */
-
-import { supabase, getTenantId } from '../core/supabase.js';
-import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
-import { validateForm, fieldError, fieldOk } from '../ui/validate.js';
-import { autoSyncTurmaStatus, autoEnrollAguardando, autoEmitirCertificados } from '../core/automations.js';
-
-let _turmas     = [];
-let _cursos     = [];
-let _instrutores = [];
-
-export let _turmasCache = []; // acessado por matriculas.js
-
-const BADGE = { agendada:'badge-blue', em_andamento:'badge-amber', concluida:'badge-green', cancelada:'badge-red' };
-const LABEL = { agendada:'Agendada', em_andamento:'Em Andamento', concluida:'Concluída', cancelada:'Cancelada' };
-
-// ─── Status calculado pelas datas ──────────────────────────────────────────────
-function calcularStatusPorData(inicio, fim) {
-  if (!inicio) return 'agendada';
-  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-  const di   = new Date(inicio + 'T00:00:00');
-  const df   = fim ? new Date(fim + 'T00:00:00') : null;
-  if (di > hoje)              return 'agendada';
-  if (df && df < hoje)        return 'concluida';
-  return 'em_andamento';
-}
-
-// ─── Render principal ─────────────────────────────────────────────────────────
-export async function render() {
-  setContent(`
-    <div class="page-header">
-      <div><h1>Turmas</h1><p>Agendamento e controle de turmas</p></div>
-      <div class="page-header-actions">
-        <button class="btn btn-secondary" id="btn-exportar-csv">
-          Exportar CSV
-        </button>
-        <button class="btn btn-secondary" id="btn-exportar-pdf">
-          Exportar PDF
-        </button>
-        <button class="btn btn-primary" id="btn-nova-turma">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Nova Turma
-        </button>
-      </div>
-    </div>
-    <div class="stats-row" id="turmas-kpis">
-      ${Array(4).fill('<div class="stat-card"><div class="skeleton" style="height:40px;width:100%"></div></div>').join('')}
-    </div>
-    <div class="table-wrap">
-      <div class="table-toolbar">
-        <div class="search-input-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-          <input class="search-input" id="search-turmas" placeholder="Código ou curso...">
-        </div>
-        <select class="select-input" id="filtro-curso-turma">
-          <option value="">Todos os cursos</option>
-        </select>
-        <select class="select-input" id="filtro-inst-turma">
-          <option value="">Todos os instrutores</option>
-        </select>
-        <select class="select-input" id="filtro-status-turma">
-          <option value="">Todos os status</option>
-          <option value="agendada">Agendada</option>
-          <option value="em_andamento">Em Andamento</option>
-          <option value="concluida">Concluída</option>
-          <option value="cancelada">Cancelada</option>
-        </select>
-      </div>
-      <div style="overflow-x:auto">
-        <table>
-          <thead><tr>
-            <th>Código</th><th>Curso</th><th>Instrutor</th>
-            <th>Período</th><th>Vagas</th><th>Status</th><th>Ações</th>
-          </tr></thead>
-          <tbody id="turmas-tbody">
-            <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-tertiary)">
-              <div class="skeleton" style="width:16px;height:16px;border-radius:50%;display:inline-block"></div> Carregando...
-            </td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `);
-
-  document.getElementById('btn-nova-turma')?.addEventListener('click', () => modalTurma());
-  document.getElementById('btn-exportar-csv')?.addEventListener('click', exportarCSV);
-  document.getElementById('btn-exportar-pdf')?.addEventListener('click', exportarPDF);
-  document.getElementById('search-turmas')?.addEventListener('input', applyFilter);
-  document.getElementById('filtro-status-turma')?.addEventListener('change', applyFilter);
-  document.getElementById('filtro-curso-turma')?.addEventListener('change', applyFilter);
-  document.getElementById('filtro-inst-turma')?.addEventListener('change', applyFilter);
-
-  await Promise.all([loadTurmas(), loadCursos(), loadInstrutores()]);
-
-  // ── Auto-sync de status por data (agendada→em_andamento→concluida) ──────
-  autoSyncTurmaStatus().then(count => {
-    if (count > 0) {
-      toast(`${count} turma(s) avançada(s) automaticamente por data.`, 'info');
-      loadTurmas();
-    }
-  });
-
-  const fCurso = document.getElementById('filtro-curso-turma');
-  if (fCurso) _cursos.forEach(c => fCurso.innerHTML += `<option value="${c.id}">${esc(c.nome)}</option>`);
-  
-  const fInst = document.getElementById('filtro-inst-turma');
-  if (fInst) _instrutores.forEach(i => fInst.innerHTML += `<option value="${i.id}">${esc(i.nome)}</option>`);
-}
-
-// ─── Fetches ──────────────────────────────────────────────────────────────────
-async function loadCursos() {
-  try {
-    const { data } = await supabase.from('cursos')
-      .select('id, nome, codigo')
-      .eq('tenant_id', getTenantId()).eq('ativo', true).order('nome');
-    _cursos = data || [];
-  } catch(_) { _cursos = []; }
-}
-
-async function loadInstrutores() {
-  try {
-    const { data } = await supabase.from('instrutores')
-      .select('id, nome').eq('tenant_id', getTenantId()).order('nome');
-    _instrutores = data || [];
-  } catch(_) { _instrutores = []; }
-}
-
-async function loadTurmas() {
-  try {
-    const { data, error } = await supabase
-      .from('turmas')
-      .select('*, curso:curso_id(id, nome, codigo), instrutor:instrutor_id(nome)')
-      .eq('tenant_id', getTenantId())
-      .order('data_inicio', { ascending: false });
-
-    if (error) throw error;
-    _turmas = (data || []).map(t => ({
-      ...t,
-      curso_nome:     t.curso?.nome      || '—',
-      curso_codigo:   t.curso?.codigo    || '',
-      instrutor_nome: t.instrutor?.nome  || '—',
-    }));
-    _turmasCache = _turmas; // exporta para matriculas.js
-  } catch (err) {
-    console.error(err);
-    toast('Erro ao carregar turmas', 'error');
-    _turmas = [];
-  }
-  renderKPIs(_turmas);
-  applyFilter();
-}
-
-// ─── KPIs ─────────────────────────────────────────────────────────────────────
-function renderKPIs(turmas) {
-  const ag  = turmas.filter(t => t.status === 'agendada').length;
-  const em  = turmas.filter(t => t.status === 'em_andamento').length;
-  const con = turmas.filter(t => t.status === 'concluida').length;
-  const can = turmas.filter(t => t.status === 'cancelada').length;
-  const el = document.getElementById('turmas-kpis');
-  if (!el) return;
-  el.innerHTML = `
-    <div class="stat-card"><div class="stat-label">Agendadas</div><div class="stat-value" style="color:var(--blue)">${ag}</div></div>
-    <div class="stat-card"><div class="stat-label">Em Andamento</div><div class="stat-value" style="color:var(--accent)">${em}</div></div>
-    <div class="stat-card"><div class="stat-label">Concluídas</div><div class="stat-value" style="color:var(--green)">${con}</div></div>
-    <div class="stat-card"><div class="stat-label">Canceladas</div><div class="stat-value" style="color:var(--red)">${can}</div></div>
-  `;
-}
-
-// ─── Filtro / tabela ──────────────────────────────────────────────────────────
-function applyFilter() {
-  const q  = (document.getElementById('search-turmas')?.value || '').toLowerCase();
-  const st = document.getElementById('filtro-status-turma')?.value || '';
-  const cr = document.getElementById('filtro-curso-turma')?.value || '';
-  const is = document.getElementById('filtro-inst-turma')?.value || '';
-
-  const f  = _turmas.filter(t =>
-    (!q  || t.codigo?.toLowerCase().includes(q) || t.curso_nome.toLowerCase().includes(q)) &&
-    (!st || t.status === st) &&
-    (!cr || t.curso_id === cr) &&
-    (!is || t.instrutor_id === is)
-  );
-  const tbody = document.getElementById('turmas-tbody');
-  if (!tbody) return;
-  if (!f.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-tertiary)">Nenhuma turma encontrada.</td></tr>`;
-    return;
-  }
-  tbody.innerHTML = f.map(t => {
-    const pct = t.vagas > 0 ? Math.round((t.ocupadas || 0) / t.vagas * 100) : 0;
-    const pctColor = pct >= 100 ? 'var(--red)' : pct >= 80 ? 'var(--amber)' : 'var(--accent)';
-    return `
-    <tr>
-      <td><span style="font-family:var(--font-mono);font-size:12px;color:var(--accent)">${esc(t.codigo || '—')}</span></td>
-      <td style="font-weight:500">${esc(t.curso_nome)}</td>
-      <td style="font-size:12.5px;color:var(--text-secondary)">${esc(t.instrutor_nome)}</td>
-      <td style="font-size:12px;color:var(--text-secondary);white-space:nowrap">
-        ${t.data_inicio ? fmtDate(t.data_inicio) : '—'} – ${t.data_fim ? fmtDate(t.data_fim) : '—'}
-      </td>
-      <td>
-        <div style="display:flex;align-items:center;gap:8px">
-          <div class="progress-bar" style="width:60px">
-            <div class="progress-fill" style="width:${pct}%;background:${pctColor}"></div>
-          </div>
-          <span style="font-size:11.5px;color:var(--text-tertiary)">${t.ocupadas || 0}/${t.vagas || 0}</span>
-        </div>
-      </td>
-      <td><span class="badge ${BADGE[t.status] ?? 'badge-gray'}">${LABEL[t.status] ?? t.status}</span></td>
-      <td>
-        <div style="display:flex;gap:4px">
-          <button class="action-btn action-alunos" data-id="${t.id}">Alunos</button>
-          ${['agendada','em_andamento'].includes(t.status) ? `
-            <button class="action-btn action-editar" data-id="${t.id}">Editar</button>
-            <button class="action-btn action-encerrar" data-id="${t.id}" style="color:var(--amber);border-color:var(--amber)">Encerrar</button>
-          ` : ''}
-          <button class="action-btn danger action-excluir-turma" data-id="${t.id}">Excluir</button>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-
-  document.querySelectorAll('.action-alunos').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const t = _turmas.find(x => x.id === btn.dataset.id);
-      if (t) verAlunos(t);
-    });
-  });
-
-  document.querySelectorAll('.action-editar').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const t = _turmas.find(x => x.id === btn.dataset.id);
-      if (t) modalTurma(t);
-    });
-  });
-
-  document.querySelectorAll('.action-encerrar').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const t = _turmas.find(x => x.id === btn.dataset.id);
-      if (t) encerrarTurma(t);
-    });
-  });
-
-  document.querySelectorAll('.action-excluir-turma').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const t = _turmas.find(x => x.id === btn.dataset.id);
-      if (t) confirmarExclusaoTurma(t);
-    });
-  });
-}
-
-// ─── Geração automática do código de turma ────────────────────────────────────
-/**
- * Gera código no formato: SIGLA-ANO-SEQ
- * Ex: NR35-2025-003
- *
- * Algoritmo:
- *  1. Pega o codigo do curso selecionado (ex: 'NR-35' → normaliza para 'NR35')
- *  2. Extrai o ano da data de início
- *  3. Conta quantas turmas desse curso já existem nesse ano → seq = count + 1
- *  4. Formata com zero-padding: 001, 002 ...
- */
-async function gerarCodigoTurma(cursoId, dataInicio) {
-  if (!cursoId || !dataInicio) return '';
-  const curso = _cursos.find(c => c.id === cursoId);
-  if (!curso) return '';
-
-  // Normaliza sigla: remove hífen e espaços, uppercase
-  const sigla = (curso.codigo || curso.nome.substring(0, 5))
-    .toUpperCase().replace(/[\s\-]/g, '');
-  const ano = new Date(dataInicio + 'T00:00:00').getFullYear();
-  const prefixo = `${sigla}-${ano}`;
-
-  try {
-    const { data, error } = await supabase
-      .from('turmas')
-      .select('codigo')
-      .eq('tenant_id', getTenantId())
-      .like('codigo', `${prefixo}-%`)
-      .order('codigo', { ascending: false })
-      .limit(1);
-
-    if (error) throw error;
-
-    let nextSeq = 1;
-    if (data && data.length > 0 && data[0].codigo) {
-      const parts = data[0].codigo.split('-');
-      const lastSeqStr = parts[parts.length - 1];
-      const lastSeq = parseInt(lastSeqStr, 10);
-      if (!isNaN(lastSeq)) {
-        nextSeq = lastSeq + 1;
-      }
-    }
-
-    const seq = String(nextSeq).padStart(3, '0');
-    return `${prefixo}-${seq}`;
-  } catch (_) {
-    return `${prefixo}-001`;
-  }
-}
-
-// ─── Modal Turma ──────────────────────────────────────────────────────────────
-function modalTurma(turma = null) {
-  const isEdit = !!turma;
-  const cursosOpts = _cursos.map(c =>
-    `<option value="${c.id}" data-codigo="${esc(c.codigo)}" ${turma?.curso_id === c.id ? 'selected' : ''}>${esc(c.nome)}</option>`
-  ).join('');
-  const instOpts = _instrutores.map(i =>
-    `<option value="${i.id}" ${turma?.instrutor_id === i.id ? 'selected' : ''}>${esc(i.nome)}</option>`
-  ).join('');
-
-  const statusInicial = turma
-    ? (turma.status === 'cancelada' ? 'cancelada' : calcularStatusPorData(turma.data_inicio, turma.data_fim))
-    : calcularStatusPorData('', '');
-
-  openModal(isEdit ? 'Editar Turma' : 'Nova Turma', `
-    <div class="form-grid">
-
-      <div class="form-group">
-        <label>Curso <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <select id="f-curso" ${isEdit ? 'disabled' : ''}>
-          <option value="">— Selecione —</option>
-          ${cursosOpts}
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>Instrutor <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <select id="f-instrutor">
-          <option value="">— Selecione —</option>
-          ${instOpts}
-        </select>
-      </div>
-
-      <div class="form-group full">
-        <label>Código da Turma</label>
-        <input id="f-codigo" type="text"
-          value="${esc(turma?.codigo || '')}"
-          placeholder="Gerado automaticamente…"
-          readonly
-          style="font-family:var(--font-mono);letter-spacing:0.5px;background:var(--bg-overlay);cursor:not-allowed;opacity:0.8">
-        <small style="color:var(--text-tertiary);font-size:11px">
-          ${isEdit ? '🔒 Código é imutável após criação.' : 'Preenchido automaticamente ao selecionar curso e data de início.'}
-        </small>
-      </div>
-
-      <div class="form-group">
-        <label>Data Início <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-inicio" type="date" value="${esc(turma?.data_inicio || '')}">
-      </div>
-
-      <div class="form-group">
-        <label>Data Fim <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-fim" type="date" value="${esc(turma?.data_fim || '')}">
-      </div>
-
-      <div class="form-group">
-        <label>Vagas <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-vagas" type="number" min="1" max="31" value="${turma?.vagas || 20}">
-        <small style="color:var(--text-tertiary);font-size:11px">Máximo de 31 alunos por turma.</small>
-      </div>
-
-      <div class="form-group">
-        <label>Local / Modalidade <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-local" type="text" placeholder="Ex: Sede SP / Online" value="${esc(turma?.local || '')}">
-      </div>
-
-      <div class="form-group full">
-        <label>Status</label>
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 0">
-          <span class="badge ${BADGE[statusInicial] ?? 'badge-gray'}" id="f-status-badge">${LABEL[statusInicial] ?? statusInicial}</span>
-          <input type="hidden" id="f-status" value="${statusInicial}">
-          <span style="font-size:11.5px;color:var(--text-tertiary);font-family:var(--font-mono)">
-            Calculado automaticamente pelas datas informadas
-          </span>
-        </div>
-      </div>
-
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-      <button class="btn btn-primary" id="modal-save">${isEdit ? 'Salvar Alterações' : 'Criar Turma'}</button>
-    </div>
-  `);
-
-  // ── Bloqueia seleção de datas passadas no calendário (apenas nova turma) ──
-  if (!isEdit) {
-    const hoje = new Date().toISOString().split('T')[0];
-    document.getElementById('f-inicio')?.setAttribute('min', hoje);
-    document.getElementById('f-fim')?.setAttribute('min', hoje);
-  }
-
-  // ── Auto-geração de código apenas para turmas novas ──────────────────────
-  async function triggerAutoCode() {
-    if (isEdit) return; // código é chave - não sobrescreve em edições
-    const cursoId    = document.getElementById('f-curso')?.value;
-    const dataInicio = document.getElementById('f-inicio')?.value;
-    if (!cursoId || !dataInicio) return;
-    const codigo = await gerarCodigoTurma(cursoId, dataInicio);
-    const input  = document.getElementById('f-codigo');
-    if (input) input.value = codigo;
-  }
-
-  // ── Atualiza badge de status ao mudar datas ──────────────────────────────
-  function atualizarStatusBadge() {
-    const inicio = document.getElementById('f-inicio')?.value;
-    const fim    = document.getElementById('f-fim')?.value;
-    const statusAtual = turma?.status === 'cancelada' ? 'cancelada' : calcularStatusPorData(inicio, fim);
-    const badge  = document.getElementById('f-status-badge');
-    const hidden = document.getElementById('f-status');
-    if (badge) {
-      badge.className = `badge ${BADGE[statusAtual] ?? 'badge-gray'}`;
-      badge.textContent = LABEL[statusAtual] ?? statusAtual;
-    }
-    if (hidden) hidden.value = statusAtual;
-  }
-
-  document.getElementById('f-inicio')?.addEventListener('change', () => {
-    atualizarStatusBadge();
-    if (!isEdit) triggerAutoCode();
-  });
-  document.getElementById('f-fim')?.addEventListener('change', atualizarStatusBadge);
-
-  if (!isEdit) {
-    document.getElementById('f-curso')?.addEventListener('change', triggerAutoCode);
-    triggerAutoCode();
-  }
-
-  document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('modal-save')?.addEventListener('click', () => saveTurma(turma?.id));
-}
-
-// ─── Save ─────────────────────────────────────────────────────────────────────
-async function saveTurma(id) {
-  const codigo      = document.getElementById('f-codigo')?.value.trim();
-  const curso_id    = document.getElementById('f-curso')?.value;
-  const instrutor_id = document.getElementById('f-instrutor')?.value || null;
-  const inicio      = document.getElementById('f-inicio')?.value || null;
-  const fim         = document.getElementById('f-fim')?.value || null;
-  const vagas       = parseInt(document.getElementById('f-vagas')?.value) || 0;
-  const local       = document.getElementById('f-local')?.value.trim() || null;
-  const status      = document.getElementById('f-status')?.value;
-
-  const ok = validateForm([
-    { id: 'f-codigo',    value: codigo,          rules: ['required'],              label: 'Código' },
-    { id: 'f-curso',     value: curso_id,         rules: ['required'],              label: 'Curso' },
-    { id: 'f-instrutor', value: instrutor_id,     rules: ['required'],              label: 'Instrutor' },
-    { id: 'f-inicio',    value: inicio,           rules: ['required'],              label: 'Data de início' },
-    { id: 'f-fim',       value: fim,              rules: ['required'],              label: 'Data de fim' },
-    { id: 'f-vagas',     value: vagas.toString(), rules: ['required','int_positive'], label: 'Vagas' },
-    { id: 'f-local',     value: local,            rules: ['required'],              label: 'Local / Modalidade' },
-  ]);
-  if (!ok) return;
-
-  if (fim && inicio && fim < inicio) {
-    fieldError('f-fim', 'Data de fim deve ser posterior à data de início.');
-    return;
-  }
-  fieldOk('f-fim');
-
-  // Datas retroativas só são bloqueadas na criação (edição mantém datas originais)
-  if (!id && inicio) {
-    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-    const di   = new Date(inicio + 'T00:00:00');
-    if (di < hoje) {
-      fieldError('f-inicio', 'Não é permitido criar turmas com data de início no passado.');
-      return;
-    }
-    fieldOk('f-inicio');
-  }
-
-  if (vagas > 31) {
-    fieldError('f-vagas', 'O limite máximo é 31 alunos por turma.');
-    return;
-  }
-  fieldOk('f-vagas');
-
-  const payload = { tenant_id: getTenantId(), codigo, curso_id, instrutor_id, data_inicio: inicio, data_fim: fim, vagas, local, status };
-
-  const btn = document.getElementById('modal-save');
-  btn.disabled = true;
-  btn.textContent = 'Salvando...';
-
-  try {
-    let error, newTurmaId;
-    if (id) {
-      ({ error } = await supabase.from('turmas').update(payload).eq('id', id).eq('tenant_id', getTenantId()));
-    } else {
-      payload.ocupadas = 0;
-      let res = await supabase.from('turmas').insert(payload).select('id').single();
-      error = res.error;
-      newTurmaId = res.data?.id;
-
-      // Retry em colisão de código
-      if (error && error.code === '23505') {
-        const novoCodigo = await gerarCodigoTurma(curso_id, inicio);
-        payload.codigo = novoCodigo;
-        res = await supabase.from('turmas').insert(payload).select('id').single();
-        error = res.error;
-        newTurmaId = res.data?.id;
-      }
-    }
-
-    if (error) {
-      if (error.code === '23505') throw new Error('Já existe uma turma com este código. Tente novamente.');
-      throw error;
-    }
-    closeModal();
-    toast(id ? 'Turma atualizada com sucesso!' : `Turma ${payload.codigo} criada!`, 'success');
-
-    // ── Auto-enroll: vincula alunos aguardando este curso ─────────────────
-    if (!id && newTurmaId) {
-      autoEnrollAguardando(newTurmaId, curso_id, vagas).then(enrolled => {
-        if (enrolled > 0) {
-          toast(
-            `${enrolled} aluno(s) em espera foram automaticamente adicionados à turma ${payload.codigo}!`,
-            'info'
-          );
-          loadTurmas();
-        }
-      });
-    }
-
-    await loadTurmas();
-  } catch (err) {
-    toast(`Erro: ${err.message}`, 'error');
-    btn.disabled = false;
-    btn.textContent = id ? 'Salvar Alterações' : 'Criar Turma';
-  }
-}
-
-// ─── Diário de Classe ─────────────────────────────────────────────────────────
-async function verAlunos(turma) {
-  const STATUS_BADGE = {
-    matriculado:         'badge-blue',
-    aguardando_turma:    'badge-amber',
-    em_andamento:        'badge-accent',
-    concluido:           'badge-green',
-    certificado_emitido: 'badge-purple',
-    reprovado:           'badge-red',
-    cancelado:           'badge-gray',
-  };
-  const STATUS_LABEL = {
-    matriculado:         'Matriculado',
-    aguardando_turma:    'Ag. Turma',
-    em_andamento:        'Em Andamento',
-    concluido:           'Concluído',
-    certificado_emitido: 'Cert. Emitido',
-    reprovado:           'Reprovado',
-    cancelado:           'Cancelado',
-  };
-
-  openModal(`Diário de Classe — ${esc(turma.codigo)}`, `
-    <div style="text-align:center;padding:40px;color:var(--text-tertiary)">Carregando...</div>
-  `);
-
-  try {
-    const { data, error } = await supabase
-      .from('matriculas')
-      .select('id, aluno_id, curso_id, aluno:aluno_id(nome, cpf, rnm), status')
-      .eq('turma_id', turma.id)
-      .eq('tenant_id', getTenantId())
-      .neq('status', 'cancelado');
-
-    if (error) throw error;
-
-    if (!data?.length) {
-      document.getElementById('modal-body').innerHTML = `
-        <div style="padding:40px;text-align:center;color:var(--text-tertiary)">Nenhum aluno nesta turma.</div>
-      `;
-      return;
-    }
-
-    // Botões de avaliação só disponíveis para turmas em andamento
-    const podeAvaliar = ['agendada', 'em_andamento', 'concluida'].includes(turma.status);
-
-    const counts = {
-      em_andamento: data.filter(m => m.status === 'em_andamento').length,
-      concluido:    data.filter(m => m.status === 'concluido').length,
-      reprovado:    data.filter(m => m.status === 'reprovado').length,
-    };
-
-    const html = data.map(m => {
-      const badge = STATUS_BADGE[m.status] ?? 'badge-gray';
-      const label = STATUS_LABEL[m.status] ?? m.status;
-      const doc   = m.aluno?.cpf ? `CPF: ${esc(m.aluno.cpf)}` : m.aluno?.rnm ? `RNM: ${esc(m.aluno.rnm)}` : '—';
-
-      const btns = podeAvaliar && m.status === 'em_andamento' ? `
-        <div style="display:flex;gap:4px;margin-top:8px">
-          <button class="action-btn diario-aprovar"
-            style="background:var(--green-soft);color:var(--green);border-color:var(--green)"
-            data-id="${m.id}" data-nome="${esc(m.aluno?.nome)}"
-            data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
-            ✓ Aprovar
-          </button>
-          <button class="action-btn danger diario-reprovar"
-            data-id="${m.id}" data-nome="${esc(m.aluno?.nome)}"
-            data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
-            ✗ Reprovar
-          </button>
-        </div>` : '';
-
-      return `
-        <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle)">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div>
-              <div style="font-weight:500;font-size:13px">${esc(m.aluno?.nome ?? '—')}</div>
-              <div style="font-size:11.5px;color:var(--text-tertiary);margin-top:2px">${doc}</div>
-            </div>
-            <span class="badge ${badge}">${label}</span>
-          </div>
-          ${btns}
-        </div>`;
-    }).join('');
-
-    document.getElementById('modal-body').innerHTML = `
-      <div style="display:flex;gap:16px;padding:12px 16px;background:var(--bg-elevated);border-bottom:1px solid var(--border-subtle);font-family:var(--font-mono);font-size:11.5px;color:var(--text-secondary)">
-        <span>${data.length} aluno(s)</span>
-        <span style="color:var(--accent)">${counts.em_andamento} em andamento</span>
-        <span style="color:var(--green)">${counts.concluido} aprovados</span>
-        <span style="color:var(--red)">${counts.reprovado} reprovados</span>
-      </div>
-      ${podeAvaliar ? `<div style="padding:8px 16px;background:var(--accent-soft);font-size:11.5px;color:var(--accent);font-family:var(--font-mono)">
-        Avalie cada aluno: Aprovar avança para Concluído · Reprovar cria nova matrícula em espera
-      </div>` : ''}
-      <div style="max-height:420px;overflow-y:auto">${html}</div>
-    `;
-
-    // ── Bind: Aprovar ───────────────────────────────────────────────────────
-    document.querySelectorAll('.diario-aprovar').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        btn.textContent = '...';
-        await avaliarAluno(btn.dataset.id, 'concluido');
-        toast(`${btn.dataset.nome} aprovado(a)!`, 'success');
-        verAlunos(turma);
-      });
-    });
-
-    // ── Bind: Reprovar ──────────────────────────────────────────────────────
-    document.querySelectorAll('.diario-reprovar').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        btn.textContent = '...';
-        await avaliarAluno(btn.dataset.id, 'reprovado', {
-          alunoId:  btn.dataset.alunoId,
-          cursoId:  btn.dataset.cursoId,
-        });
-        toast(`${btn.dataset.nome} reprovado(a). Nova matrícula criada na fila de espera.`, 'info');
-        verAlunos(turma);
-      });
-    });
-
-  } catch (e) {
-    document.getElementById('modal-body').innerHTML = `
-      <div style="padding:20px;color:var(--red)">Erro ao carregar alunos da turma.</div>
-    `;
-  }
-}
-
-// ─── Avaliação de aluno (aprovar / reprovar) ──────────────────────────────────
-async function avaliarAluno(matriculaId, novoStatus, opts = {}) {
-  const { error } = await supabase
-    .from('matriculas')
-    .update({ status: novoStatus })
-    .eq('id', matriculaId)
-    .eq('tenant_id', getTenantId())
-    .in('status', ['matriculado', 'em_andamento']);
-
-  if (error) throw error;
-
-  // Reprovado: cria nova matrícula automática em aguardando_turma (reciclagem)
-  if (novoStatus === 'reprovado' && opts.alunoId && opts.cursoId) {
-    await supabase.from('matriculas').insert({
-      tenant_id: getTenantId(),
-      aluno_id:  opts.alunoId,
-      curso_id:  opts.cursoId,
-      status:    'aguardando_turma',
-    }).catch(() => {}); // Ignora erro silenciosamente (pode já ter outra ativa)
-  }
-}
-
-// ─── Encerrar Turma ───────────────────────────────────────────────────────────
-async function encerrarTurma(turma) {
-  openModal(`Encerrar Turma — ${esc(turma.codigo)}`, `
-    <div style="padding:40px;text-align:center;color:var(--text-tertiary)">Carregando alunos...</div>
-  `);
-
-  try {
-    const { data, error } = await supabase
-      .from('matriculas')
-      .select('id, aluno_id, curso_id, status, aluno:aluno_id(nome, cpf, rnm)')
-      .eq('turma_id', turma.id)
-      .eq('tenant_id', getTenantId())
-      .neq('status', 'cancelado')
-      .order('status');
-
-    if (error) throw error;
-    _renderEncerrarModal(turma, data || []);
-  } catch (e) {
-    document.getElementById('modal-body').innerHTML =
-      `<div style="padding:20px;color:var(--red)">Erro ao carregar alunos da turma.</div>`;
-  }
-}
-
-function _renderEncerrarModal(turma, data) {
-  const PENDENTES  = ['em_andamento', 'matriculado'];
-  const pendentes  = data.filter(m => PENDENTES.includes(m.status));
-  const avaliados  = data.filter(m => !PENDENTES.includes(m.status));
-  const todosAvaliados = pendentes.length === 0;
-
-  const STATUS_BADGE = { concluido:'badge-green', reprovado:'badge-red', certificado_emitido:'badge-purple', em_andamento:'badge-accent', matriculado:'badge-blue' };
-  const STATUS_LABEL = { concluido:'Aprovado', reprovado:'Reprovado', certificado_emitido:'Certificado', em_andamento:'Em Andamento', matriculado:'Matriculado' };
-
-  const counts = {
-    aprovados:   data.filter(m => m.status === 'concluido' || m.status === 'certificado_emitido').length,
-    reprovados:  data.filter(m => m.status === 'reprovado').length,
-    pendentes:   pendentes.length,
-  };
-
-  const renderRow = (m, avaliado) => {
-    const doc = m.aluno?.cpf ? m.aluno.cpf : (m.aluno?.rnm ? m.aluno.rnm : '');
-    return `
-      <div class="enc-row" data-id="${m.id}" data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}"
-           data-nome="${esc(m.aluno?.nome ?? '')}"
-           style="padding:11px 16px;border-bottom:1px solid var(--border-subtle);
-                  display:flex;align-items:center;gap:12px">
-        ${!avaliado ? `
-          <input type="checkbox" class="enc-check" data-id="${m.id}"
-            style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent);flex-shrink:0">
-        ` : `<div style="width:15px;flex-shrink:0"></div>`}
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:500;font-size:13px">${esc(m.aluno?.nome ?? '—')}</div>
-          ${doc ? `<div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono)">${esc(doc)}</div>` : ''}
-        </div>
-        <span class="badge ${STATUS_BADGE[m.status] ?? 'badge-gray'}" style="flex-shrink:0">
-          ${STATUS_LABEL[m.status] ?? m.status}
-        </span>
-        ${!avaliado ? `
-          <div style="display:flex;gap:4px;flex-shrink:0">
-            <button class="action-btn enc-aprovar"
-              style="color:var(--green);border-color:var(--green);padding:3px 8px"
-              data-id="${m.id}" data-nome="${esc(m.aluno?.nome ?? '')}"
-              data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">✓</button>
-            <button class="action-btn danger enc-reprovar"
-              style="padding:3px 8px"
-              data-id="${m.id}" data-nome="${esc(m.aluno?.nome ?? '')}"
-              data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">✗</button>
-          </div>
-        ` : ''}
-      </div>`;
-  };
-
-  document.getElementById('modal-body').innerHTML = `
-
-    <!-- Resumo -->
-    <div style="display:flex;gap:0;border-bottom:1px solid var(--border-subtle)">
-      <div style="flex:1;padding:10px 16px;text-align:center;border-right:1px solid var(--border-subtle)">
-        <div style="font-size:18px;font-weight:700;color:var(--amber)">${counts.pendentes}</div>
-        <div style="font-size:10.5px;color:var(--text-tertiary)">Pendentes</div>
-      </div>
-      <div style="flex:1;padding:10px 16px;text-align:center;border-right:1px solid var(--border-subtle)">
-        <div style="font-size:18px;font-weight:700;color:var(--green)">${counts.aprovados}</div>
-        <div style="font-size:10.5px;color:var(--text-tertiary)">Aprovados</div>
-      </div>
-      <div style="flex:1;padding:10px 16px;text-align:center">
-        <div style="font-size:18px;font-weight:700;color:var(--red)">${counts.reprovados}</div>
-        <div style="font-size:10.5px;color:var(--text-tertiary)">Reprovados</div>
-      </div>
-    </div>
-
-    <!-- Barra de ações em massa (só se houver pendentes) -->
-    ${pendentes.length > 0 ? `
-    <div style="padding:10px 16px;background:var(--bg-elevated);border-bottom:1px solid var(--border-subtle);
-                display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px;color:var(--text-secondary)">
-        <input type="checkbox" id="enc-select-all" style="width:14px;height:14px;accent-color:var(--accent)">
-        Selecionar todos
-      </label>
-      <div style="flex:1"></div>
-      <button class="action-btn" id="enc-massa-aprovar"
-        style="color:var(--green);border-color:var(--green);display:flex;align-items:center;gap:4px;opacity:.5"
-        disabled>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg>
-        Aprovar selecionados
-      </button>
-      <button class="action-btn danger" id="enc-massa-reprovar"
-        style="display:flex;align-items:center;gap:4px;opacity:.5"
-        disabled>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        Reprovar selecionados
-      </button>
-    </div>
-    ` : ''}
-
-    <!-- Lista -->
-    <div style="max-height:360px;overflow-y:auto">
-      ${pendentes.length > 0 ? `
-        <div style="padding:6px 16px;font-size:10.5px;font-weight:600;text-transform:uppercase;
-                    letter-spacing:.06em;color:var(--amber);background:color-mix(in srgb,var(--amber) 8%,transparent)">
-          Pendentes de avaliação (${pendentes.length})
-        </div>
-        ${pendentes.map(m => renderRow(m, false)).join('')}
-      ` : ''}
-      ${avaliados.length > 0 ? `
-        <div style="padding:6px 16px;font-size:10.5px;font-weight:600;text-transform:uppercase;
-                    letter-spacing:.06em;color:var(--text-tertiary);background:var(--bg-elevated)">
-          Já avaliados (${avaliados.length})
-        </div>
-        ${avaliados.map(m => renderRow(m, true)).join('')}
-      ` : ''}
-      ${data.length === 0 ? `
-        <div style="padding:40px;text-align:center;color:var(--text-tertiary);font-size:13px">
-          Nenhum aluno nesta turma.
-        </div>` : ''}
-    </div>
-
-    <!-- Footer -->
-    <div class="modal-footer">
-      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-      <button class="btn btn-primary" id="btn-encerrar-confirm"
-        ${!todosAvaliados ? 'disabled style="opacity:.5;cursor:not-allowed"' : ''}>
-        ${todosAvaliados ? 'Encerrar Turma' : `Avalie os ${counts.pendentes} aluno(s) pendentes`}
-      </button>
-    </div>
-  `;
-
-  // ── Listeners ──────────────────────────────────────────────────────────────
-  document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
-
-  // Selecionar todos
-  document.getElementById('enc-select-all')?.addEventListener('change', function () {
-    document.querySelectorAll('.enc-check').forEach(cb => cb.checked = this.checked);
-    _atualizarBotoesEmMassa();
-  });
-
-  document.querySelectorAll('.enc-check').forEach(cb => {
-    cb.addEventListener('change', () => {
-      const total    = document.querySelectorAll('.enc-check').length;
-      const checked  = document.querySelectorAll('.enc-check:checked').length;
-      const selectAll = document.getElementById('enc-select-all');
-      if (selectAll) selectAll.checked = checked === total;
-      _atualizarBotoesEmMassa();
-    });
-  });
-
-  // Ação individual — Aprovar
-  document.querySelectorAll('.enc-aprovar').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = '...';
-      try {
-        await avaliarAluno(btn.dataset.id, 'concluido');
-        toast(`${btn.dataset.nome} aprovado(a)!`, 'success');
-      } catch { toast('Erro ao aprovar.', 'error'); }
-      const { data: fresh } = await supabase
-        .from('matriculas').select('id, aluno_id, curso_id, status, aluno:aluno_id(nome, cpf, rnm)')
-        .eq('turma_id', turma.id).eq('tenant_id', getTenantId()).neq('status', 'cancelado').order('status');
-      _renderEncerrarModal(turma, fresh || []);
-    });
-  });
-
-  // Ação individual — Reprovar
-  document.querySelectorAll('.enc-reprovar').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = '...';
-      try {
-        await avaliarAluno(btn.dataset.id, 'reprovado', { alunoId: btn.dataset.alunoId, cursoId: btn.dataset.cursoId });
-        toast(`${btn.dataset.nome} reprovado(a). Nova matrícula em espera criada.`, 'info');
-      } catch { toast('Erro ao reprovar.', 'error'); }
-      const { data: fresh } = await supabase
-        .from('matriculas').select('id, aluno_id, curso_id, status, aluno:aluno_id(nome, cpf, rnm)')
-        .eq('turma_id', turma.id).eq('tenant_id', getTenantId()).neq('status', 'cancelado').order('status');
-      _renderEncerrarModal(turma, fresh || []);
-    });
-  });
-
-  // Ação em massa — Aprovar
-  document.getElementById('enc-massa-aprovar')?.addEventListener('click', async () => {
-    const ids = _getSelectedIds();
-    if (!ids.length) return;
-    const btn = document.getElementById('enc-massa-aprovar');
-    btn.disabled = true; btn.textContent = 'Aprovando...';
-    for (const id of ids) {
-      try { await avaliarAluno(id, 'concluido'); } catch { /* continua */ }
-    }
-    toast(`${ids.length} aluno(s) aprovado(s)!`, 'success');
-    const { data: fresh } = await supabase
-      .from('matriculas').select('id, aluno_id, curso_id, status, aluno:aluno_id(nome, cpf, rnm)')
-      .eq('turma_id', turma.id).eq('tenant_id', getTenantId()).neq('status', 'cancelado').order('status');
-    _renderEncerrarModal(turma, fresh || []);
-  });
-
-  // Ação em massa — Reprovar
-  document.getElementById('enc-massa-reprovar')?.addEventListener('click', async () => {
-    const rows = document.querySelectorAll('.enc-check:checked');
-    if (!rows.length) return;
-    const btn = document.getElementById('enc-massa-reprovar');
-    btn.disabled = true; btn.textContent = 'Reprovando...';
-    for (const cb of rows) {
-      const row = cb.closest('.enc-row');
-      try {
-        await avaliarAluno(cb.dataset.id, 'reprovado', {
-          alunoId: row?.dataset.alunoId, cursoId: row?.dataset.cursoId,
-        });
-      } catch { /* continua */ }
-    }
-    toast(`${rows.length} aluno(s) reprovado(s). Matrículas em espera criadas.`, 'info');
-    const { data: fresh } = await supabase
-      .from('matriculas').select('id, aluno_id, curso_id, status, aluno:aluno_id(nome, cpf, rnm)')
-      .eq('turma_id', turma.id).eq('tenant_id', getTenantId()).neq('status', 'cancelado').order('status');
-    _renderEncerrarModal(turma, fresh || []);
-  });
-
-  // Encerrar turma
-  document.getElementById('btn-encerrar-confirm')?.addEventListener('click', async () => {
-    if (!todosAvaliados) return;
-    const btn = document.getElementById('btn-encerrar-confirm');
-    btn.disabled = true; btn.textContent = 'Encerrando...';
-    const { error } = await supabase.from('turmas')
-      .update({ status: 'concluida' }).eq('id', turma.id).eq('tenant_id', getTenantId());
-    if (error) { toast('Erro ao encerrar turma.', 'error'); btn.disabled = false; btn.textContent = 'Encerrar Turma'; return; }
-    closeModal();
-    toast(`Turma ${esc(turma.codigo)} encerrada!`, 'success');
-    autoEmitirCertificados().then(n => { if (n > 0) toast(`${n} certificado(s) emitido(s) automaticamente.`, 'info'); });
-    await loadTurmas();
-  });
-}
-
-function _getSelectedIds() {
-  return [...document.querySelectorAll('.enc-check:checked')].map(cb => cb.dataset.id);
-}
-
-function _atualizarBotoesEmMassa() {
-  const temSelecionados = document.querySelectorAll('.enc-check:checked').length > 0;
-  const btnApr = document.getElementById('enc-massa-aprovar');
-  const btnRep = document.getElementById('enc-massa-reprovar');
-  if (btnApr) { btnApr.disabled = !temSelecionados; btnApr.style.opacity = temSelecionados ? '1' : '.5'; }
-  if (btnRep) { btnRep.disabled = !temSelecionados; btnRep.style.opacity = temSelecionados ? '1' : '.5'; }
-}
-
-// ─── Exportação ───────────────────────────────────────────────────────────────
-function exportarCSV() {
-  const headers = ['Código','Curso','Instrutor','Início','Fim','Vagas','Ocupadas','Status'];
-  const rows = _turmas.map(t => [
-    t.codigo, t.curso_nome, t.instrutor_nome, t.data_inicio, t.data_fim, t.vagas, t.ocupadas, t.status
-  ].map(v => `"${v||''}"`).join(','));
-  const csv = [headers.join(','), ...rows].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href = url; a.download = 'turmas.csv'; a.click();
-  URL.revokeObjectURL(url);
-  toast('CSV exportado com sucesso!', 'success');
-}
-
-async function exportarPDF() {
-  try {
-    toast('Gerando PDF...', 'info');
-    if (typeof window.jspdf === 'undefined') {
-      await new Promise((resolve) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-        script.onload = resolve;
-        document.head.appendChild(script);
-      });
-      await new Promise((resolve) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js';
-        script.onload = resolve;
-        document.head.appendChild(script);
-      });
-    }
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    doc.text('Relatório de Turmas', 14, 15);
-    const body = _turmas.map(t => [
-      t.codigo,
-      t.curso_nome,
-      t.instrutor_nome,
-      `${t.data_inicio ? fmtDate(t.data_inicio) : ''} a ${t.data_fim ? fmtDate(t.data_fim) : '-'}`,
-      `${t.ocupadas || 0}/${t.vagas}`,
-      LABEL[t.status] || t.status
-    ]);
-    doc.autoTable({
-      head: [['Código', 'Curso', 'Instrutor', 'Período', 'Vagas', 'Status']],
-      body: body,
-      startY: 20,
-      theme: 'grid',
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [15, 23, 42] }
-    });
-    doc.save('turmas.pdf');
-    toast('PDF exportado com sucesso!', 'success');
-  } catch (err) {
-    console.error(err);
-    toast('Erro ao gerar PDF', 'error');
-  }
-}
-
-// ─── Exclusão de Turmas ────────────────────────────────────────────────────────
-
-function confirmarExclusaoTurma(turma) {
-  openModal('Excluir Turma', `
-    <div class="danger-banner">
-      <div class="danger-banner-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-      </div>
-      <div class="danger-banner-info">
-        <div class="danger-banner-title">Excluir turma permanentemente</div>
-        <div class="danger-banner-sub">${turma.codigo} · ${turma.curso_nome}</div>
-      </div>
-    </div>
-    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;line-height:1.6">
-      Esta ação é irreversível. O agendamento da turma e as matrículas associadas podem ser <strong style="color:var(--red)">afetadas permanentemente</strong>.
-    </p>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-      <button class="btn btn-danger" id="btn-confirmar-exclusao-turma">Excluir Turma</button>
-    </div>
-  `);
-
-  document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('btn-confirmar-exclusao-turma')?.addEventListener('click', () => excluirTurma(turma.id));
-}
-
-async function excluirTurma(id) {
-  const btn = document.getElementById('btn-confirmar-exclusao-turma');
-  btn.disabled = true;
-  btn.textContent = 'Excluindo...';
-  try {
-    const { error } = await supabase.from('turmas').delete().eq('id', id).eq('tenant_id', getTenantId());
-    if (error) throw error;
-    closeModal();
-    toast('Turma excluída com sucesso!', 'success');
-    await loadTurmas();
-  } catch (err) {
-    console.error(err);
-    toast(`Erro ao excluir: ${err.message}`, 'error');
-    btn.disabled = false;
-    btn.textContent = 'Excluir Turma';
-  }
-}
-
+2026-04-07 17:08:15,360  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:08:15,360  INFO  Branch de destino: main
+2026-04-07 17:08:15,360  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:08:54,679  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:08:58,489  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 17:08:58,590  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\.claude\settings.local.json
+2026-04-07 17:08:58,612  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\00-index\MOC.md
+2026-04-07 17:08:58,633  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:08:58,646  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\visao-geral.md
+2026-04-07 17:08:58,660  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-alunos.md
+2026-04-07 17:08:58,675  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-auth.md
+2026-04-07 17:08:58,692  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-certificados.md
+2026-04-07 17:08:58,707  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:08:58,720  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-cursos.md
+2026-04-07 17:08:58,735  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-dashboard.md
+2026-04-07 17:08:58,750  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-date-picker.md
+2026-04-07 17:08:58,762  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-empresas.md
+2026-04-07 17:08:58,776  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-filter-multiselect.md
+2026-04-07 17:08:58,795  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-financeiro.md
+2026-04-07 17:08:58,810  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-global-filters.md
+2026-04-07 17:08:58,823  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-instrutores.md
+2026-04-07 17:08:58,839  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-matriculas.md
+2026-04-07 17:08:58,854  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-pipeline.md
+2026-04-07 17:08:58,868  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-planning-engine.md
+2026-04-07 17:08:58,880  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-rbac.md
+2026-04-07 17:08:58,892  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-relatorios.md
+2026-04-07 17:08:58,905  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-renovacoes.md
+2026-04-07 17:08:58,920  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-security.md
+2026-04-07 17:08:58,934  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-sla-calculator.md
+2026-04-07 17:08:58,948  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-turmas.md
+2026-04-07 17:08:58,966  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-utils.md
+2026-04-07 17:08:58,983  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:08:58,996  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\modelo-registro.md
+2026-04-07 17:08:59,010  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\schema-xlsx-import.md
+2026-04-07 17:08:59,023  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\storage-local.md
+2026-04-07 17:08:59,040  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\04-api\api-global-filters.md
+2026-04-07 17:08:59,059  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\04-api\api-modulos.md
+2026-04-07 17:08:59,074  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\04-api\api-sla-calculator.md
+2026-04-07 17:08:59,098  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:08:59,111  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-calculo-sla.md
+2026-04-07 17:08:59,131  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-importacao-dados.md
+2026-04-07 17:08:59,149  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-planejamento.md
+2026-04-07 17:08:59,166  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:08:59,183  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\07-decisoes\decisao-security-crypto.md
+2026-04-07 17:08:59,203  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\07-decisoes\decisao-stack-vanilla.md
+2026-04-07 17:08:59,217  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\07-decisoes\decisao-tabulator.md
+2026-04-07 17:08:59,221  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\Insert_Demo_Tenant.sql
+2026-04-07 17:08:59,247  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M10_HLV_Tenant_e_Perfil.sql
+2026-04-07 17:08:59,279  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M12_WhiteLabel_Tenants.sql
+2026-04-07 17:08:59,297  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M4_Alunos_Documento_Estrangeiro.sql
+2026-04-07 17:08:59,313  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M5_Alunos_Multi_Documento.sql
+2026-04-07 17:08:59,328  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M6_Apply_MultiDoc_Now.sql
+2026-04-07 17:08:59,349  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M8_Add_Reprovado_Status.sql
+2026-04-07 17:08:59,366  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M9_Financeiro_Comprovante.sql
+2026-04-07 17:08:59,385  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\PRODUCAO.sql
+2026-04-07 17:08:59,406  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\certificado.html
+2026-04-07 17:08:59,462  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\css\components.css
+2026-04-07 17:08:59,477  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\css\globals.css
+2026-04-07 17:08:59,492  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\css\layout.css
+2026-04-07 17:08:59,517  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\index.html
+2026-04-07 17:08:59,551  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\auth.js
+2026-04-07 17:08:59,577  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\automations.js
+2026-04-07 17:08:59,600  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\init.js
+2026-04-07 17:08:59,607  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\router.js
+2026-04-07 17:08:59,654  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\supabase.js
+2026-04-07 17:08:59,659  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\schema.json
+2026-04-07 17:08:59,701  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\branding.js
+2026-04-07 17:08:59,706  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\charts.js
+2026-04-07 17:08:59,758  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\components.js
+2026-04-07 17:08:59,782  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\loading.js
+2026-04-07 17:08:59,806  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\theme.js
+2026-04-07 17:08:59,836  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 17:08:59,874  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 17:08:59,903  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\certificados.js
+2026-04-07 17:08:59,931  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\configuracoes.js
+2026-04-07 17:08:59,961  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\cursos.js
+2026-04-07 17:08:59,990  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\dashboard.js
+2026-04-07 17:09:00,024  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\empresas.js
+2026-04-07 17:09:00,058  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\financeiro.js
+2026-04-07 17:09:00,087  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\instrutores.js
+2026-04-07 17:09:00,112  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\matriculas.js
+2026-04-07 17:09:00,138  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\pipeline.js
+2026-04-07 17:09:00,143  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\rbac.js
+2026-04-07 17:09:00,189  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\relatorios.js
+2026-04-07 17:09:00,215  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\renovacoes.js
+2026-04-07 17:09:00,247  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 17:09:01,507  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:08:58
+2026-04-07 17:09:01,580  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:09:03,918  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:09:03
+2026-04-07 17:09:03,979  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:11:35,712  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:11:35,712  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:11:39,193  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:11:39,398  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:11:39
+2026-04-07 17:11:39,459  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:11:42,817  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:11:42
+2026-04-07 17:11:42,881  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:11:54,967  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:11:54,968  INFO  Branch de destino: main
+2026-04-07 17:11:54,968  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:12:03,193  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:12:07,278  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:12:07
+2026-04-07 17:12:07,329  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:14:51,314  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:14:51,314  INFO  Branch de destino: master
+2026-04-07 17:14:51,314  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:15:05,063  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:15:05,064  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:15:05,064  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:15:08,508  ERROR  git add falhou: fatal: Unable to create 'C:/Projetos/HLV_edu-main/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+2026-04-07 17:15:08,718  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:15:08
+2026-04-07 17:15:08,766  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:18:39,833  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:39,833  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:39,834  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:39,834  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:39,834  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:43,175  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:18:42
+2026-04-07 17:18:43,223  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:18:43,884  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:18:43
+2026-04-07 17:18:44,148  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:18:57,676  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:18:57,676  INFO  Branch de destino: master
+2026-04-07 17:18:57,676  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:19:03,623  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:19:03,623  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:19:06,966  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:19:06
+2026-04-07 17:19:07,078  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:19:07,455  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:19:07
+2026-04-07 17:19:07,574  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:20:16,925  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:20:16,926  INFO  Branch de destino: master
+2026-04-07 17:20:16,926  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:20:24,899  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:20:24
+2026-04-07 17:20:25,022  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:20:25,218  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:20:25
+2026-04-07 17:20:25,335  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:20:25,376  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:20:25
+2026-04-07 17:20:25,483  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:23:02,966  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:23:02,966  INFO  Branch de destino: master
+2026-04-07 17:23:02,966  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:23:09,736  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,738  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,738  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:13,191  ERROR  git commit falhou: fatal: Unable to create 'C:/Projetos/HLV_edu-main/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+2026-04-07 17:23:13,368  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:23:13
+2026-04-07 17:25:16,930  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:25:16,930  INFO  Branch de destino: master
+2026-04-07 17:25:16,930  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:25:28,090  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:25:28,091  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:25:29,101  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:29,101  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:29,367  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:33,260  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:25:33
+2026-04-07 17:25:47,017  INFO  Push realizado com sucesso -> origin/master
+2026-04-07 17:25:57,875  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:57,875  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:57,878  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:57,878  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:26:01,334  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:26:01
+2026-04-07 17:26:10,970  INFO  Push realizado com sucesso -> origin/master
+2026-04-07 17:26:38,350  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\Novo(a) Documento de Texto.txt
+2026-04-07 17:26:41,299  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\Teste.txt
+2026-04-07 17:26:45,292  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:26:45
+2026-04-07 17:26:56,896  INFO  Push realizado com sucesso -> origin/master
+2026-04-07 17:39:26,625  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 17:39:52,482  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude\settings.local.json
+2026-04-07 17:39:52,483  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 17:39:52,483  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M12_WhiteLabel_Tenants.sql
+2026-04-07 17:39:52,483  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\Teste.txt
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:39:52,485  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:39:52,485  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:39:52,485  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:39:52,485  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:39:52,485  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:39:52,486  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:39:52,486  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:39:52,486  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:39:52,486  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:39:52,486  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:39:52,487  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:39:52,487  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:39:52,487  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:39:52,487  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\meta3.html
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\meta3.html
+2026-04-07 17:39:52,489  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV
+2026-04-07 17:39:52,489  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL
+2026-04-07 17:39:52,489  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL\EduOS_Schema.sql
+2026-04-07 17:39:52,490  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL\EduOS_Schema.sql
+2026-04-07 17:39:52,490  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\certificado.html
+2026-04-07 17:39:52,490  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\certificado.html
+2026-04-07 17:39:52,490  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css
+2026-04-07 17:39:52,491  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\components.css
+2026-04-07 17:39:52,491  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\components.css
+2026-04-07 17:39:52,491  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\globals.css
+2026-04-07 17:39:52,491  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\globals.css
+2026-04-07 17:39:52,492  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\layout.css
+2026-04-07 17:39:52,492  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\layout.css
+2026-04-07 17:39:52,493  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\eduos_2.html
+2026-04-07 17:39:52,494  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\eduos_2.html
+2026-04-07 17:39:52,494  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\index.html
+2026-04-07 17:39:52,494  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\index.html
+2026-04-07 17:39:52,495  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js
+2026-04-07 17:39:52,495  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core
+2026-04-07 17:39:52,495  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\auth.js
+2026-04-07 17:39:52,495  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core
+2026-04-07 17:39:52,496  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\auth.js
+2026-04-07 17:39:52,496  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\auth.js
+2026-04-07 17:39:52,496  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\auth.js
+2026-04-07 17:39:52,496  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\init.js
+2026-04-07 17:39:52,497  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\init.js
+2026-04-07 17:39:52,497  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\router.js
+2026-04-07 17:39:52,497  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\router.js
+2026-04-07 17:39:52,497  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\supabase.js
+2026-04-07 17:39:52,498  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\supabase.js
+2026-04-07 17:39:52,498  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\schema.json
+2026-04-07 17:39:52,498  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\schema.json
+2026-04-07 17:39:52,498  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui
+2026-04-07 17:39:52,498  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\charts.js
+2026-04-07 17:39:52,499  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\charts.js
+2026-04-07 17:39:52,499  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\charts.js
+2026-04-07 17:39:52,499  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\components.js
+2026-04-07 17:39:52,499  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\components.js
+2026-04-07 17:39:52,499  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\theme.js
+2026-04-07 17:39:52,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\theme.js
+2026-04-07 17:39:52,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views
+2026-04-07 17:39:52,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\alunos.js
+2026-04-07 17:39:52,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\alunos.js
+2026-04-07 17:39:52,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\certificados.js
+2026-04-07 17:39:52,501  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\certificados.js
+2026-04-07 17:39:52,501  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\configuracoes.js
+2026-04-07 17:39:52,501  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\configuracoes.js
+2026-04-07 17:39:52,501  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\cursos.js
+2026-04-07 17:39:52,501  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\cursos.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\dashboard.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\dashboard.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\empresas.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\empresas.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\financeiro.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\financeiro.js
+2026-04-07 17:39:52,503  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\instrutores.js
+2026-04-07 17:39:52,503  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\instrutores.js
+2026-04-07 17:39:52,503  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\matriculas.js
+2026-04-07 17:39:52,503  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\matriculas.js
+2026-04-07 17:39:52,504  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\pipeline.js
+2026-04-07 17:39:52,504  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\pipeline.js
+2026-04-07 17:39:52,504  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\rbac.js
+2026-04-07 17:39:52,504  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\rbac.js
+2026-04-07 17:39:52,505  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\relatorios.js
+2026-04-07 17:39:52,505  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\relatorios.js
+2026-04-07 17:39:52,505  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\renovacoes.js
+2026-04-07 17:39:52,505  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\renovacoes.js
+2026-04-07 17:39:52,506  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\turmas.js
+2026-04-07 17:39:52,506  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\turmas.js
+2026-04-07 17:40:30,440  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\meta3.html
+2026-04-07 17:40:30,441  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL\EduOS_Schema.sql
+2026-04-07 17:40:30,442  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\certificado.html
+2026-04-07 17:40:30,442  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\components.css
+2026-04-07 17:40:30,442  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL
+2026-04-07 17:40:30,443  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL
+2026-04-07 17:40:30,443  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\globals.css
+2026-04-07 17:40:30,443  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\layout.css
+2026-04-07 17:40:30,444  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\eduos_2.html
+2026-04-07 17:40:30,444  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\index.html
+2026-04-07 17:40:30,444  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\auth.js
+2026-04-07 17:40:30,445  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css
+2026-04-07 17:40:30,445  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css
+2026-04-07 17:40:30,445  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\init.js
+2026-04-07 17:40:30,445  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\router.js
+2026-04-07 17:40:30,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\supabase.js
+2026-04-07 17:40:30,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\schema.json
+2026-04-07 17:40:30,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\charts.js
+2026-04-07 17:40:30,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core
+2026-04-07 17:40:30,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core
+2026-04-07 17:40:30,447  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui
+2026-04-07 17:40:30,447  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\components.js
+2026-04-07 17:40:30,447  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\theme.js
+2026-04-07 17:40:30,447  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\alunos.js
+2026-04-07 17:40:30,448  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui
+2026-04-07 17:40:30,448  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui
+2026-04-07 17:40:30,448  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\certificados.js
+2026-04-07 17:40:30,448  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\configuracoes.js
+2026-04-07 17:40:30,448  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\cursos.js
+2026-04-07 17:40:30,449  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\dashboard.js
+2026-04-07 17:40:30,449  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\empresas.js
+2026-04-07 17:40:30,449  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\financeiro.js
+2026-04-07 17:40:30,449  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\instrutores.js
+2026-04-07 17:40:30,450  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\matriculas.js
+2026-04-07 17:40:30,450  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\pipeline.js
+2026-04-07 17:40:30,450  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\rbac.js
+2026-04-07 17:40:30,450  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\relatorios.js
+2026-04-07 17:40:30,451  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\renovacoes.js
+2026-04-07 17:40:30,451  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\turmas.js
+2026-04-07 17:40:30,451  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views
+2026-04-07 17:40:30,451  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude\settings.local.json
+2026-04-07 17:40:30,453  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude\settings.local.json
+2026-04-07 17:40:30,453  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 17:40:30,453  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 17:40:30,453  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:40:30,454  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:40:30,454  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:40:30,454  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:40:30,454  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:40:30,454  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:40:30,456  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:40:30,456  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:40:30,456  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:40:30,456  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:40:30,456  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:40:30,457  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:40:30,457  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:40:30,457  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:40:30,457  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:40:30,458  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M12_WhiteLabel_Tenants.sql
+2026-04-07 17:40:30,458  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M12_WhiteLabel_Tenants.sql
+2026-04-07 17:40:30,458  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\Teste.txt
+2026-04-07 17:40:30,458  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\Teste.txt
+2026-04-07 17:40:30,458  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:40:30,459  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:43:36,477  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:43:36,478  INFO  Branch de destino: master
+2026-04-07 17:43:36,478  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:44:00,607  INFO  Monitoramento encerrado pelo usuario.
+2026-04-07 17:45:17,759  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:45:17,759  INFO  Branch de destino: master
+2026-04-07 17:45:17,759  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:45:36,861  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:45:36,873  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:45:41,164  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:45:40
+2026-04-07 17:45:50,671  INFO  Push realizado com sucesso -> origin/master
+2026-04-07 17:46:32,810  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:46:36,771  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 17:46:51,671  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:46:55,026  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:46:54
+2026-04-07 17:47:09,722  INFO  Push realizado com sucesso -> origin/master
+2026-04-07 17:50:14,446  INFO  Monitoramento encerrado pelo usuario.
+2026-04-07 17:50:46,337  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:50:46,338  INFO  Branch de destino: main
+2026-04-07 17:50:46,338  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:51:00,953  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:51:00,954  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:51:04,765  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:51:04
+2026-04-07 17:51:13,379  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:51:13,391  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:51:13,391  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:51:22,151  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 17:51:23,423  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:51:23
+2026-04-07 17:52:23,513  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 18:38:57,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 18:39:00,736  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 18:39:07,769  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 18:39:07,772  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 18:39:12,041  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 18:39:11
+2026-04-07 18:39:24,704  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 19:47:48,632  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\00-index\MOC.md
+2026-04-07 19:47:48,850  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\visao-geral.md
+2026-04-07 19:47:52,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 19:47:52,458  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 19:47:53,021  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 19:47:54,034  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\modelo-registro.md
+2026-04-07 19:47:54,419  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 19:47:57,516  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 19:47:58,549  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 19:47:59,044  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\07-decisoes\decisao-stack-vanilla.md
+2026-04-07 19:48:02,575  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:06:53,469  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:06:57,312  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:07:22,212  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:07:25,378  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:08:33,891  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js.tmp.27836.1775603313869
+2026-04-07 20:08:33,891  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js.tmp.27836.1775603313869
+2026-04-07 20:08:33,893  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:08:33,894  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:08:37,732  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:08:37
+2026-04-07 20:08:47,705  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:08:53,467  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js.tmp.27836.1775603333444
+2026-04-07 20:08:53,467  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js.tmp.27836.1775603333444
+2026-04-07 20:08:53,478  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:08:53,479  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:08:57,012  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:08:56
+2026-04-07 20:09:07,373  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:09:15,752  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603355727
+2026-04-07 20:09:15,752  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603355727
+2026-04-07 20:09:15,765  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:09:15,765  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:09:19,674  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:09:19
+2026-04-07 20:09:31,388  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:09:41,141  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603381114
+2026-04-07 20:09:41,141  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603381114
+2026-04-07 20:09:41,155  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:09:41,156  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:09:44,695  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:09:44
+2026-04-07 20:09:54,791  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:09:58,923  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603398895
+2026-04-07 20:09:58,924  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603398895
+2026-04-07 20:09:58,936  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:09:58,936  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:10:03,091  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:10:02
+2026-04-07 20:10:11,862  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:10:13,478  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603413448
+2026-04-07 20:10:13,478  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603413448
+2026-04-07 20:10:13,490  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:10:13,491  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:10:17,146  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:10:16
+2026-04-07 20:10:28,108  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:10:39,979  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603439947
+2026-04-07 20:10:39,979  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603439947
+2026-04-07 20:10:39,982  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:10:39,982  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:10:43,420  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:10:43
+2026-04-07 20:10:55,444  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:11:07,582  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603467579
+2026-04-07 20:11:07,582  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603467579
+2026-04-07 20:11:07,585  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:07,585  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:11,748  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:11:11
+2026-04-07 20:11:21,620  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:22,294  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:11:25,360  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:11:29,261  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603489255
+2026-04-07 20:11:29,261  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603489255
+2026-04-07 20:11:29,264  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:29,265  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:32,667  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:11:32
+2026-04-07 20:11:33,685  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:11:34,714  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:43,633  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:11:44,701  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:17:31,014  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603851007
+2026-04-07 20:17:31,015  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603851007
+2026-04-07 20:17:31,026  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:17:31,027  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:17:35,155  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:17:34
+2026-04-07 20:17:45,375  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:17:47,370  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603867363
+2026-04-07 20:17:47,371  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603867363
+2026-04-07 20:17:47,383  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:17:47,383  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:17:51,693  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:17:51
+2026-04-07 20:18:01,371  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:19:25,956  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603965944
+2026-04-07 20:19:25,957  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603965944
+2026-04-07 20:19:25,970  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:19:25,970  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:19:29,451  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:19:29,714  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:19:29
+2026-04-07 20:19:38,893  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:19:39,962  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:42:17,273  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:42:20,590  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:42:35,563  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\css\components.css
+2026-04-07 20:42:38,597  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\css\globals.css
+2026-04-07 20:42:41,655  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:43:04,974  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605384968
+2026-04-07 20:43:04,975  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605384968
+2026-04-07 20:43:04,987  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:43:04,988  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:43:09,045  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:43:08
+2026-04-07 20:43:24,873  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:46:58,736  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605618728
+2026-04-07 20:46:58,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605618728
+2026-04-07 20:46:58,748  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:46:58,748  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:47:02,358  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:47:02
+2026-04-07 20:47:13,337  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:47:15,114  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605635106
+2026-04-07 20:47:15,114  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605635106
+2026-04-07 20:47:15,126  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:47:15,127  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:47:18,640  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:47:18
+2026-04-07 20:47:50,641  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605670633
+2026-04-07 20:47:50,642  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605670633
+2026-04-07 20:47:50,653  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:47:50,654  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:48:05,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:48:07,753  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:48:08,806  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 20:48:09,083  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:48:08
+2026-04-07 20:48:20,327  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:48:21,395  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:48:53,426  INFO  Monitoramento encerrado pelo usuario.

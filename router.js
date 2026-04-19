@@ -1,453 +1,310 @@
-/**
- * /js/core/automations.js
- * Motor de automações do EduOS.
- *
- * Objetivo: reduzir interações humanas ao mínimo — apenas:
- *   - Cadastrar alunos
- *   - Cadastrar instrutores
- *   - Validar pagamentos
- *
- * Tudo o mais acontece aqui automaticamente.
- *
- * Funções exportadas:
- *   runAutomations()           — executa todas as automações, retorna sumário
- *   autoSyncTurmaStatus()      — avança turmas/matrículas pelos status com base em datas
- *   autoEmitirCertificados()   — emite certs para matrículas concluídas sem pendências
- *   autoEnrollAguardando()     — enrolam alunos em espera quando nova turma é criada
- */
+/* ============================================================
+   globals.css — EduOS Design Tokens (meta3 design system)
+   4 Temas: dark (padrão), light, neon-glass, ocean-glass
+   Fontes: Inter + JetBrains Mono
+   ============================================================ */
 
-import { supabase, getTenantId } from './supabase.js';
+/* ===== DESIGN TOKENS ===== */
+:root {
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 
-// ─── Helper: verifica sobreposição de datas entre duas turmas ─────────────────
-// Retorna true se os períodos se sobrepõem (= conflito de horário)
-// data_fim null = turma sem data de encerramento → assume vigência infinita
-export function datasConflitam(inicio1, fim1, inicio2, fim2) {
-  if (!inicio1 || !inicio2) return false;
-  const FAR = '2099-12-31';
-  return inicio1 <= (fim2 || FAR) && inicio2 <= (fim1 || FAR);
+  /* ── DARK FLAT (padrão) ─────────────────────────────────── */
+  --bg-base:     #0e0e0e;
+  --bg-gradient: #0e0e0e;
+  --bg-surface:  #161616;
+  --bg-elevated: #1e1e1e;
+  --bg-overlay:  #222222;
+  --bg-hover:    rgba(255,255,255,0.04);
+  --bg-active:   rgba(255,255,255,0.08);
+
+  --border-subtle:  rgba(255,255,255,0.07);
+  --border-default: rgba(255,255,255,0.07);
+  --border-strong:  rgba(255,255,255,0.14);
+
+  --text-primary:   #ffffff;
+  --text-secondary: rgba(255,255,255,0.52);  /* era .45 → 4.9:1 ✓ WCAG AA */
+  --text-tertiary:  rgba(255,255,255,0.42);  /* era .30 → 4.6:1 ✓ WCAG AA */
+  --text-inverse:   #0e0e0e;
+
+  --accent:       #63ffab;
+  --accent-soft:  rgba(99,255,171,0.1);
+  --accent-hover: #82e0aa;
+
+  --blue:        #5b8af0;
+  --blue-soft:   rgba(91,138,240,0.12);
+  --green:       #63ffab;
+  --green-soft:  rgba(99,255,171,0.1);
+  --amber:       #ffdc73;
+  --amber-soft:  rgba(255,220,115,0.1);
+  --red:         #ff6b81;
+  --red-soft:    rgba(255,107,129,0.1);
+  --purple:      #b685ff;
+  --purple-soft: rgba(182,133,255,0.1);
+
+  --radius-sm:   6px;
+  --radius-md:   12px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-main: 12px;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md: none;
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
+
+  /* Glass / card */
+  --card-blur:    none;
+  --card-shadow:  none;
+  --noise-opacity: 0;
+
+  /* Nav / sidebar */
+  --nav-bg:     #161616;
+  --nav-border: rgba(255,255,255,0.07);
+  --nav-shadow: 0 10px 30px rgba(0,0,0,0.5);
+
+  /* Input sólido — select/option precisam de fundo opaco (browsers ignoram rgba) */
+  --bg-input-solid: #1e1e1e;
+
+  --sidebar-width: 240px;
+  --topbar-height: 56px;
+  --transition: 200ms cubic-bezier(0.4,0,0.2,1);
 }
 
-// ─── Executor geral ───────────────────────────────────────────────────────────
-export async function runAutomations() {
-  // Ordem importa: envelhecer certs antes de emitir novos; renovações após emissão
-  await autoMarkCertsStatus();
+/* ── LIGHT FLAT ──────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg-base:     #f2f3f5;
+  --bg-gradient: #f2f3f5;
+  --bg-surface:  #ffffff;
+  --bg-elevated: #f9fafb;
+  --bg-overlay:  #f0f0f2;
+  --bg-hover:    #e8e8ea;
+  --bg-active:   #e0e0e3;
 
-  const [tResult, cResult] = await Promise.allSettled([
-    autoSyncTurmaStatus(),
-    autoEmitirCertificados(),
-  ]);
+  --border-subtle:  #e2e4e8;
+  --border-default: #e2e4e8;
+  --border-strong:  #c8cacd;
 
-  const rResult = await Promise.allSettled([autoCreateRenovacoes()]);
+  --text-primary:   #111111;
+  --text-secondary: #555e6b;  /* era #6b7280 → 5.3:1 ✓ WCAG AA */
+  --text-tertiary:  #6e7882;  /* era #9ca3af (2.8:1) → 4.6:1 ✓ WCAG AA */
+  --text-inverse:   #ffffff;
 
-  return {
-    turmasAvancadas: tResult.status === 'fulfilled' ? (tResult.value ?? 0) : 0,
-    certEmitidos:    cResult.status === 'fulfilled' ? (cResult.value ?? 0) : 0,
-    renovacoesCriadas: rResult[0].status === 'fulfilled' ? (rResult[0].value ?? 0) : 0,
-  };
+  --accent:       #16a34a;
+  --accent-soft:  rgba(22,163,74,0.1);
+  --accent-hover: #15803d;
+
+  --blue:        #3b82f6;
+  --blue-soft:   rgba(59,130,246,0.1);
+  --green:       #16a34a;
+  --green-soft:  rgba(22,163,74,0.1);
+  --amber:       #d97706;
+  --amber-soft:  rgba(217,119,6,0.1);
+  --red:         #dc2626;
+  --red-soft:    rgba(220,38,38,0.1);
+  --purple:      #7c3aed;
+  --purple-soft: rgba(124,58,237,0.1);
+
+  --radius-sm:   6px;
+  --radius-md:   12px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-main: 12px;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-lg: 0 8px 32px rgba(0,0,0,0.16);
+
+  --card-blur:    none;
+  --card-shadow:  0 2px 8px rgba(0,0,0,0.06);
+  --noise-opacity: 0;
+
+  --nav-bg:     #ffffff;
+  --nav-border: #e2e4e8;
+  --nav-shadow: 0 10px 30px rgba(0,0,0,0.08);
+
+  --bg-input-solid: #f9fafb;
 }
 
-// ─── 1. Avança status de turmas por data ─────────────────────────────────────
-/**
- * agendada → em_andamento : quando data_inicio <= hoje
- * em_andamento → concluida : quando data_fim <= hoje (e data_fim preenchida)
- *
- * Propaga automaticamente para as matrículas da turma:
- *   matriculado | aguardando_turma → em_andamento
- *   em_andamento → concluido
- *
- * Retorna quantas turmas foram avançadas.
- */
-export async function autoSyncTurmaStatus() {
-  const tenant = getTenantId();
-  const hoje   = new Date().toISOString().split('T')[0];
-  let   count  = 0;
+/* ── NEON GLASS (Terminal / Brutalista) ──────────────────── */
+[data-theme="neon-glass"] {
+  --bg-base:     #080907;
+  --bg-gradient: radial-gradient(ellipse 80% 80% at 30% 20%, #242c22 0%, #080907 100%);
+  --bg-surface:  rgba(18,18,18,0.4);
+  --bg-elevated: rgba(0,0,0,0.3);
+  --bg-overlay:  rgba(255,255,255,0.04);
+  --bg-hover:    rgba(255,255,255,0.05);
+  --bg-active:   rgba(255,255,255,0.09);
 
-  try {
-    // ── agendada → em_andamento ────────────────────────────────────────────
-    const { data: iniciadas, error: e1 } = await supabase
-      .from('turmas')
-      .update({ status: 'em_andamento' })
-      .eq('tenant_id', tenant)
-      .eq('status', 'agendada')
-      .lte('data_inicio', hoje)
-      .select('id');
+  --border-subtle:  rgba(255,255,255,0.08);
+  --border-default: rgba(255,255,255,0.08);
+  --border-strong:  rgba(255,255,255,0.16);
 
-    if (!e1 && iniciadas?.length) {
-      count += iniciadas.length;
-      // Avança matrículas das turmas iniciadas
-      await supabase
-        .from('matriculas')
-        .update({ status: 'em_andamento' })
-        .eq('tenant_id', tenant)
-        .in('turma_id', iniciadas.map(t => t.id))
-        .in('status', ['matriculado', 'aguardando_turma']);
-    }
+  --text-primary:   #f0f0f0;
+  --text-secondary: rgba(255,255,255,0.56);  /* era .50 → 5.2:1 ✓ */
+  --text-tertiary:  rgba(255,255,255,0.44);  /* era .35 → 4.7:1 ✓ */
+  --text-inverse:   #121212;
 
-    // ── em_andamento → concluida ───────────────────────────────────────────
-    const { data: concluidas, error: e2 } = await supabase
-      .from('turmas')
-      .update({ status: 'concluida' })
-      .eq('tenant_id', tenant)
-      .eq('status', 'em_andamento')
-      .not('data_fim', 'is', null)
-      .lte('data_fim', hoje)
-      .select('id');
+  --accent:       #82e0aa;
+  --accent-soft:  rgba(130,224,170,0.1);
+  --accent-hover: #9de8bc;
 
-    if (!e2 && concluidas?.length) {
-      count += concluidas.length;
-      // Avança matrículas das turmas concluídas
-      await supabase
-        .from('matriculas')
-        .update({ status: 'concluido' })
-        .eq('tenant_id', tenant)
-        .in('turma_id', concluidas.map(t => t.id))
-        .eq('status', 'em_andamento');
-    }
-  } catch (err) {
-    console.warn('[Automations] autoSyncTurmaStatus falhou:', err.message);
+  --blue:        #7eb8f5;
+  --blue-soft:   rgba(126,184,245,0.1);
+  --green:       #82e0aa;
+  --green-soft:  rgba(130,224,170,0.1);
+  --amber:       #f5b041;
+  --amber-soft:  rgba(245,176,65,0.1);
+  --red:         #e74c3c;
+  --red-soft:    rgba(231,76,60,0.1);
+  --purple:      #bb8fce;
+  --purple-soft: rgba(187,143,206,0.1);
+
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   8px;
+  --radius-xl:   12px;
+  --radius-main: 8px;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
+  --shadow-md: 0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  --shadow-lg: 0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+
+  --card-blur:    blur(24px) saturate(120%);
+  --card-shadow:  0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
+  --noise-opacity: 0.35;
+
+  --nav-bg:     rgba(15,15,15,0.65);
+  --nav-border: rgba(255,255,255,0.08);
+  --nav-shadow: 0 10px 30px rgba(0,0,0,0.6);
+
+  --bg-input-solid: #0f0f0f;
+}
+
+/* ── OCEAN GLASS (Premium, Arredondado) ──────────────────── */
+[data-theme="ocean-glass"] {
+  --bg-base: #060d14;
+  --bg-gradient:
+    radial-gradient(ellipse 75% 55% at 12% 12%, rgba(6,45,62,0.95) 0%, transparent 58%),
+    radial-gradient(ellipse 65% 50% at 88% 88%, rgba(26,11,8,0.9) 0%, transparent 58%),
+    linear-gradient(180deg, #060d14 0%, #030810 100%);
+  --bg-surface:  rgba(255,255,255,0.03);
+  --bg-elevated: rgba(255,255,255,0.05);
+  --bg-overlay:  rgba(255,255,255,0.04);
+  --bg-hover:    rgba(255,255,255,0.06);
+  --bg-active:   rgba(255,255,255,0.10);
+
+  --border-subtle:  rgba(255,255,255,0.13);
+  --border-default: rgba(255,255,255,0.13);
+  --border-strong:  rgba(255,255,255,0.22);
+
+  --text-primary:   #ffffff;
+  --text-secondary: rgba(255,255,255,0.56);  /* era .52 → 5.2:1 ✓ */
+  --text-tertiary:  rgba(255,255,255,0.44);  /* era .36 → 4.7:1 ✓ */
+  --text-inverse:   #060d14;
+
+  --accent:       #63ffab;
+  --accent-soft:  rgba(99,255,171,0.09);
+  --accent-hover: #82e0aa;
+
+  --blue:        #7eb8f5;
+  --blue-soft:   rgba(126,184,245,0.1);
+  --green:       #63ffab;
+  --green-soft:  rgba(99,255,171,0.09);
+  --amber:       #ffdc73;
+  --amber-soft:  rgba(255,220,115,0.09);
+  --red:         #ff6b81;
+  --red-soft:    rgba(255,107,129,0.09);
+  --purple:      #b685ff;
+  --purple-soft: rgba(182,133,255,0.09);
+
+  --radius-sm:   8px;
+  --radius-md:   16px;
+  --radius-lg:   16px;
+  --radius-xl:   20px;
+  --radius-main: 16px;
+
+  --shadow-sm: 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-md: 0 15px 35px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+  --shadow-lg: 0 15px 35px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+
+  --card-blur:    blur(36px) saturate(190%) brightness(1.04);
+  --card-shadow:  0 15px 35px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
+  --noise-opacity: 0.12;
+
+  --nav-bg:     rgba(6,18,28,0.7);
+  --nav-border: rgba(255,255,255,0.15);
+  --nav-shadow: 0 10px 40px rgba(0,0,0,0.5), inset 0 1.5px 0 rgba(255,255,255,0.18);
+
+  --bg-input-solid: #081422;
+}
+
+/* ===== NOISE OVERLAY =====
+   type="turbulence" → grão nítido e contrastado (vs fractalNoise que é suave)
+   baseFrequency="0.65" → granulação média, visível e definida
+   numOctaves="4" → múltiplas camadas de detalhe
+   animate seed → grain cinematográfico vivo (troca padrão 12×/s)
+   mix-blend-mode: overlay → integra com o fundo sem cobrir
+   background-size: 250px → tile consistente, sem distorção
+   ================================================================ */
+.noise-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none; z-index: 9999;
+  opacity: var(--noise-opacity);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.65' numOctaves='4' seed='2' stitchTiles='stitch'%3E%3Canimate attributeName='seed' from='0' to='100' dur='0.08s' repeatCount='indefinite'/%3E%3C/feTurbulence%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 250px 250px;
+  transition: opacity 0.4s;
+}
+
+/* ===== RESET ===== */
+*, *::before, *::after {
+  box-sizing: border-box; margin: 0; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+html { font-size: 14px; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-gradient);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  height: 100vh;
+  transition: background 0.4s, color 0.3s;
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+
+/* ===== SELEÇÃO DE TEXTO ===== */
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+::-moz-selection {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ===== PREFERS-REDUCED-MOTION ===== */
+/* Para usuários com sensibilidade a movimento (vestibular disorders, epilepsia) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration:   0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration:  0.01ms !important;
+    scroll-behavior:      auto   !important;
   }
 
-  return count;
-}
-
-// ─── 2. Auto-emissão de certificados ─────────────────────────────────────────
-/**
- * Para cada matrícula com status='concluido':
- *   - Não tem certificado válido/a_vencer já emitido?
- *   - Não tem pagamentos pendentes/em atraso?
- *   → Emite certificado automaticamente e avança para 'certificado_emitido'
- *
- * Retorna quantos certificados foram emitidos.
- */
-export async function autoEmitirCertificados() {
-  const tenant = getTenantId();
-  let   count  = 0;
-
-  try {
-    const { data: matriculas } = await supabase
-      .from('matriculas')
-      .select('id, aluno_id, curso_id')
-      .eq('tenant_id', tenant)
-      .eq('status', 'concluido')
-      .limit(50);
-
-    if (!matriculas?.length) return 0;
-
-    for (const m of matriculas) {
-      // Já tem certificado válido ou a vencer?
-      const { count: certExiste } = await supabase
-        .from('certificados')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenant)
-        .eq('aluno_id', m.aluno_id)
-        .eq('curso_id', m.curso_id)
-        .in('status', ['valido', 'a_vencer']);
-      if (certExiste > 0) continue;
-
-      // Tem pagamentos em aberto?
-      const { count: pagAberto } = await supabase
-        .from('pagamentos')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenant)
-        .eq('matricula_id', m.id)
-        .in('status', ['pendente', 'atraso']);
-      if (pagAberto > 0) continue;
-
-      // Busca validade do curso para calcular data_validade
-      const { data: curso } = await supabase
-        .from('cursos')
-        .select('validade_meses')
-        .eq('id', m.curso_id)
-        .single();
-
-      const hoje   = new Date();
-      const meses  = curso?.validade_meses ?? null; // null = vitalício
-      let dataValidade = null;
-      if (meses !== null) {
-        dataValidade = new Date(hoje);
-        dataValidade.setMonth(dataValidade.getMonth() + meses);
-      }
-
-      // Gera código único de verificação
-      const codigo =
-        'CRT-' +
-        Math.random().toString(36).slice(2, 8).toUpperCase() +
-        '-' +
-        Date.now().toString(36).toUpperCase();
-
-      const { error: eInsert } = await supabase.from('certificados').insert({
-        tenant_id:          tenant,
-        aluno_id:           m.aluno_id,
-        curso_id:           m.curso_id,
-        data_emissao:       hoje.toISOString().split('T')[0],
-        data_validade:      dataValidade ? dataValidade.toISOString().split('T')[0] : null,
-        status:             'valido',
-        codigo_verificacao: codigo,
-      });
-
-      if (!eInsert) {
-        // Avança pipeline para certificado_emitido
-        await supabase
-          .from('matriculas')
-          .update({ status: 'certificado_emitido' })
-          .eq('id', m.id)
-          .eq('tenant_id', tenant);
-        count++;
-      }
-    }
-  } catch (err) {
-    console.warn('[Automations] autoEmitirCertificados falhou:', err.message);
+  /* Noise grain: desativa animação do seed (mantém textura estática) */
+  .noise-overlay {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.65' numOctaves='4' seed='42' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 
-  return count;
-}
-
-// ─── 3. Auto-enroll de alunos em espera ──────────────────────────────────────
-/**
- * Quando uma nova turma é criada, procura matrículas com status='aguardando_turma'
- * para o mesmo curso e vincula-as automaticamente (FIFO, respeitando vagas e
- * conflito de datas com outras turmas ativas do aluno).
- *
- * Retorna quantas matrículas foram vinculadas.
- */
-export async function autoEnrollAguardando(turmaId, cursoId, vagas) {
-  const tenant = getTenantId();
-  let   count  = 0;
-
-  try {
-    // Carrega dados completos da turma destino (precisa das datas)
-    const { data: turmaDestino } = await supabase
-      .from('turmas')
-      .select('id, data_inicio, data_fim, status')
-      .eq('id', turmaId)
-      .eq('tenant_id', tenant)
-      .single();
-
-    if (!turmaDestino || turmaDestino.status !== 'agendada') return 0;
-
-    // Busca alunos em espera para este curso (FIFO)
-    const { data: aguardando } = await supabase
-      .from('matriculas')
-      .select('id, aluno_id')
-      .eq('tenant_id', tenant)
-      .eq('curso_id', cursoId)
-      .eq('status', 'aguardando_turma')
-      .is('turma_id', null)
-      .order('created_at', { ascending: true })
-      .limit(vagas);
-
-    if (!aguardando?.length) return 0;
-
-    for (const m of aguardando) {
-      // Verifica conflito de datas com turmas ativas do aluno
-      if (turmaDestino.data_inicio) {
-        const { data: mAtivas } = await supabase
-          .from('matriculas')
-          .select('turma:turma_id(data_inicio, data_fim)')
-          .eq('tenant_id', tenant)
-          .eq('aluno_id', m.aluno_id)
-          .in('status', ['em_andamento', 'matriculado'])
-          .not('turma_id', 'is', null);
-
-        const turmasAtivas = (mAtivas ?? []).map(r => r.turma).filter(Boolean);
-        const conflito = turmasAtivas.some(ta =>
-          datasConflitam(turmaDestino.data_inicio, turmaDestino.data_fim, ta.data_inicio, ta.data_fim)
-        );
-        if (conflito) continue; // mantém em aguardando, não vincula
-      }
-
-      const { error } = await supabase
-        .from('matriculas')
-        .update({ turma_id: turmaId, status: 'matriculado' })
-        .eq('id', m.id)
-        .eq('tenant_id', tenant);
-      if (!error) count++;
-    }
-  } catch (err) {
-    console.warn('[Automations] autoEnrollAguardando falhou:', err.message);
-  }
-
-  return count;
-}
-
-// ─── 4. Envelhece certificados por data ──────────────────────────────────────
-/**
- * valido → a_vencer  (vence em até 30 dias)
- * valido/a_vencer → vencido (data_validade já passou)
- * Espelho de fn_mark_certs_status (fallback frontend).
- */
-export async function autoMarkCertsStatus() {
-  const tenant = getTenantId();
-  const hoje   = new Date().toISOString().split('T')[0];
-  const limite = new Date();
-  limite.setDate(limite.getDate() + 30);
-  const limiteStr = limite.toISOString().split('T')[0];
-
-  try {
-    await supabase
-      .from('certificados')
-      .update({ status: 'vencido' })
-      .eq('tenant_id', tenant)
-      .in('status', ['valido', 'a_vencer'])
-      .not('data_validade', 'is', null)
-      .lt('data_validade', hoje);
-
-    await supabase
-      .from('certificados')
-      .update({ status: 'a_vencer' })
-      .eq('tenant_id', tenant)
-      .eq('status', 'valido')
-      .not('data_validade', 'is', null)
-      .gte('data_validade', hoje)
-      .lte('data_validade', limiteStr);
-  } catch (err) {
-    console.warn('[Automations] autoMarkCertsStatus falhou:', err.message);
-  }
-}
-
-// ─── 5. Auto-cria renovações para certificados a_vencer ──────────────────────
-/**
- * Para cada certificado a_vencer sem matrícula ativa no mesmo curso,
- * cria matrícula com aguardando_turma.
- * O trigger fn_auto_enroll_aguardando (M15) vincula à turma disponível.
- * Retorna quantas renovações foram criadas.
- */
-export async function autoCreateRenovacoes() {
-  const tenant = getTenantId();
-  let   count  = 0;
-
-  try {
-    const { data: certs } = await supabase
-      .from('certificados')
-      .select('aluno_id, curso_id')
-      .eq('tenant_id', tenant)
-      .eq('status', 'a_vencer')
-      .limit(100);
-
-    if (!certs?.length) return 0;
-
-    for (const c of certs) {
-      const { count: ativa } = await supabase
-        .from('matriculas')
-        .select('id', { count: 'exact', head: true })
-        .eq('tenant_id', tenant)
-        .eq('aluno_id', c.aluno_id)
-        .eq('curso_id', c.curso_id)
-        .in('status', ['matriculado', 'aguardando_turma', 'em_andamento']);
-
-      if (ativa > 0) continue;
-
-      const { error } = await supabase.from('matriculas').insert({
-        tenant_id:   tenant,
-        aluno_id:    c.aluno_id,
-        curso_id:    c.curso_id,
-        status:      'aguardando_turma',
-        observacoes: 'Renovação automática — certificado a vencer',
-      });
-
-      if (!error) count++;
-    }
-  } catch (err) {
-    console.warn('[Automations] autoCreateRenovacoes falhou:', err.message);
-  }
-
-  return count;
-}
-
-// ─── 7. Cria matrícula de renovação (manual via renovacoes.js) ───────────────
-/**
- * Usado em renovacoes.js para criar uma nova matrícula de renovação
- * para um aluno com certificado vencido/crítico.
- * Evita duplicar se já houver matrícula ativa.
- *
- * Retorna { ok: true } ou { ok: false, reason: string }
- */
-export async function criarRenovacao(alunoId, cursoId) {
-  const tenant = getTenantId();
-  const statusAtivos = ['matriculado', 'aguardando_turma', 'em_andamento', 'concluido'];
-
-  try {
-    // Verifica se já tem matrícula ativa para este aluno+curso
-    const { data: existing } = await supabase
-      .from('matriculas')
-      .select('id, status')
-      .eq('tenant_id', tenant)
-      .eq('aluno_id', alunoId)
-      .eq('curso_id', cursoId);
-
-    const hasActive = (existing ?? []).some(m => statusAtivos.includes(m.status));
-    if (hasActive) {
-      return { ok: false, reason: 'Aluno já possui matrícula ativa neste curso.' };
-    }
-
-    const { error } = await supabase.from('matriculas').insert({
-      tenant_id: tenant,
-      aluno_id:  alunoId,
-      curso_id:  cursoId,
-      status:    'aguardando_turma',
-    });
-
-    if (error) throw error;
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, reason: err.message };
-  }
-}
-
-// ─── 8. Cria matrícula automática ao cadastrar aluno ─────────────────────────
-/**
- * Chamado por alunos.js quando um novo aluno é criado com "Curso de Interesse".
- * Se houver turma disponível → vincula imediatamente.
- * Se não houver → cria com status aguardando_turma.
- *
- * Retorna { ok, turma_code } onde turma_code é o código da turma vinculada (ou null).
- */
-export async function criarMatriculaAutomatica(alunoId, cursoId) {
-  const tenant = getTenantId();
-
-  try {
-    // Turmas agendadas com vaga (em_andamento nunca aceita novas matrículas)
-    const { data: turmas } = await supabase
-      .from('turmas')
-      .select('id, codigo, vagas, ocupadas, data_inicio, data_fim')
-      .eq('tenant_id', tenant)
-      .eq('curso_id', cursoId)
-      .eq('status', 'agendada')
-      .order('data_inicio', { ascending: true });
-
-    // Turmas ativas do aluno para detectar conflito de datas
-    const { data: mAtivas } = await supabase
-      .from('matriculas')
-      .select('turma:turma_id(data_inicio, data_fim)')
-      .eq('tenant_id', tenant)
-      .eq('aluno_id', alunoId)
-      .in('status', ['em_andamento', 'matriculado'])
-      .not('turma_id', 'is', null);
-
-    const turmasAtivas = (mAtivas ?? []).map(r => r.turma).filter(Boolean);
-
-    // Primeira turma com vaga e sem conflito de datas
-    const turmaDisponivel = (turmas ?? []).find(t => {
-      if ((t.ocupadas ?? 0) >= (t.vagas ?? 0)) return false;
-      return !turmasAtivas.some(ta =>
-        datasConflitam(t.data_inicio, t.data_fim, ta.data_inicio, ta.data_fim)
-      );
-    });
-
-    const payload = {
-      tenant_id: tenant,
-      aluno_id:  alunoId,
-      curso_id:  cursoId,
-      status:    turmaDisponivel ? 'matriculado' : 'aguardando_turma',
-      turma_id:  turmaDisponivel ? turmaDisponivel.id : null,
-    };
-
-    const { error } = await supabase.from('matriculas').insert(payload);
-    if (error) throw error;
-
-    return { ok: true, turma_code: turmaDisponivel?.codigo ?? null };
-  } catch (err) {
-    console.warn('[Automations] criarMatriculaAutomatica falhou:', err.message);
-    return { ok: false, reason: err.message };
-  }
+  /* Login orbs: sem flutuação */
+  .login-bg-orb { animation: none !important; }
 }

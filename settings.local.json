@@ -1,3 +1,347 @@
-.vercel
-auto_push.log
-auto_push.log
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="neon-glass">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EduOS — Plataforma de Gestão Educacional</title>
+<meta name="description" content="EduOS — Sistema SaaS de gestão educacional para cursos técnicos e treinamentos NR.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link rel="stylesheet" href="./css/globals.css">
+<link rel="stylesheet" href="./css/layout.css">
+<link rel="stylesheet" href="./css/components.css">
+</head>
+<body>
+
+<!-- SKIP LINK — acessibilidade: permite pular o sidebar via teclado (Tab → Enter) -->
+<a href="#main-content" class="skip-link">Pular para o conteúdo</a>
+
+<!-- NOISE OVERLAY (grain texture — ativo em neon-glass e ocean-glass) -->
+<div class="noise-overlay"></div>
+
+<!-- TOAST CONTAINER -->
+<div id="toast-container"></div>
+
+<!-- MODAL BACKDROP -->
+<div class="modal-backdrop" id="modal-backdrop">
+  <div class="modal" id="modal-content">
+    <div class="modal-header">
+      <span class="modal-title" id="modal-title">Modal</span>
+      <button class="modal-close" id="modal-close-btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ===================== LOGIN SCREEN ===================== -->
+<div id="login-screen">
+  <div class="login-bg">
+    <div class="login-bg-orb"></div>
+    <div class="login-bg-orb"></div>
+    <div class="login-bg-orb"></div>
+  </div>
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-logo-icon">E</div>
+      <div class="login-logo-text">Edu<span>OS</span></div>
+    </div>
+    <h2>Bem-vindo de volta</h2>
+    <p>Faça login na sua instituição para continuar</p>
+
+    <div class="form-field">
+      <label class="form-label">E-mail institucional</label>
+      <input class="form-input" id="login-email" type="email" placeholder="admin@minhaescola.edu.br">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Senha</label>
+      <input class="form-input" id="login-pass" type="password" placeholder="••••••••" value="demo1234">
+    </div>
+    <div id="login-session-hint" style="display:none; color:var(--accent); font-size:11.5px; margin-bottom:4px; font-family:var(--font-mono); opacity:0.8;"></div>
+    <div id="login-error" style="display:none; color:var(--red); font-size:12.5px; margin-bottom:12px; padding:8px 12px; background:var(--red-soft); border-radius:var(--radius-sm);"></div>
+    <button class="btn btn-primary full" id="login-btn">
+      Entrar na plataforma
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </button>
+
+    <!-- Demo login was removed -->
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+
+<!-- Overlay do drawer mobile -->
+<div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+<div id="app">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-icon" style="flex-shrink:0">E</div>
+        <div class="sidebar-brand-name" style="flex-shrink:0">Edu<span>OS</span></div>
+        <button class="sidebar-collapse-btn" id="sidebar-collapse-btn" aria-label="Alternar menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Visão geral</div>
+      <div class="nav-item active" data-page="dashboard" role="button" tabindex="0" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span class="nav-label">Dashboard</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Acadêmico</div>
+      <div class="nav-item" role="button" tabindex="0" data-page="alunos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        <span class="nav-label">Alunos</span>
+      </div>
+      <div class="nav-item" role="button" tabindex="0" data-page="turmas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        <span class="nav-label">Turmas</span>
+      </div>
+      <div class="nav-item" role="button" tabindex="0" data-page="cursos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+        <span class="nav-label">Cursos</span>
+      </div>
+      <div class="nav-item" role="button" tabindex="0" data-page="instrutores">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 00-16 0"/><path d="M16 11l2 2 4-4"/></svg>
+        <span class="nav-label">Instrutores</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Operacional</div>
+      <div class="nav-item" role="button" tabindex="0" data-page="matriculas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span class="nav-label">Matrículas</span>
+      </div>
+      <div class="nav-item" role="button" tabindex="0" data-page="pipeline">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 20h2l3-12h10l3 12h2M9 8h6"/></svg>
+        <span class="nav-label">Pipeline</span>
+      </div>
+      <div class="nav-item" role="button" tabindex="0" data-page="certificados">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+        <span class="nav-label">Certificados</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Comercial</div>
+      <div class="nav-item" role="button" tabindex="0" data-page="empresas">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-label">Empresas B2B</span>
+      </div>
+      <div class="nav-item" role="button" tabindex="0" data-page="renovacoes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        <span class="nav-label">Renovações</span>
+        <span class="nav-badge" id="nav-badge-renov"></span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Financeiro</div>
+      <div class="nav-item" role="button" tabindex="0" data-page="financeiro">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        <span class="nav-label">Pagamentos</span>
+      </div>
+      <div class="nav-item" role="button" tabindex="0" data-page="relatorios">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span class="nav-label">Relatórios</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Minha Conta</div>
+      <div class="nav-item" role="button" tabindex="0" data-page="portal-aluno">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+        <span class="nav-label">Meu Portal</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Sistema</div>
+      <div class="nav-item" role="button" tabindex="0" data-page="rbac">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        <span class="nav-label">Permissões RBAC</span>
+      </div>
+      <div class="nav-item" role="button" tabindex="0" data-page="configuracoes">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="nav-label">Configurações</span>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="user-chip" id="user-chip-logout">
+        <div class="user-avatar" id="user-avatar-sidebar">A</div>
+        <div class="user-info">
+          <div class="user-name" id="user-name-sidebar">Admin</div>
+          <div class="user-role" id="user-role-sidebar">Administrador</div>
+        </div>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14" style="color:var(--text-tertiary);flex-shrink:0"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN AREA -->
+  <div class="main-area">
+    <div class="topbar">
+      <!-- Hamburger mobile -->
+      <button id="hamburger-btn" aria-label="Abrir menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+
+      <span id="topbar-title" class="topbar-title">Dashboard</span>
+
+      <div class="topbar-actions">
+        <div class="topbar-search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          <input class="topbar-search" id="topbar-search" placeholder="Buscar alunos, cursos...">
+        </div>
+        <div style="position:relative">
+          <button class="btn btn-ghost btn-icon" title="Notificações" id="notif-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>
+          </button>
+          <div class="notif-dot"></div>
+        </div>
+        <button class="btn btn-ghost btn-icon" id="theme-toggle" title="Alternar tema (4 temas)">
+          <i class="fa-solid fa-terminal"></i>
+        </button>
+      </div>
+    </div>
+    <div class="content" id="main-content"></div>
+  </div>
+</div>
+
+<!-- ===================== MOBILE BOTTOM NAV ===================== -->
+<nav class="mobile-bottom-nav" id="mobile-bottom-nav">
+  <div class="nav-item mbn-item" data-page="dashboard">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    <span>Dashboard</span>
+  </div>
+  <div class="nav-item mbn-item" data-page="alunos">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+    <span>Alunos</span>
+  </div>
+  <div class="nav-item mbn-item" data-page="matriculas">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+    <span>Matrículas</span>
+  </div>
+  <div class="nav-item mbn-item" data-page="financeiro">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+    <span>Pagamentos</span>
+  </div>
+  <button class="mbn-item mbn-more" id="mbn-more-btn" aria-label="Mais opções">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
+    <span>Mais</span>
+  </button>
+</nav>
+
+<!-- SHEET OVERLAY -->
+<div class="sheet-overlay" id="sheet-overlay"></div>
+
+<!-- MOBILE BOTTOM SHEET -->
+<div class="mobile-sheet" id="mobile-sheet">
+  <div class="sheet-handle"></div>
+
+  <div class="sheet-user">
+    <div class="user-avatar" id="sheet-user-avatar">A</div>
+    <div class="user-info">
+      <div class="user-name" id="sheet-user-name">Admin</div>
+      <div class="user-role" id="sheet-user-role">Administrador</div>
+    </div>
+    <button class="sheet-logout-btn" id="sheet-logout-btn" aria-label="Sair">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16" height="16"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+    </button>
+  </div>
+
+  <div class="sheet-section">
+    <div class="sheet-section-label">Acadêmico</div>
+    <div class="nav-item" role="button" tabindex="0" data-page="turmas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      Turmas
+    </div>
+    <div class="nav-item" role="button" tabindex="0" data-page="cursos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      Cursos
+    </div>
+    <div class="nav-item" role="button" tabindex="0" data-page="instrutores">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 00-16 0"/><path d="M16 11l2 2 4-4"/></svg>
+      Instrutores
+    </div>
+  </div>
+
+  <div class="sheet-section">
+    <div class="sheet-section-label">Operacional</div>
+    <div class="nav-item" role="button" tabindex="0" data-page="pipeline">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 20h2l3-12h10l3 12h2M9 8h6"/></svg>
+      Pipeline
+    </div>
+    <div class="nav-item" role="button" tabindex="0" data-page="certificados">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/></svg>
+      Certificados
+    </div>
+  </div>
+
+  <div class="sheet-section">
+    <div class="sheet-section-label">Comercial</div>
+    <div class="nav-item" role="button" tabindex="0" data-page="empresas">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Empresas B2B
+    </div>
+    <div class="nav-item" role="button" tabindex="0" data-page="renovacoes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+      Renovações
+      <span class="nav-badge" id="nav-badge-renov-sheet"></span>
+    </div>
+  </div>
+
+  <div class="sheet-section">
+    <div class="sheet-section-label">Sistema</div>
+    <div class="nav-item" role="button" tabindex="0" data-page="relatorios">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      Relatórios
+    </div>
+    <div class="nav-item" role="button" tabindex="0" data-page="rbac">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      Permissões RBAC
+    </div>
+    <div class="nav-item" role="button" tabindex="0" data-page="configuracoes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      Configurações
+    </div>
+  </div>
+</div>
+
+<!-- ===================== LOADING SCREEN (pós-login) ===================== -->
+<div id="loading-screen" class="loading-screen" style="display:none">
+  <div class="loading-card">
+    <div class="login-logo" style="margin-bottom:0">
+      <div class="login-logo-icon">E</div>
+      <div class="login-logo-text">Edu<span>OS</span></div>
+    </div>
+    <div class="ls-progress-wrapper">
+      <div class="ls-bar-container">
+        <div id="ls-bar-fill" class="ls-bar-fill"></div>
+      </div>
+      <div class="ls-footer">
+        <span id="ls-status" class="ls-status">> init_system...</span>
+        <span id="ls-percent" class="ls-percent">0%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./js/core/init.js"></script>
+</body>
+</html>

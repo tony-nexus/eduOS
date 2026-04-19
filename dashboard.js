@@ -1,172 +1,80 @@
 /**
- * js/ui/validate.js
- * Validação centralizada de formulários.
- * Exibe erros inline (campo vermelho + mensagem) e valida antes do submit.
+ * /js/ui/components.js
+ * Helpers de UI: Modal, Toast, setContent, formatters.
+ *
+ * CORREÇÕES APLICADAS:
+ *  - fmtDate() corrigido para timezone BR (evita off-by-one em UTC-3)
+ *  - toast() com guard t.isConnected antes de remover (evita erro pós-navegação)
+ *  - esc() helper de escape HTML para prevenir XSS nos modais
  */
 
-// ─── Inline field feedback ────────────────────────────────────────────────────
-
-export function fieldError(id, msg) {
-  const el = document.getElementById(id);
-  if (!el) return false;
-  el.classList.add('has-error');
-  el.setAttribute('aria-invalid', 'true');
-  const errId = id + '-err';
-  el.setAttribute('aria-describedby', errId);
-  let span = el.parentElement.querySelector('.field-error-msg');
-  if (!span) {
-    span = document.createElement('span');
-    span.className = 'field-error-msg';
-    span.setAttribute('role', 'alert');
-    el.parentElement.appendChild(span);
-  }
-  span.id = errId;
-  span.textContent = msg;
-  return false;
+// ─── XSS escape ───────────────────────────────────────────────────────────────
+export function esc(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-export function fieldOk(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.remove('has-error');
-  el.removeAttribute('aria-invalid');
-  el.removeAttribute('aria-describedby');
-  el.parentElement.querySelector('.field-error-msg')?.remove();
+// ─── Modal ────────────────────────────────────────────────────────────────────
+export function openModal(title, bodyHTML, wide = false) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML    = bodyHTML;
+  const modal = document.getElementById('modal-content');
+  modal.style.width    = wide ? '760px' : '600px';
+  modal.style.maxWidth = 'calc(100vw - 32px)';
+  document.getElementById('modal-backdrop').classList.add('open');
 }
 
-export function clearErrors(...ids) {
-  ids.forEach(id => fieldOk(id));
+export function closeModal() {
+  document.getElementById('modal-backdrop').classList.remove('open');
 }
 
-// ─── Algoritmos de validação ──────────────────────────────────────────────────
+// ─── Toast ────────────────────────────────────────────────────────────────────
+const TOAST_ICONS = {
+  success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+  error:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
+  warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  info:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+};
 
-export function isValidCPF(cpf) {
-  const c = cpf.replace(/\D/g, '');
-  if (c.length !== 11 || /^(\d)\1+$/.test(c)) return false;
-  let s = 0;
-  for (let i = 0; i < 9; i++) s += +c[i] * (10 - i);
-  let r = (s * 10) % 11; if (r === 10 || r === 11) r = 0;
-  if (r !== +c[9]) return false;
-  s = 0;
-  for (let i = 0; i < 10; i++) s += +c[i] * (11 - i);
-  r = (s * 10) % 11; if (r === 10 || r === 11) r = 0;
-  return r === +c[10];
+export function toast(msg, type = 'info') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = (TOAST_ICONS[type] ?? TOAST_ICONS.info) + `<span>${esc(msg)}</span>`;
+  document.getElementById('toast-container').appendChild(t);
+
+  setTimeout(() => {
+    t.style.opacity   = '0';
+    t.style.transform = 'translateX(20px)';
+    t.style.transition = '0.3s';
+    // CORREÇÃO: guard isConnected antes de remove()
+    setTimeout(() => { if (t.isConnected) t.remove(); }, 300);
+  }, 3000);
 }
 
-export function isValidCNPJ(cnpj) {
-  const c = cnpj.replace(/\D/g, '');
-  if (c.length !== 14 || /^(\d)\1+$/.test(c)) return false;
-  const calc = (c, n) => {
-    let s = 0, p = n - 7;
-    for (let i = 0; i < n; i++) { s += +c[i] * p--; if (p < 2) p = 9; }
-    const r = s % 11;
-    return r < 2 ? 0 : 11 - r;
-  };
-  return calc(c, 12) === +c[12] && calc(c, 13) === +c[13];
+// ─── Content injection ────────────────────────────────────────────────────────
+export function setContent(html) {
+  document.getElementById('main-content').innerHTML = html;
 }
 
-export function isValidEmail(email) {
-  return email.trim().includes('@') && email.trim().length >= 3;
+// ─── Formatters ───────────────────────────────────────────────────────────────
+export function fmtMoney(v) {
+  return 'R$\u00a0' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 }
 
-// RNM: 1 letra + 6 dígitos + traço + 1 letra ou dígito  ex: V123456-J
-export function isValidRNM(rnm) {
-  return /^[A-Za-z]\d{6}-[A-Za-z0-9]$/.test(rnm.trim().toUpperCase());
-}
-
-// CNH Estrangeiro: exatamente 11 dígitos numéricos
-export function isValidCNHEstrangeiro(cnh) {
-  return /^\d{11}$/.test(cnh.replace(/\D/g, ''));
-}
-
-export function isValidPhone(tel) {
-  const d = tel.replace(/\D/g, '');
-  return d.length >= 10 && d.length <= 11;
-}
-
-// Nome: apenas letras (incluindo acentuadas), espaços, hífens e apóstrofos, mín. 2 chars
-export function isValidName(name) {
-  const t = name.trim();
-  return t.length >= 2 && /^[A-Za-zÀ-ÿ\s\-']+$/.test(t);
-}
-
-// ─── Validação de formulário ──────────────────────────────────────────────────
 /**
- * Valida um conjunto de regras e marca os campos com erro.
- * Cada regra: { id, value, rules: ['required','cpf','cnpj','email','phone'], label }
- * Retorna true se tudo válido.
+ * CORREÇÃO: fmtDate() sem erro de timezone.
+ * new Date('2025-01-15') interpreta como UTC 00:00, que em BRT (UTC-3)
+ * se torna 2025-01-14 23:00. Construção manual evita esse off-by-one.
  */
-export function validateForm(rules) {
-  let valid = true;
-  for (const { id, value, rules: checks, label } of rules) {
-    const v = (value ?? '').toString().trim();
-    fieldOk(id); // limpa erro anterior
-
-    if (checks.includes('required') && !v) {
-      fieldError(id, `${label} é obrigatório.`);
-      valid = false;
-      continue;
-    }
-    if (!v) continue; // campos opcionais: se vazio não valida o resto
-
-    if (checks.includes('name') && !isValidName(v)) {
-      fieldError(id, 'Nome deve conter apenas letras e espaços (sem números ou símbolos).');
-      valid = false; continue;
-    }
-    if (checks.includes('cpf') && !isValidCPF(v)) {
-      fieldError(id, 'CPF inválido.');
-      valid = false; continue;
-    }
-    if (checks.includes('cnpj') && !isValidCNPJ(v)) {
-      fieldError(id, 'CNPJ inválido.');
-      valid = false; continue;
-    }
-    if (checks.includes('rnm') && !isValidRNM(v)) {
-      fieldError(id, 'RNM inválido. Formato: A000000-A (ex: V123456-J).');
-      valid = false; continue;
-    }
-    if ((checks.includes('cnh_estrangeiro') || checks.includes('cnh')) && !isValidCNHEstrangeiro(v)) {
-      fieldError(id, 'CNH deve ter 11 dígitos numéricos.');
-      valid = false; continue;
-    }
-    if (checks.includes('email') && !isValidEmail(v)) {
-      fieldError(id, 'E-mail inválido.');
-      valid = false; continue;
-    }
-    if (checks.includes('phone') && !isValidPhone(v)) {
-      fieldError(id, 'Telefone deve ter DDD + número (10 ou 11 dígitos).');
-      valid = false; continue;
-    }
-    if (checks.includes('positive')) {
-      const n = parseFloat(v);
-      if (isNaN(n) || n <= 0) {
-        fieldError(id, `${label} deve ser maior que zero.`);
-        valid = false; continue;
-      }
-    }
-    if (checks.includes('int_positive')) {
-      const n = parseInt(v);
-      if (isNaN(n) || n <= 0) {
-        fieldError(id, `${label} deve ser um número inteiro maior que zero.`);
-        valid = false; continue;
-      }
-    }
+export function fmtDate(d) {
+  if (!d) return '—';
+  // Suporte a strings ISO e objetos Date
+  if (typeof d === 'string' && d.length === 10) {
+    const [y, m, day] = d.split('-').map(Number);
+    return new Date(y, m - 1, day).toLocaleDateString('pt-BR');
   }
-  return valid;
+  return new Date(d).toLocaleDateString('pt-BR');
 }
 
-// ─── Realtime: valida campo ao sair do foco ───────────────────────────────────
-/**
- * Registra validação on-blur para campos individuais.
- * Uso: bindBlur('f-email', 'email', 'E-mail', ['email'])
- */
-export function bindBlur(id, label, checks) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener('blur', () => {
-    validateForm([{ id, value: el.value, rules: checks, label }]);
-  });
-  el.addEventListener('input', () => {
-    if (el.classList.contains('has-error')) fieldOk(id);
-  });
+export function randInt(a, b) {
+  return Math.floor(Math.random() * (b - a + 1)) + a;
 }

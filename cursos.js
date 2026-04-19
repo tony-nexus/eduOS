@@ -1,43 +1,48 @@
 /**
- * /js/ui/theme.js
- * Ciclo de 4 temas com persistência em localStorage.
- * Ordem: neon-glass → ocean-glass → dark → light → (volta)
+ * /js/ui/charts.js
+ * Componentes de gráfico reutilizáveis (mini-chart e fin-chart).
  */
 
-const STORAGE_KEY = 'eduos-theme';
-const THEMES = ['neon-glass', 'ocean-glass', 'dark', 'light'];
-
-const ICONS = {
-  'neon-glass':  'fa-terminal',
-  'ocean-glass': 'fa-droplet',
-  'dark':        'fa-moon',
-  'light':       'fa-sun',
-};
-
-export function initTheme() {
-  const saved = localStorage.getItem(STORAGE_KEY) ?? 'neon-glass';
-  applyTheme(saved);
+/**
+ * Renderiza um gráfico de barras financeiro.
+ * @param {string} containerId - ID do elemento container
+ * @param {string[]} labels - Labels dos meses/períodos
+ * @param {number[]} values - Valores numéricos
+ */
+export function renderFinChart(containerId, labels, values) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const max = Math.max(...values, 1);
+  container.innerHTML = `
+    <div class="fin-chart">
+      ${labels.map((m, i) => `
+        <div class="fin-bar-group">
+          <div class="fin-bar-stack">
+            <div class="fin-bar" style="background:var(--accent);opacity:0.85;height:${Math.round(values[i] / max * 72)}px"></div>
+          </div>
+          <span class="fin-bar-label">${m}</span>
+        </div>
+      `).join('')}
+    </div>`;
 }
 
-export function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') ?? 'neon-glass';
-  const idx  = THEMES.indexOf(current);
-  const next = THEMES[(idx + 1) % THEMES.length];
-  applyTheme(next);
-  localStorage.setItem(STORAGE_KEY, next);
-}
-
-function applyTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-
-  const btn = document.getElementById('theme-toggle');
-  if (!btn) return;
-
-  const icon = btn.querySelector('i');
-  if (!icon) return;
-
-  // Remove todos os ícones possíveis
-  Object.values(ICONS).forEach(cls => icon.classList.remove(cls));
-  // Aplica o ícone do tema ativo
-  icon.classList.add(ICONS[theme] ?? 'fa-terminal');
+/**
+ * Renderiza um mini gráfico de barras inline.
+ * @param {string} containerId
+ * @param {number[]} values
+ * @param {string[]} labels
+ */
+export function renderMiniChart(containerId, values, labels) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const max = Math.max(...values, 1);
+  container.innerHTML = `
+    <div class="mini-chart">
+      ${values.map((v, i) => `
+        <div class="mini-bar-wrap">
+          <div class="mini-bar" style="height:${Math.round(v / max * 68)}px"></div>
+          ${labels?.[i] ? `<span class="mini-bar-label">${labels[i]}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>`;
 }

@@ -1,123 +1,35 @@
 /**
- * /js/ui/branding.js
- * Aplica as configurações de White-label do tenant ao DOM e às variáveis CSS.
- * Chamado após login e ao salvar configurações de aparência.
+ * /js/core/supabase.js
+ * Configuração do cliente Supabase para o EduOS.
+ *
+ * CORREÇÕES APLICADAS:
+ *  - getTenantId() agora lê currentUser.tenant_id em vez de UUID hardcoded
  */
 
-const STYLE_ID = 'tenant-branding';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
+
+const SUPABASE_URL = 'https://wyetjiymimfdtiwmvjsj.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_yaSMkD0y6xr9C08F3uebUA_mc8zxXkB';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
+});
+
+export const getClient = async () => supabase;
 
 /**
- * Busca dados do tenant e aplica o branding.
- * Requer currentUser já populado em globalThis.__eduos_auth.
+ * Retorna o tenant_id do usuário logado.
+ * - Usuário real  → lê currentUser.tenant_id (preenchido via tabela perfis no login)
  */
-export async function loadAndApplyBranding() {
+export function getTenantId() {
   try {
-    const { supabase, getTenantId } = await import('../core/supabase.js');
-    const tenantId = getTenantId();
-    if (!tenantId) return;
-
-    const { data: tenant } = await supabase
-      .from('tenants')
-      .select('nome, logo_url, cor_primaria, cor_secundaria, tema_padrao')
-      .eq('id', tenantId)
-      .single();
-
-    if (tenant) applyBranding(tenant);
-  } catch (_) { /* branding não crítico */ }
+    const u = globalThis.__eduos_auth?.currentUser;
+    if (u?.tenant_id) return u.tenant_id;
+  } catch (_) { /* módulo ainda não carregado */ }
+  return null;
 }
 
-/**
- * Aplica um objeto tenant ao DOM (pode ser chamado para preview em tempo real).
- * @param {Object} tenant - { nome, logo_url, cor_primaria, cor_secundaria, tema_padrao }
- */
-export function applyBranding(tenant) {
-  if (!tenant) return;
-
-  _applyColors(tenant.cor_primaria, tenant.cor_secundaria);
-  _applyLogo(tenant.logo_url, tenant.nome);
-  _applyTheme(tenant.tema_padrao);
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function _applyColors(primary, secondary) {
-  let style = document.getElementById(STYLE_ID);
-  if (!style) {
-    style = document.createElement('style');
-    style.id = STYLE_ID;
-    document.head.appendChild(style);
-  }
-
-  const rules = [];
-
-  if (primary && /^#[0-9a-fA-F]{6}$/.test(primary)) {
-    const soft = _hexToRgba(primary, 0.12);
-    rules.push(`
-      :root,
-      [data-theme="dark"],
-      [data-theme="light"],
-      [data-theme="neon-glass"],
-      [data-theme="ocean-glass"] {
-        --accent:       ${primary};
-        --accent-soft:  ${soft};
-        --accent-hover: ${primary};
-        --green:        ${primary};
-        --green-soft:   ${soft};
-      }
-    `);
-  }
-
-  if (secondary && /^#[0-9a-fA-F]{6}$/.test(secondary)) {
-    const softSec = _hexToRgba(secondary, 0.12);
-    rules.push(`
-      :root,
-      [data-theme="dark"],
-      [data-theme="light"],
-      [data-theme="neon-glass"],
-      [data-theme="ocean-glass"] {
-        --blue:      ${secondary};
-        --blue-soft: ${softSec};
-      }
-    `);
-  }
-
-  style.textContent = rules.join('\n');
-}
-
-function _applyLogo(logoUrl, nome) {
-  const letter = (nome?.[0] ?? 'E').toUpperCase();
-
-  const brandIcon  = document.querySelector('.sidebar-brand-icon');
-  const loginIcon  = document.querySelector('.login-logo-icon');
-
-  if (logoUrl) {
-    const imgStyle = 'width:28px;height:28px;object-fit:contain;border-radius:4px;display:block;';
-    if (brandIcon) brandIcon.innerHTML = `<img src="${logoUrl}" alt="Logo" style="${imgStyle}">`;
-    if (loginIcon) loginIcon.innerHTML = `<img src="${logoUrl}" alt="Logo" style="${imgStyle}">`;
-  } else {
-    if (brandIcon) brandIcon.textContent = letter;
-    if (loginIcon) loginIcon.textContent = letter;
-  }
-
-  // Atualiza o nome na sidebar se couber sem truncar demais
-  const brandName = document.querySelector('.sidebar-brand-name');
-  if (brandName && nome) {
-    const display = nome.length <= 14 ? nome : nome.substring(0, 13) + '…';
-    brandName.innerHTML = display;
-  }
-}
-
-function _applyTheme(tema) {
-  if (!tema) return;
-  // Só aplica se o usuário não tiver uma preferência pessoal salva
-  if (!localStorage.getItem('eduos-theme')) {
-    document.documentElement.setAttribute('data-theme', tema);
-  }
-}
-
-function _hexToRgba(hex, alpha) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+export async function getSupabaseUser() {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user;
 }
