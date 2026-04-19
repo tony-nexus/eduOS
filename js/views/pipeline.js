@@ -67,7 +67,7 @@ function startRefresh() {
       try {
         const { data, error } = await supabase
           .from('matriculas')
-          .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
+          .select('id, aluno_id, curso_id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
           .eq('tenant_id', getTenantId())
           .eq('turma_id', _activeId);
         if (!error && data) {
@@ -380,7 +380,7 @@ async function selecionarTurma(id) {
   try {
     const { data, error } = await supabase
       .from('matriculas')
-      .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
+      .select('id, aluno_id, curso_id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
       .eq('tenant_id', getTenantId())
       .eq('turma_id', id);
     if (error) throw error;
@@ -560,6 +560,12 @@ function setupDragAndDrop(turma) {
           .eq('tenant_id', getTenantId());
 
         if (error) throw error;
+
+        // Quando avança para certificado_emitido, emite o certificado automaticamente
+        if (newStatus === 'certificado_emitido') {
+          await autoEmitirCertificadoUnico(matricula, cardId);
+        }
+
         toast(`${esc(draggingCard.dataset.nome)} → ${newStatus.replace(/_/g, ' ')}`, 'success');
       } catch (err) {
         matricula.status = oldStatus;
@@ -567,5 +573,51 @@ function setupDragAndDrop(turma) {
         toast('Erro ao alterar status.', 'error');
       }
     });
+  });
+}
+
+// ─── Emite certificado ao mover para certificado_emitido no pipeline ──────────
+async function autoEmitirCertificadoUnico(matricula, matriculaId) {
+  const tenant = getTenantId();
+
+  // Já tem certificado válido/a_vencer para este aluno+curso?
+  const { count: existe } = await supabase
+    .from('certificados')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenant)
+    .eq('aluno_id', matricula.aluno_id)
+    .eq('curso_id', matricula.curso_id)
+    .in('status', ['valido', 'a_vencer']);
+
+  if (existe > 0) return; // já emitido
+
+  const { data: curso } = await supabase
+    .from('cursos')
+    .select('validade_meses')
+    .eq('id', matricula.curso_id)
+    .single();
+
+  const hoje = new Date();
+  const meses = curso?.validade_meses ?? null;
+  let dataValidade = null;
+  if (meses !== null) {
+    dataValidade = new Date(hoje);
+    dataValidade.setMonth(dataValidade.getMonth() + meses);
+  }
+
+  const codigo =
+    'CRT-' +
+    Math.random().toString(36).slice(2, 8).toUpperCase() +
+    '-' +
+    Date.now().toString(36).toUpperCase();
+
+  await supabase.from('certificados').insert({
+    tenant_id:          tenant,
+    aluno_id:           matricula.aluno_id,
+    curso_id:           matricula.curso_id,
+    data_emissao:       hoje.toISOString().split('T')[0],
+    data_validade:      dataValidade ? dataValidade.toISOString().split('T')[0] : null,
+    status:             'valido',
+    codigo_verificacao: codigo,
   });
 }
