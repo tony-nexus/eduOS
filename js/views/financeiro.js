@@ -86,7 +86,7 @@ async function loadAux() {
   try {
     const { data } = await supabase
       .from('matriculas')
-      .select('id, aluno:aluno_id(id, nome), curso:curso_id(id, nome)')
+      .select('id, aluno:aluno_id(id, nome), curso:curso_id(id, nome, valor_padrao), turma:turma_id(data_inicio)')
       .eq('tenant_id', getTenantId());
     _matriculas = data || [];
   } catch (_) { _matriculas = []; }
@@ -816,10 +816,18 @@ function modalPagamento(pag = null) {
       <div class="form-group">
         <label>Valor (R$) <span style="color:var(--red)">*</span></label>
         <input id="f-valor" type="number" step="0.01" min="0.01" value="${pag?.valor || ''}" placeholder="0,00">
+        <div id="hint-valor" style="display:none;font-size:11px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><polyline points="20 6 9 17 4 12"/></svg>
+          <span id="hint-valor-text"></span>
+        </div>
       </div>
       <div class="form-group">
         <label>Vencimento <span style="color:var(--red)">*</span></label>
         <input id="f-venc" type="date" value="${pag?.data_vencimento || ''}">
+        <div id="hint-venc" style="display:none;font-size:11px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><polyline points="20 6 9 17 4 12"/></svg>
+          <span id="hint-venc-text"></span>
+        </div>
       </div>
       <div class="form-group">
         <label>Forma de Pagamento</label>
@@ -850,6 +858,52 @@ function modalPagamento(pag = null) {
 
   document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
   document.getElementById('modal-save')?.addEventListener('click',   () => savePagamento(pag?.id));
+
+  // Auto-preenchimento de valor e vencimento ao selecionar matrícula
+  if (!isEdit) {
+    document.getElementById('f-matricula')?.addEventListener('change', function () {
+      const mat        = _matriculas.find(m => m.id === this.value);
+      const valorInput = document.getElementById('f-valor');
+      const vencInput  = document.getElementById('f-venc');
+      const hintValor  = document.getElementById('hint-valor');
+      const hintVenc   = document.getElementById('hint-venc');
+
+      // Limpa hints anteriores
+      if (hintValor) hintValor.style.display = 'none';
+      if (hintVenc)  hintVenc.style.display  = 'none';
+
+      if (!mat) return;
+
+      // Valor do curso
+      if (mat.curso?.valor_padrao) {
+        valorInput.value = mat.curso.valor_padrao;
+        if (hintValor) {
+          hintValor.style.display = 'flex';
+          document.getElementById('hint-valor-text').textContent =
+            `Valor padrão do curso (${fmtMoney(mat.curso.valor_padrao)})`;
+        }
+      }
+
+      // Vencimento = data_inicio da turma, se houver; senão +30 dias
+      if (mat.turma?.data_inicio) {
+        vencInput.value = mat.turma.data_inicio;
+        if (hintVenc) {
+          hintVenc.style.display = 'flex';
+          document.getElementById('hint-venc-text').textContent =
+            `Data de início da turma`;
+        }
+      } else {
+        const d = new Date();
+        d.setDate(d.getDate() + 30);
+        vencInput.value = d.toISOString().split('T')[0];
+        if (hintVenc) {
+          hintVenc.style.display = 'flex';
+          document.getElementById('hint-venc-text').textContent =
+            `Sem turma definida — vencimento em 30 dias`;
+        }
+      }
+    });
+  }
 }
 
 async function savePagamento(id) {

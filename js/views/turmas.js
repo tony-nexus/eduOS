@@ -673,7 +673,7 @@ async function avaliarAluno(matriculaId, novoStatus, opts = {}) {
     .update({ status: novoStatus })
     .eq('id', matriculaId)
     .eq('tenant_id', getTenantId())
-    .eq('status', 'em_andamento'); // Só avança a partir de em_andamento
+    .in('status', ['matriculado', 'em_andamento']);
 
   if (error) throw error;
 
@@ -691,131 +691,259 @@ async function avaliarAluno(matriculaId, novoStatus, opts = {}) {
 // ─── Encerrar Turma ───────────────────────────────────────────────────────────
 async function encerrarTurma(turma) {
   openModal(`Encerrar Turma — ${esc(turma.codigo)}`, `
-    <div style="padding:40px;text-align:center;color:var(--text-tertiary)">Verificando alunos...</div>
+    <div style="padding:40px;text-align:center;color:var(--text-tertiary)">Carregando alunos...</div>
   `);
 
   try {
     const { data, error } = await supabase
       .from('matriculas')
-      .select('id, aluno_id, curso_id, status, aluno:aluno_id(nome)')
+      .select('id, aluno_id, curso_id, status, aluno:aluno_id(nome, cpf, rnm)')
       .eq('turma_id', turma.id)
       .eq('tenant_id', getTenantId())
-      .neq('status', 'cancelado');
+      .neq('status', 'cancelado')
+      .order('status');
 
     if (error) throw error;
-
-    const emAndamento = (data || []).filter(m => m.status === 'em_andamento');
-
-    if (emAndamento.length > 0) {
-      // Há alunos pendentes de avaliação
-      document.getElementById('modal-body').innerHTML = `
-        <div style="padding:10px 16px;background:var(--amber-soft);border-left:3px solid var(--amber);margin-bottom:4px;font-size:12.5px">
-          <strong>${emAndamento.length} aluno(s) ainda em andamento.</strong> Avalie todos antes de encerrar.
-        </div>
-        <div style="max-height:380px;overflow-y:auto">
-          ${emAndamento.map(m => `
-            <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle);display:flex;justify-content:space-between;align-items:center">
-              <span style="font-weight:500;font-size:13px">${esc(m.aluno?.nome ?? '—')}</span>
-              <div style="display:flex;gap:6px">
-                <button class="action-btn enc-aprovar"
-                  style="background:var(--green-soft);color:var(--green);border-color:var(--green)"
-                  data-id="${m.id}" data-nome="${esc(m.aluno?.nome ?? '')}"
-                  data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
-                  ✓ Aprovar
-                </button>
-                <button class="action-btn danger enc-reprovar"
-                  data-id="${m.id}" data-nome="${esc(m.aluno?.nome ?? '')}"
-                  data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
-                  ✗ Reprovar
-                </button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-        </div>
-      `;
-
-      document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
-
-      document.querySelectorAll('.enc-aprovar').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          btn.disabled = true; btn.textContent = '...';
-          await avaliarAluno(btn.dataset.id, 'concluido');
-          toast(`${btn.dataset.nome} aprovado(a)!`, 'success');
-          closeModal();
-          encerrarTurma(turma);
-        });
-      });
-
-      document.querySelectorAll('.enc-reprovar').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          btn.disabled = true; btn.textContent = '...';
-          await avaliarAluno(btn.dataset.id, 'reprovado', {
-            alunoId: btn.dataset.alunoId,
-            cursoId: btn.dataset.cursoId,
-          });
-          toast(`${btn.dataset.nome} reprovado(a). Nova matrícula em espera criada.`, 'info');
-          closeModal();
-          encerrarTurma(turma);
-        });
-      });
-
-    } else {
-      // Todos avaliados — confirmar encerramento
-      const counts = {
-        concluido:    (data || []).filter(m => m.status === 'concluido').length,
-        reprovado:    (data || []).filter(m => m.status === 'reprovado').length,
-        certificado:  (data || []).filter(m => m.status === 'certificado_emitido').length,
-      };
-
-      document.getElementById('modal-body').innerHTML = `
-        <div style="padding:16px;font-size:13px;line-height:1.6">
-          <p>Todos os alunos foram avaliados. Confirma o encerramento da turma <strong>${esc(turma.codigo)}</strong>?</p>
-          <div style="display:flex;gap:20px;margin-top:12px;font-family:var(--font-mono);font-size:12px;flex-wrap:wrap">
-            <span style="color:var(--green)">✓ ${counts.concluido} aprovados</span>
-            <span style="color:var(--red)">✗ ${counts.reprovado} reprovados</span>
-            <span style="color:var(--purple)">🎓 ${counts.certificado} já certificados</span>
-          </div>
-          <p style="margin-top:12px;font-size:11.5px;color:var(--text-tertiary)">
-            Os certificados dos alunos aprovados serão emitidos automaticamente.
-          </p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-          <button class="btn btn-primary" id="btn-encerrar-confirm">Encerrar Turma</button>
-        </div>
-      `;
-
-      document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
-      document.getElementById('btn-encerrar-confirm')?.addEventListener('click', async () => {
-        const btn = document.getElementById('btn-encerrar-confirm');
-        btn.disabled = true; btn.textContent = 'Encerrando...';
-
-        const { error: errTurma } = await supabase
-          .from('turmas')
-          .update({ status: 'concluida' })
-          .eq('id', turma.id)
-          .eq('tenant_id', getTenantId());
-
-        if (errTurma) { toast('Erro ao encerrar turma.', 'error'); return; }
-
-        closeModal();
-        toast(`Turma ${esc(turma.codigo)} encerrada com sucesso!`, 'success');
-
-        autoEmitirCertificados().then(n => {
-          if (n > 0) toast(`${n} certificado(s) emitido(s) automaticamente.`, 'info');
-        });
-
-        await loadTurmas();
-      });
-    }
+    _renderEncerrarModal(turma, data || []);
   } catch (e) {
-    document.getElementById('modal-body').innerHTML = `
-      <div style="padding:20px;color:var(--red)">Erro ao verificar status dos alunos.</div>
-    `;
+    document.getElementById('modal-body').innerHTML =
+      `<div style="padding:20px;color:var(--red)">Erro ao carregar alunos da turma.</div>`;
   }
+}
+
+function _renderEncerrarModal(turma, data) {
+  const PENDENTES  = ['em_andamento', 'matriculado'];
+  const pendentes  = data.filter(m => PENDENTES.includes(m.status));
+  const avaliados  = data.filter(m => !PENDENTES.includes(m.status));
+  const todosAvaliados = pendentes.length === 0;
+
+  const STATUS_BADGE = { concluido:'badge-green', reprovado:'badge-red', certificado_emitido:'badge-purple', em_andamento:'badge-accent', matriculado:'badge-blue' };
+  const STATUS_LABEL = { concluido:'Aprovado', reprovado:'Reprovado', certificado_emitido:'Certificado', em_andamento:'Em Andamento', matriculado:'Matriculado' };
+
+  const counts = {
+    aprovados:   data.filter(m => m.status === 'concluido' || m.status === 'certificado_emitido').length,
+    reprovados:  data.filter(m => m.status === 'reprovado').length,
+    pendentes:   pendentes.length,
+  };
+
+  const renderRow = (m, avaliado) => {
+    const doc = m.aluno?.cpf ? m.aluno.cpf : (m.aluno?.rnm ? m.aluno.rnm : '');
+    return `
+      <div class="enc-row" data-id="${m.id}" data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}"
+           data-nome="${esc(m.aluno?.nome ?? '')}"
+           style="padding:11px 16px;border-bottom:1px solid var(--border-subtle);
+                  display:flex;align-items:center;gap:12px">
+        ${!avaliado ? `
+          <input type="checkbox" class="enc-check" data-id="${m.id}"
+            style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent);flex-shrink:0">
+        ` : `<div style="width:15px;flex-shrink:0"></div>`}
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:500;font-size:13px">${esc(m.aluno?.nome ?? '—')}</div>
+          ${doc ? `<div style="font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono)">${esc(doc)}</div>` : ''}
+        </div>
+        <span class="badge ${STATUS_BADGE[m.status] ?? 'badge-gray'}" style="flex-shrink:0">
+          ${STATUS_LABEL[m.status] ?? m.status}
+        </span>
+        ${!avaliado ? `
+          <div style="display:flex;gap:4px;flex-shrink:0">
+            <button class="action-btn enc-aprovar"
+              style="color:var(--green);border-color:var(--green);padding:3px 8px"
+              data-id="${m.id}" data-nome="${esc(m.aluno?.nome ?? '')}"
+              data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">✓</button>
+            <button class="action-btn danger enc-reprovar"
+              style="padding:3px 8px"
+              data-id="${m.id}" data-nome="${esc(m.aluno?.nome ?? '')}"
+              data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">✗</button>
+          </div>
+        ` : ''}
+      </div>`;
+  };
+
+  document.getElementById('modal-body').innerHTML = `
+
+    <!-- Resumo -->
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border-subtle)">
+      <div style="flex:1;padding:10px 16px;text-align:center;border-right:1px solid var(--border-subtle)">
+        <div style="font-size:18px;font-weight:700;color:var(--amber)">${counts.pendentes}</div>
+        <div style="font-size:10.5px;color:var(--text-tertiary)">Pendentes</div>
+      </div>
+      <div style="flex:1;padding:10px 16px;text-align:center;border-right:1px solid var(--border-subtle)">
+        <div style="font-size:18px;font-weight:700;color:var(--green)">${counts.aprovados}</div>
+        <div style="font-size:10.5px;color:var(--text-tertiary)">Aprovados</div>
+      </div>
+      <div style="flex:1;padding:10px 16px;text-align:center">
+        <div style="font-size:18px;font-weight:700;color:var(--red)">${counts.reprovados}</div>
+        <div style="font-size:10.5px;color:var(--text-tertiary)">Reprovados</div>
+      </div>
+    </div>
+
+    <!-- Barra de ações em massa (só se houver pendentes) -->
+    ${pendentes.length > 0 ? `
+    <div style="padding:10px 16px;background:var(--bg-elevated);border-bottom:1px solid var(--border-subtle);
+                display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12.5px;color:var(--text-secondary)">
+        <input type="checkbox" id="enc-select-all" style="width:14px;height:14px;accent-color:var(--accent)">
+        Selecionar todos
+      </label>
+      <div style="flex:1"></div>
+      <button class="action-btn" id="enc-massa-aprovar"
+        style="color:var(--green);border-color:var(--green);display:flex;align-items:center;gap:4px;opacity:.5"
+        disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><polyline points="20 6 9 17 4 12"/></svg>
+        Aprovar selecionados
+      </button>
+      <button class="action-btn danger" id="enc-massa-reprovar"
+        style="display:flex;align-items:center;gap:4px;opacity:.5"
+        disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="11" height="11"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        Reprovar selecionados
+      </button>
+    </div>
+    ` : ''}
+
+    <!-- Lista -->
+    <div style="max-height:360px;overflow-y:auto">
+      ${pendentes.length > 0 ? `
+        <div style="padding:6px 16px;font-size:10.5px;font-weight:600;text-transform:uppercase;
+                    letter-spacing:.06em;color:var(--amber);background:color-mix(in srgb,var(--amber) 8%,transparent)">
+          Pendentes de avaliação (${pendentes.length})
+        </div>
+        ${pendentes.map(m => renderRow(m, false)).join('')}
+      ` : ''}
+      ${avaliados.length > 0 ? `
+        <div style="padding:6px 16px;font-size:10.5px;font-weight:600;text-transform:uppercase;
+                    letter-spacing:.06em;color:var(--text-tertiary);background:var(--bg-elevated)">
+          Já avaliados (${avaliados.length})
+        </div>
+        ${avaliados.map(m => renderRow(m, true)).join('')}
+      ` : ''}
+      ${data.length === 0 ? `
+        <div style="padding:40px;text-align:center;color:var(--text-tertiary);font-size:13px">
+          Nenhum aluno nesta turma.
+        </div>` : ''}
+    </div>
+
+    <!-- Footer -->
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+      <button class="btn btn-primary" id="btn-encerrar-confirm"
+        ${!todosAvaliados ? 'disabled style="opacity:.5;cursor:not-allowed"' : ''}>
+        ${todosAvaliados ? 'Encerrar Turma' : `Avalie os ${counts.pendentes} aluno(s) pendentes`}
+      </button>
+    </div>
+  `;
+
+  // ── Listeners ──────────────────────────────────────────────────────────────
+  document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
+
+  // Selecionar todos
+  document.getElementById('enc-select-all')?.addEventListener('change', function () {
+    document.querySelectorAll('.enc-check').forEach(cb => cb.checked = this.checked);
+    _atualizarBotoesEmMassa();
+  });
+
+  document.querySelectorAll('.enc-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const total    = document.querySelectorAll('.enc-check').length;
+      const checked  = document.querySelectorAll('.enc-check:checked').length;
+      const selectAll = document.getElementById('enc-select-all');
+      if (selectAll) selectAll.checked = checked === total;
+      _atualizarBotoesEmMassa();
+    });
+  });
+
+  // Ação individual — Aprovar
+  document.querySelectorAll('.enc-aprovar').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = '...';
+      try {
+        await avaliarAluno(btn.dataset.id, 'concluido');
+        toast(`${btn.dataset.nome} aprovado(a)!`, 'success');
+      } catch { toast('Erro ao aprovar.', 'error'); }
+      const { data: fresh } = await supabase
+        .from('matriculas').select('id, aluno_id, curso_id, status, aluno:aluno_id(nome, cpf, rnm)')
+        .eq('turma_id', turma.id).eq('tenant_id', getTenantId()).neq('status', 'cancelado').order('status');
+      _renderEncerrarModal(turma, fresh || []);
+    });
+  });
+
+  // Ação individual — Reprovar
+  document.querySelectorAll('.enc-reprovar').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = '...';
+      try {
+        await avaliarAluno(btn.dataset.id, 'reprovado', { alunoId: btn.dataset.alunoId, cursoId: btn.dataset.cursoId });
+        toast(`${btn.dataset.nome} reprovado(a). Nova matrícula em espera criada.`, 'info');
+      } catch { toast('Erro ao reprovar.', 'error'); }
+      const { data: fresh } = await supabase
+        .from('matriculas').select('id, aluno_id, curso_id, status, aluno:aluno_id(nome, cpf, rnm)')
+        .eq('turma_id', turma.id).eq('tenant_id', getTenantId()).neq('status', 'cancelado').order('status');
+      _renderEncerrarModal(turma, fresh || []);
+    });
+  });
+
+  // Ação em massa — Aprovar
+  document.getElementById('enc-massa-aprovar')?.addEventListener('click', async () => {
+    const ids = _getSelectedIds();
+    if (!ids.length) return;
+    const btn = document.getElementById('enc-massa-aprovar');
+    btn.disabled = true; btn.textContent = 'Aprovando...';
+    for (const id of ids) {
+      try { await avaliarAluno(id, 'concluido'); } catch { /* continua */ }
+    }
+    toast(`${ids.length} aluno(s) aprovado(s)!`, 'success');
+    const { data: fresh } = await supabase
+      .from('matriculas').select('id, aluno_id, curso_id, status, aluno:aluno_id(nome, cpf, rnm)')
+      .eq('turma_id', turma.id).eq('tenant_id', getTenantId()).neq('status', 'cancelado').order('status');
+    _renderEncerrarModal(turma, fresh || []);
+  });
+
+  // Ação em massa — Reprovar
+  document.getElementById('enc-massa-reprovar')?.addEventListener('click', async () => {
+    const rows = document.querySelectorAll('.enc-check:checked');
+    if (!rows.length) return;
+    const btn = document.getElementById('enc-massa-reprovar');
+    btn.disabled = true; btn.textContent = 'Reprovando...';
+    for (const cb of rows) {
+      const row = cb.closest('.enc-row');
+      try {
+        await avaliarAluno(cb.dataset.id, 'reprovado', {
+          alunoId: row?.dataset.alunoId, cursoId: row?.dataset.cursoId,
+        });
+      } catch { /* continua */ }
+    }
+    toast(`${rows.length} aluno(s) reprovado(s). Matrículas em espera criadas.`, 'info');
+    const { data: fresh } = await supabase
+      .from('matriculas').select('id, aluno_id, curso_id, status, aluno:aluno_id(nome, cpf, rnm)')
+      .eq('turma_id', turma.id).eq('tenant_id', getTenantId()).neq('status', 'cancelado').order('status');
+    _renderEncerrarModal(turma, fresh || []);
+  });
+
+  // Encerrar turma
+  document.getElementById('btn-encerrar-confirm')?.addEventListener('click', async () => {
+    if (!todosAvaliados) return;
+    const btn = document.getElementById('btn-encerrar-confirm');
+    btn.disabled = true; btn.textContent = 'Encerrando...';
+    const { error } = await supabase.from('turmas')
+      .update({ status: 'concluida' }).eq('id', turma.id).eq('tenant_id', getTenantId());
+    if (error) { toast('Erro ao encerrar turma.', 'error'); btn.disabled = false; btn.textContent = 'Encerrar Turma'; return; }
+    closeModal();
+    toast(`Turma ${esc(turma.codigo)} encerrada!`, 'success');
+    autoEmitirCertificados().then(n => { if (n > 0) toast(`${n} certificado(s) emitido(s) automaticamente.`, 'info'); });
+    await loadTurmas();
+  });
+}
+
+function _getSelectedIds() {
+  return [...document.querySelectorAll('.enc-check:checked')].map(cb => cb.dataset.id);
+}
+
+function _atualizarBotoesEmMassa() {
+  const temSelecionados = document.querySelectorAll('.enc-check:checked').length > 0;
+  const btnApr = document.getElementById('enc-massa-aprovar');
+  const btnRep = document.getElementById('enc-massa-reprovar');
+  if (btnApr) { btnApr.disabled = !temSelecionados; btnApr.style.opacity = temSelecionados ? '1' : '.5'; }
+  if (btnRep) { btnRep.disabled = !temSelecionados; btnRep.style.opacity = temSelecionados ? '1' : '.5'; }
 }
 
 // ─── Exportação ───────────────────────────────────────────────────────────────
