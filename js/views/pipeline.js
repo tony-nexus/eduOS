@@ -67,14 +67,21 @@ function startRefresh() {
     // Atualiza silenciosamente a turma ativa (sem esqueleto)
     if (_activeId) {
       try {
-        const { data, error } = await supabase
-          .from('matriculas')
-          .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
-          .eq('tenant_id', getTenantId())
-          .eq('turma_id', _activeId);
-        if (!error && data) {
-          _matriculas = data;
-          const turma = _turmas.find(t => t.id === _activeId);
+        const turma = _turmas.find(t => t.id === _activeId);
+        const [r1, r2] = await Promise.all([
+          supabase.from('matriculas')
+            .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
+            .eq('tenant_id', getTenantId())
+            .eq('turma_id', _activeId),
+          turma ? supabase.from('matriculas')
+            .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
+            .eq('tenant_id', getTenantId())
+            .eq('curso_id', turma.curso_id)
+            .eq('status', 'aguardando_turma')
+            .is('turma_id', null) : Promise.resolve({ data: [] }),
+        ]);
+        if (!r1.error) {
+          _matriculas = [...(r1.data || []), ...(r2.data || [])];
           if (turma) renderDetailPanel(turma, _matriculas);
         }
       } catch (_) { /* silencioso */ }
@@ -95,12 +102,21 @@ function startRefresh() {
           }
         });
         // Re-renderiza lista master silenciosamente
-        const q  = (document.getElementById('search-turmas-pipe')?.value || '').toLowerCase();
-        const st = document.getElementById('filter-status-pipe')?.value || '';
-        renderMasterList(_turmas.filter(t =>
-          (!q  || t.codigo.toLowerCase().includes(q) || (t.curso_nome ?? '').toLowerCase().includes(q)) &&
-          (!st || t.status === st)
-        ));
+        const q    = (document.getElementById('search-turmas-pipe')?.value   || '').toLowerCase();
+        const st   = document.getElementById('filter-status-pipe')?.value    || '';
+        const cur  = document.getElementById('filter-curso-pipe')?.value     || '';
+        const inst = document.getElementById('filter-instrutor-pipe')?.value || '';
+        const de   = document.getElementById('filter-periodo-de')?.value     || '';
+        const ate  = document.getElementById('filter-periodo-ate')?.value    || '';
+        renderMasterList(_turmas.filter(t => {
+          if (q   && !t.codigo.toLowerCase().includes(q) && !(t.curso_nome ?? '').toLowerCase().includes(q)) return false;
+          if (st  && t.status !== st)          return false;
+          if (cur && t.curso_id !== cur)       return false;
+          if (inst && t.instrutor_id !== inst) return false;
+          if (de  && t.data_inicio && t.data_inicio < de)  return false;
+          if (ate && t.data_inicio && t.data_inicio > ate) return false;
+          return true;
+        }));
       }
     } catch (_) { /* silencioso */ }
 
@@ -141,20 +157,34 @@ export async function render() {
       <!-- ── MASTER: lista de turmas ──────────────────────────────── -->
       <div class="pipe-master-panel">
         <div class="table-wrap" style="padding:0;overflow:hidden">
-          <div class="table-toolbar" style="padding:10px 12px;border-bottom:1px solid var(--border-subtle)">
-            <div class="search-input-wrap" style="flex:1">
+          <div style="padding:10px 12px;border-bottom:1px solid var(--border-subtle);display:flex;gap:6px;align-items:center">
+            <div class="search-input-wrap" style="flex:1;min-width:0">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
               </svg>
-              <input class="search-input" id="search-turmas-pipe" placeholder="Buscar turma..." aria-label="Buscar turma">
+              <input class="search-input" id="search-turmas-pipe" placeholder="Código ou curso..." aria-label="Buscar turma">
             </div>
-            <select class="select-input" id="filter-status-pipe" style="font-size:12px;padding:6px 8px;min-width:0">
+            <select class="select-input" id="filter-status-pipe" style="font-size:12px;padding:6px 6px;min-width:0;max-width:110px">
               <option value="">Todos</option>
               <option value="agendada">Agendada</option>
               <option value="em_andamento">Em Andamento</option>
               <option value="concluida">Concluída</option>
               <option value="cancelada">Cancelada</option>
             </select>
+          </div>
+          <div style="padding:8px 12px;border-bottom:1px solid var(--border-subtle);display:flex;gap:6px;flex-wrap:wrap">
+            <select class="select-input" id="filter-curso-pipe" style="font-size:11.5px;padding:5px 6px;flex:1;min-width:0">
+              <option value="">Todos os cursos</option>
+            </select>
+            <select class="select-input" id="filter-instrutor-pipe" style="font-size:11.5px;padding:5px 6px;flex:1;min-width:0">
+              <option value="">Todos os instrutores</option>
+            </select>
+          </div>
+          <div style="padding:8px 12px;border-bottom:1px solid var(--border-subtle);display:flex;gap:6px;align-items:center">
+            <span style="font-size:11px;color:var(--text-tertiary);flex-shrink:0">Período:</span>
+            <input type="date" class="select-input" id="filter-periodo-de" style="font-size:11.5px;padding:5px 6px;flex:1;min-width:0" title="Data início de">
+            <span style="font-size:11px;color:var(--text-tertiary)">→</span>
+            <input type="date" class="select-input" id="filter-periodo-ate" style="font-size:11.5px;padding:5px 6px;flex:1;min-width:0" title="Data início até">
           </div>
           <div id="pipe-turma-list" style="padding:10px 10px 4px;max-height:calc(100vh - 260px);overflow-y:auto">
             ${Array(3).fill('<div class="skeleton" style="height:70px;border-radius:6px;margin-bottom:7px"></div>').join('')}
@@ -177,15 +207,29 @@ export async function render() {
 
   // Filtros do master
   const applyMasterFilter = () => {
-    const q  = (document.getElementById('search-turmas-pipe')?.value || '').toLowerCase();
-    const st = document.getElementById('filter-status-pipe')?.value || '';
-    renderMasterList(_turmas.filter(t =>
-      (!q  || t.codigo.toLowerCase().includes(q) || (t.curso_nome ?? '').toLowerCase().includes(q)) &&
-      (!st || t.status === st)
-    ));
+    const q    = (document.getElementById('search-turmas-pipe')?.value  || '').toLowerCase();
+    const st   = document.getElementById('filter-status-pipe')?.value   || '';
+    const cur  = document.getElementById('filter-curso-pipe')?.value    || '';
+    const inst = document.getElementById('filter-instrutor-pipe')?.value || '';
+    const de   = document.getElementById('filter-periodo-de')?.value    || '';
+    const ate  = document.getElementById('filter-periodo-ate')?.value   || '';
+
+    renderMasterList(_turmas.filter(t => {
+      if (q   && !t.codigo.toLowerCase().includes(q) && !(t.curso_nome ?? '').toLowerCase().includes(q)) return false;
+      if (st  && t.status !== st)          return false;
+      if (cur && t.curso_id !== cur)       return false;
+      if (inst && t.instrutor_id !== inst) return false;
+      if (de  && t.data_inicio && t.data_inicio < de)  return false;
+      if (ate && t.data_inicio && t.data_inicio > ate) return false;
+      return true;
+    }));
   };
-  document.getElementById('search-turmas-pipe')?.addEventListener('input', applyMasterFilter);
-  document.getElementById('filter-status-pipe')?.addEventListener('change', applyMasterFilter);
+
+  ['search-turmas-pipe','filter-status-pipe','filter-curso-pipe',
+   'filter-instrutor-pipe','filter-periodo-de','filter-periodo-ate'].forEach(id => {
+    const el = document.getElementById(id);
+    el?.addEventListener(id === 'search-turmas-pipe' ? 'input' : 'change', applyMasterFilter);
+  });
 
   if (_isMobile()) {
     document.getElementById('pipe-detail-panel')?.classList.add('mob-hide');
@@ -199,20 +243,37 @@ async function loadTurmas() {
   try {
     const { data, error } = await supabase
       .from('turmas')
-      .select('id, codigo, status, vagas, ocupadas, data_inicio, data_fim, curso:curso_id(nome)')
+      .select('id, codigo, curso_id, instrutor_id, status, vagas, ocupadas, data_inicio, data_fim, curso:curso_id(nome), instrutor:instrutor_id(nome)')
       .eq('tenant_id', getTenantId())
       .order('data_inicio', { ascending: false });
 
     if (error) throw error;
-    _turmas = (data || []).map(t => ({ ...t, curso_nome: t.curso?.nome ?? '—' }));
+    _turmas = (data || []).map(t => ({
+      ...t,
+      curso_nome:     t.curso?.nome     ?? '—',
+      instrutor_nome: t.instrutor?.nome ?? null,
+    }));
   } catch (err) {
     console.error(err);
     toast('Erro ao carregar turmas', 'error');
     _turmas = [];
   }
+  _populateMasterFilters();
   renderMasterList(_turmas);
   _updateLastRefresh();
   startRefresh();
+}
+
+function _populateMasterFilters() {
+  const cursos     = [...new Map(_turmas.filter(t => t.curso_id).map(t => [t.curso_id, t.curso_nome])).entries()];
+  const instrutores = [...new Map(_turmas.filter(t => t.instrutor_id).map(t => [t.instrutor_id, t.instrutor_nome])).entries()];
+
+  const selCurso = document.getElementById('filter-curso-pipe');
+  const selInst  = document.getElementById('filter-instrutor-pipe');
+  if (selCurso) selCurso.innerHTML = '<option value="">Todos os cursos</option>' +
+    cursos.map(([id, nome]) => `<option value="${id}">${esc(nome)}</option>`).join('');
+  if (selInst) selInst.innerHTML = '<option value="">Todos os instrutores</option>' +
+    instrutores.map(([id, nome]) => `<option value="${id}">${esc(nome)}</option>`).join('');
 }
 
 // ─── Render lista master ──────────────────────────────────────────────────────
@@ -243,7 +304,7 @@ function renderMasterList(list) {
               ${STATUS_TURMA_LABEL[t.status] ?? t.status}
             </span>
           </div>
-          <div class="inst-item-meta">${esc(t.curso_nome)}</div>
+          <div class="inst-item-meta">${esc(t.curso_nome)}${t.instrutor_nome ? ` · <span style="color:var(--text-tertiary)">${esc(t.instrutor_nome)}</span>` : ''}</div>
           <div style="margin-top:5px;display:flex;align-items:center;gap:8px">
             <div class="progress-bar" style="flex:1;height:3px">
               <div class="progress-fill" style="width:${pct}%;background:${pctColor}"></div>
@@ -303,14 +364,21 @@ async function selecionarTurma(id) {
   if (!turma) return;
 
   try {
-    const { data, error } = await supabase
-      .from('matriculas')
-      .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
-      .eq('tenant_id', getTenantId())
-      .eq('turma_id', id);
-
-    if (error) throw error;
-    _matriculas = data || [];
+    const [r1, r2] = await Promise.all([
+      supabase.from('matriculas')
+        .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
+        .eq('tenant_id', getTenantId())
+        .eq('turma_id', id),
+      // Ag. Turma: alunos aguardando sem turma atribuída no mesmo curso
+      supabase.from('matriculas')
+        .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
+        .eq('tenant_id', getTenantId())
+        .eq('curso_id', turma.curso_id)
+        .eq('status', 'aguardando_turma')
+        .is('turma_id', null),
+    ]);
+    if (r1.error) throw r1.error;
+    _matriculas = [...(r1.data || []), ...(r2.data || [])];
     renderDetailPanel(turma, _matriculas);
   } catch (err) {
     toast(`Erro ao carregar pipeline: ${err.message}`, 'error');

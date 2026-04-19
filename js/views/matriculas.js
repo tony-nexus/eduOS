@@ -165,21 +165,13 @@ function applyFilter() {
       <td><span style="font-family:var(--font-mono);font-size:12px;color:var(--text-tertiary)">${esc(m.turma_codigo)}</span></td>
       <td style="font-size:12px;color:var(--text-tertiary)">${fmtDate(m.created_at)}</td>
       <td><span class="badge ${BADGE_MAP[m.status] ?? 'badge-gray'}">${LABEL_MAP[m.status] ?? m.status}</span></td>
-      <td style="white-space:nowrap">
-        <button class="action-btn action-editar" data-id="${m.id}">Editar Status</button>
-        <button class="action-btn danger action-excluir" data-id="${m.id}" title="Excluir matrícula" style="margin-left:4px">Excluir</button>
+      <td>
+        <button class="action-btn danger action-excluir" data-id="${m.id}" title="Excluir matrícula">Excluir</button>
       </td>
     </tr>
   `).join('');
 
   if (count) count.textContent = `${f.length} registro${f.length !== 1 ? 's' : ''}`;
-
-  document.querySelectorAll('.action-editar').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const m = _matriculas.find(x => x.id === btn.dataset.id);
-      if (m) modalEditar(m);
-    });
-  });
 
   document.querySelectorAll('.action-excluir').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -676,50 +668,6 @@ async function saveMatricula() {
 // ─── Atualização de Vagas via BD Automático ─────────────────────────────────
 // A função adjustOcupadas nativa do frontend foi removida, pois a base de dados
 // usa a trigger fn_sync_turma_ocupadas() para garantir ACID em incrementos.
-
-// ─── Modal Editar Status ──────────────────────────────────────────────────────
-function modalEditar(m) {
-  openModal(`Atualizar — ${esc(m.aluno_nome)}`, `
-    <div style="margin-bottom:16px;padding:12px;background:var(--bg-elevated);border-radius:8px;font-size:13px;color:var(--text-secondary)">
-      <strong style="color:var(--text-primary)">${esc(m.aluno_nome)}</strong><br>
-      ${esc(m.curso_nome)} · Turma <span style="font-family:var(--font-mono)">${esc(m.turma_codigo)}</span>
-    </div>
-    <div class="form-group">
-      <label>Novo Status</label>
-      <select id="e-status">
-        ${Object.entries(LABEL_MAP).map(([v, l]) =>
-          `<option value="${v}" ${m.status === v ? 'selected' : ''}>${l}</option>`
-        ).join('')}
-      </select>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
-      <button class="btn btn-primary" id="modal-update">Salvar Status</button>
-    </div>
-  `);
-
-  document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('modal-update')?.addEventListener('click', async () => {
-    const st      = document.getElementById('e-status')?.value;
-    const btn     = document.getElementById('modal-update');
-    btn.disabled  = true;
-    try {
-      const { error } = await supabase
-        .from('matriculas').update({ status: st }).eq('id', m.id).eq('tenant_id', getTenantId());
-      if (error) throw error;
-
-      // O banco de dados ajusta as vagas ocupadas automaticamente via Trigger
-      // quando o status muda para "cancelado" ou retorna.
-
-      closeModal();
-      toast('Status atualizado!', 'success');
-      await loadMatriculas();
-    } catch (err) {
-      toast('Erro ao atualizar.', 'error');
-      btn.disabled = false;
-    }
-  });
-}
 
 // ─── Modal Excluir Matrícula ──────────────────────────────────────────────────
 function modalExcluirMatricula(m) {
