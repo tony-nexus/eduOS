@@ -14,11 +14,12 @@ import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
 import { datasConflitam } from '../core/automations.js';
 
-let _matriculas     = [];
-let _alunos         = [];
-let _cursos         = [];
-let _turmas         = [];
-let _selectedAlunos = [];
+let _matriculas      = [];
+let _alunos          = [];
+let _cursos          = [];
+let _turmas          = [];
+let _selectedAlunos  = [];
+let _selectedTurmaId = null;
 
 const BADGE_MAP = { matriculado:'badge-blue', aguardando_turma:'badge-amber', em_andamento:'badge-accent', concluido:'badge-green', certificado_emitido:'badge-purple', cancelado:'badge-red', reprovado:'badge-red' };
 const LABEL_MAP = { matriculado:'Matriculado', aguardando_turma:'Ag. Turma', em_andamento:'Em Andamento', concluido:'Concluído', certificado_emitido:'Cert. Emitido', cancelado:'Cancelado', reprovado:'Reprovado' };
@@ -227,9 +228,21 @@ function modalNovaMatricula() {
 
       <div class="form-group full">
         <label>Turma <span style="font-size:11px;color:var(--text-tertiary);font-weight:400">(opcional)</span></label>
-        <select id="f-turma">
-          <option value="">— Sem turma / Aguardando —</option>
-        </select>
+        <div id="turma-picker" tabindex="0"
+          style="border:1px solid var(--border-default);border-radius:8px;background:var(--bg-input-solid);
+                 padding:8px 12px;min-height:42px;cursor:pointer;display:flex;align-items:center;
+                 justify-content:space-between;gap:8px;user-select:none">
+          <span id="turma-picker-label" style="font-size:13px;color:var(--text-tertiary)">— Selecione um curso primeiro —</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"
+               style="flex-shrink:0;color:var(--text-tertiary)"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div style="position:relative">
+          <div id="turma-dropdown" hidden
+            style="position:absolute;top:2px;left:0;right:0;background:var(--bg-input-solid);
+                   border:1px solid var(--border-default);border-radius:8px;
+                   box-shadow:var(--shadow-lg);z-index:300;max-height:300px;overflow-y:auto">
+          </div>
+        </div>
         <small style="color:var(--text-tertiary);font-size:11px">
           Turmas abertas do curso selecionado. Sem turma → status <strong>Aguardando Turma</strong>.
         </small>
@@ -250,18 +263,15 @@ function modalNovaMatricula() {
     </div>
   `);
 
+  _selectedTurmaId = null;
   bindSearchAluno();
+  bindTurmaPicker([]);
 
   document.getElementById('f-curso')?.addEventListener('change', function() {
-    const cursoId    = this.value;
-    const turmaSelect = document.getElementById('f-turma');
-    const filtradas   = _turmas.filter(t => t.curso_id === cursoId);
-    turmaSelect.innerHTML = '<option value="">— Sem turma / Aguardando —</option>' +
-      filtradas.map(t => {
-        const disp  = (t.vagas || 0) - (t.ocupadas || 0);
-        const label = `${t.codigo} (${disp} vaga${disp !== 1 ? 's' : ''})`;
-        return `<option value="${t.id}" ${disp <= 0 ? 'disabled' : ''}>${esc(label)}</option>`;
-      }).join('');
+    const filtradas = _turmas.filter(t => t.curso_id === this.value);
+    _selectedTurmaId = null;
+    _setTurmaLabel(null);
+    renderTurmaOpcoes(filtradas);
   });
 
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
@@ -405,10 +415,150 @@ function bindSearchAluno() {
   });
 }
 
+// ─── Turma Picker ─────────────────────────────────────────────────────────────
+function _setTurmaLabel(turma) {
+  const lbl = document.getElementById('turma-picker-label');
+  if (!lbl) return;
+  if (!turma) {
+    lbl.textContent = '— Sem turma / Aguardando —';
+    lbl.style.color = 'var(--text-tertiary)';
+  } else {
+    const disp = (turma.vagas || 0) - (turma.ocupadas || 0);
+    lbl.innerHTML = `
+      <span style="font-family:var(--font-mono);font-weight:600;color:var(--accent)">${esc(turma.codigo)}</span>
+      <span style="color:var(--text-tertiary);font-size:12px;margin-left:8px">${disp} vaga${disp !== 1 ? 's' : ''} disponível${disp !== 1 ? 'is' : ''}</span>`;
+    lbl.style.color = '';
+  }
+}
+
+function renderTurmaOpcoes(turmas) {
+  const drop = document.getElementById('turma-dropdown');
+  if (!drop) return;
+
+  const semTurma = `
+    <div class="turma-result-row" data-id=""
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;gap:8px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="16" height="16"
+           style="color:var(--text-tertiary);flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      <div>
+        <div style="font-size:13px;color:var(--text-secondary);font-weight:500">Sem turma / Aguardando</div>
+        <div style="font-size:11px;color:var(--text-tertiary)">Aluno entra na fila FIFO e é alocado automaticamente</div>
+      </div>
+    </div>`;
+
+  if (!turmas.length) {
+    drop.innerHTML = semTurma + `
+      <div style="padding:14px;font-size:13px;color:var(--text-tertiary);text-align:center">
+        Nenhuma turma agendada para este curso.
+      </div>`;
+    return;
+  }
+
+  drop.innerHTML = semTurma + turmas.map(t => {
+    const disp     = (t.vagas || 0) - (t.ocupadas || 0);
+    const pctOcup  = t.vagas ? Math.round((t.ocupadas || 0) / t.vagas * 100) : 0;
+    const cor      = disp <= 0 ? 'var(--red)' : disp <= 2 ? 'var(--amber)' : 'var(--green)';
+    const disabled = disp <= 0;
+
+    const inicio = t.data_inicio ? fmtDate(t.data_inicio) : null;
+    const fim    = t.data_fim    ? fmtDate(t.data_fim)    : null;
+    const datas  = inicio ? (fim ? `${inicio} → ${fim}` : `A partir de ${inicio}`) : 'Datas não definidas';
+
+    return `
+      <div class="turma-result-row" data-id="${t.id}"
+        style="padding:10px 14px;cursor:${disabled ? 'not-allowed' : 'pointer'};
+               border-bottom:1px solid var(--border-subtle);
+               opacity:${disabled ? '0.5' : '1'}"
+        ${disabled ? 'data-disabled="true"' : ''}>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px">
+          <span style="font-family:var(--font-mono);font-size:13px;font-weight:700;color:var(--accent)">${esc(t.codigo)}</span>
+          <span style="font-size:11px;padding:2px 8px;border-radius:20px;
+                       background:color-mix(in srgb,${cor} 15%,transparent);
+                       color:${cor};font-weight:600;white-space:nowrap">
+            ${disp > 0 ? `${disp} vaga${disp !== 1 ? 's' : ''}` : 'Sem vagas'}
+          </span>
+        </div>
+        <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:6px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"
+               style="vertical-align:middle;margin-right:3px"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          ${esc(datas)}
+        </div>
+        <div style="height:3px;border-radius:2px;background:var(--border-subtle)">
+          <div style="height:100%;border-radius:2px;width:${pctOcup}%;background:${cor};transition:width .3s"></div>
+        </div>
+        <div style="font-size:10px;color:var(--text-tertiary);margin-top:3px;text-align:right">
+          ${t.ocupadas || 0}/${t.vagas || 0} ocupadas
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function bindTurmaPicker(turmasIniciais) {
+  renderTurmaOpcoes(turmasIniciais);
+
+  const picker = document.getElementById('turma-picker');
+  const drop   = document.getElementById('turma-dropdown');
+  if (!picker || !drop) return;
+
+  let highlightIdx = -1;
+
+  function open()  { drop.hidden = false; picker.style.borderColor = 'var(--accent)'; }
+  function close() { drop.hidden = true;  picker.style.borderColor = ''; highlightIdx = -1; }
+
+  function setHighlight(rows, idx) {
+    rows.forEach((r, i) => r.style.background = i === idx ? 'var(--bg-elevated)' : '');
+  }
+
+  function selectRow(row) {
+    if (row.dataset.disabled) return;
+    const id    = row.dataset.id || null;
+    _selectedTurmaId = id || null;
+    _setTurmaLabel(id ? _turmas.find(t => t.id === id) : null);
+    close();
+    picker.style.borderColor = _selectedTurmaId ? 'var(--accent)' : '';
+  }
+
+  picker.addEventListener('click', () => drop.hidden ? open() : close());
+  picker.addEventListener('keydown', e => {
+    const rows = [...drop.querySelectorAll('.turma-result-row')];
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); drop.hidden ? open() : (rows[highlightIdx >= 0 ? highlightIdx : 0]?.click()); }
+    if (e.key === 'Escape')    { close(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); if (drop.hidden) open(); highlightIdx = Math.min(highlightIdx + 1, rows.length - 1); setHighlight(rows, highlightIdx); rows[highlightIdx]?.scrollIntoView({ block: 'nearest' }); }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); setHighlight(rows, highlightIdx); rows[highlightIdx]?.scrollIntoView({ block: 'nearest' }); }
+  });
+
+  drop.addEventListener('mousedown', e => e.preventDefault());
+
+  drop.addEventListener('click', e => {
+    const row = e.target.closest('.turma-result-row');
+    if (row) selectRow(row);
+  });
+
+  drop.addEventListener('mouseover', e => {
+    const row = e.target.closest('.turma-result-row');
+    if (!row) return;
+    const rows = [...drop.querySelectorAll('.turma-result-row')];
+    highlightIdx = rows.indexOf(row);
+    setHighlight(rows, highlightIdx);
+  });
+
+  drop.addEventListener('mouseleave', () => {
+    [...drop.querySelectorAll('.turma-result-row')].forEach(r => r.style.background = '');
+    highlightIdx = -1;
+  });
+
+  document.addEventListener('click', function outsideClick(e) {
+    const p = document.getElementById('turma-picker');
+    const d = document.getElementById('turma-dropdown');
+    if (!p || !d) { document.removeEventListener('click', outsideClick); return; }
+    if (!p.contains(e.target) && !d.contains(e.target)) close();
+  });
+}
+
 // ─── Save ─────────────────────────────────────────────────────────────────────
 async function saveMatricula() {
   const curso_id = document.getElementById('f-curso')?.value;
-  const turma_id = document.getElementById('f-turma')?.value || null;
+  const turma_id = _selectedTurmaId || null;
   const obs      = document.getElementById('f-obs')?.value.trim() || null;
 
   if (!_selectedAlunos.length) { toast('Selecione pelo menos um aluno.', 'warning'); return; }
