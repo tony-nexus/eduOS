@@ -11,6 +11,7 @@
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
+import EssealDatePicker from '../../esseal-date-picker-main/index.js';
 
 let _certs = [];
 let _alunos = [];
@@ -388,11 +389,11 @@ function modalEmitir() {
       </div>
       <div class="form-group">
         <label>Data de Emissão</label>
-        <input id="f-emissao" type="date" value="${new Date().toISOString().split('T')[0]}">
+        <input id="f-emissao" type="text" readonly placeholder="Selecione..." value="${new Date().toISOString().split('T')[0]}">
       </div>
       <div class="form-group">
         <label>Data de Validade (opcional)</label>
-        <input id="f-validade" type="date">
+        <input id="f-validade" type="text" readonly placeholder="Selecione...">
         <small style="color:var(--text-tertiary)" id="f-validade-help">Preenchido auto se curso tiver expiração.</small>
       </div>
     </div>
@@ -428,6 +429,17 @@ function modalEmitir() {
 
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => saveCert());
+
+  // ── Inicializa o EssealDatePicker ──
+  const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#63ffab';
+  new EssealDatePicker('#f-emissao', {
+    primaryColor,
+    format: (d) => d.toISOString().split('T')[0]
+  });
+  new EssealDatePicker('#f-validade', {
+    primaryColor,
+    format: (d) => d.toISOString().split('T')[0]
+  });
 }
 
 async function saveCert() {

@@ -17,6 +17,7 @@ import { getClient, getTenantId } from '../core/supabase.js';
 import { currentUser } from '../core/auth.js';
 import { setContent, openModal, closeModal, toast } from '../ui/components.js';
 import { validateForm, fieldError, fieldOk, bindBlur } from '../ui/validate.js';
+import EssealDatePicker from '../../esseal-date-picker-main/index.js';
 import { criarMatriculaAutomatica } from '../core/automations.js';
 
 // Cache local — evita re-fetch desnecessário ao filtrar
@@ -770,7 +771,7 @@ function modalNovoAluno() {
           </div>
           <div class="form-group">
             <label for="f-nasc">Data de Nascimento</label>
-            <input id="f-nasc" name="data_nascimento" type="date" autocomplete="bday">
+            <input id="f-nasc" name="data_nascimento" type="text" readonly placeholder="Selecione..." autocomplete="bday">
           </div>
         </div>
 
@@ -971,6 +972,15 @@ function modalNovoAluno() {
     });
   });
 
+  // ── Inicializa o EssealDatePicker ──
+  const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#63ffab';
+  if (document.getElementById('f-nasc')) {
+    new EssealDatePicker('#f-nasc', {
+      primaryColor,
+      format: (d) => d.toISOString().split('T')[0]
+    });
+  }
+
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => salvarNovoAluno());
 }
@@ -1127,7 +1137,7 @@ function modalEditarAluno(aluno) {
           </div>
           <div class="form-group">
             <label for="e-nasc">Nascimento</label>
-            <input id="e-nasc" type="date" value="${aluno.data_nascimento || ''}">
+            <input id="e-nasc" type="text" readonly placeholder="Selecione..." value="${aluno.data_nascimento || ''}">
           </div>
         </div>
         <div class="input-row">
@@ -1247,6 +1257,15 @@ function modalEditarAluno(aluno) {
   else                bindBlur('e-email', 'E-mail',   ['email']);
   if (aluno.telefone) bindBlur('e-tel',   'Telefone', ['required', 'phone']);
   else                bindBlur('e-tel',   'Telefone', ['phone']);
+
+  // ── Inicializa o EssealDatePicker ──
+  const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#63ffab';
+  if (document.getElementById('e-nasc')) {
+    new EssealDatePicker('#e-nasc', {
+      primaryColor,
+      format: (d) => d.toISOString().split('T')[0]
+    });
+  }
 
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-update')?.addEventListener('click', () => atualizarAluno(aluno.id, aluno));
