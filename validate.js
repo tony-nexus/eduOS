@@ -1,35 +1,48 @@
 /**
- * /js/core/supabase.js
- * Configuração do cliente Supabase para o EduOS.
- *
- * CORREÇÕES APLICADAS:
- *  - getTenantId() agora lê currentUser.tenant_id em vez de UUID hardcoded
+ * /js/ui/charts.js
+ * Componentes de gráfico reutilizáveis (mini-chart e fin-chart).
  */
-
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
-
-const SUPABASE_URL = 'https://wyetjiymimfdtiwmvjsj.supabase.co';
-const SUPABASE_ANON = 'sb_publishable_yaSMkD0y6xr9C08F3uebUA_mc8zxXkB';
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
-  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
-});
-
-export const getClient = async () => supabase;
 
 /**
- * Retorna o tenant_id do usuário logado.
- * - Usuário real  → lê currentUser.tenant_id (preenchido via tabela perfis no login)
+ * Renderiza um gráfico de barras financeiro.
+ * @param {string} containerId - ID do elemento container
+ * @param {string[]} labels - Labels dos meses/períodos
+ * @param {number[]} values - Valores numéricos
  */
-export function getTenantId() {
-  try {
-    const u = globalThis.__eduos_auth?.currentUser;
-    if (u?.tenant_id) return u.tenant_id;
-  } catch (_) { /* módulo ainda não carregado */ }
-  return null;
+export function renderFinChart(containerId, labels, values) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const max = Math.max(...values, 1);
+  container.innerHTML = `
+    <div class="fin-chart">
+      ${labels.map((m, i) => `
+        <div class="fin-bar-group">
+          <div class="fin-bar-stack">
+            <div class="fin-bar" style="background:var(--accent);opacity:0.85;height:${Math.round(values[i] / max * 72)}px"></div>
+          </div>
+          <span class="fin-bar-label">${m}</span>
+        </div>
+      `).join('')}
+    </div>`;
 }
 
-export async function getSupabaseUser() {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+/**
+ * Renderiza um mini gráfico de barras inline.
+ * @param {string} containerId
+ * @param {number[]} values
+ * @param {string[]} labels
+ */
+export function renderMiniChart(containerId, values, labels) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const max = Math.max(...values, 1);
+  container.innerHTML = `
+    <div class="mini-chart">
+      ${values.map((v, i) => `
+        <div class="mini-bar-wrap">
+          <div class="mini-bar" style="height:${Math.round(v / max * 68)}px"></div>
+          ${labels?.[i] ? `<span class="mini-bar-label">${labels[i]}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>`;
 }

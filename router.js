@@ -1,310 +1,271 @@
-/* ============================================================
-   globals.css — EduOS Design Tokens (meta3 design system)
-   4 Temas: dark (padrão), light, neon-glass, ocean-glass
-   Fontes: Inter + JetBrains Mono
-   ============================================================ */
+/**
+ * /js/core/auth.js
+ * Autenticação real via Supabase + modo demo local.
+ *
+ * CORREÇÕES APLICADAS:
+ *  - currentUser exposto em globalThis.__eduos_auth para getTenantId() sem import circular
+ *  - initials gerado com segurança (guard contra nomes undefined)
+ *  - Mensagens de erro em PT-BR mais descritivas
+ *  - [FIX CRÍTICO] showNavForPerfil() oculta itens do sidebar sem permissão
+ *  - [UX] initAuth() nunca auto-redireciona — exige clique do usuário no login
+ */
 
-/* ===== DESIGN TOKENS ===== */
-:root {
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+import { navigate } from './router.js';
+import { showLoadingScreen } from '../ui/loading.js';
+import { loadAndApplyBranding } from '../ui/branding.js';
 
-  /* ── DARK FLAT (padrão) ─────────────────────────────────── */
-  --bg-base:     #0e0e0e;
-  --bg-gradient: #0e0e0e;
-  --bg-surface:  #161616;
-  --bg-elevated: #1e1e1e;
-  --bg-overlay:  #222222;
-  --bg-hover:    rgba(255,255,255,0.04);
-  --bg-active:   rgba(255,255,255,0.08);
+export let currentUser = null;
 
-  --border-subtle:  rgba(255,255,255,0.07);
-  --border-default: rgba(255,255,255,0.07);
-  --border-strong:  rgba(255,255,255,0.14);
+// Sessão ativa detectada na inicialização (reutilizada sem re-auth se email bater)
+let _cachedSession = null;
 
-  --text-primary:   #ffffff;
-  --text-secondary: rgba(255,255,255,0.52);  /* era .45 → 4.9:1 ✓ WCAG AA */
-  --text-tertiary:  rgba(255,255,255,0.42);  /* era .30 → 4.6:1 ✓ WCAG AA */
-  --text-inverse:   #0e0e0e;
-
-  --accent:       #63ffab;
-  --accent-soft:  rgba(99,255,171,0.1);
-  --accent-hover: #82e0aa;
-
-  --blue:        #5b8af0;
-  --blue-soft:   rgba(91,138,240,0.12);
-  --green:       #63ffab;
-  --green-soft:  rgba(99,255,171,0.1);
-  --amber:       #ffdc73;
-  --amber-soft:  rgba(255,220,115,0.1);
-  --red:         #ff6b81;
-  --red-soft:    rgba(255,107,129,0.1);
-  --purple:      #b685ff;
-  --purple-soft: rgba(182,133,255,0.1);
-
-  --radius-sm:   6px;
-  --radius-md:   12px;
-  --radius-lg:   12px;
-  --radius-xl:   16px;
-  --radius-main: 12px;
-
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
-  --shadow-md: none;
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
-
-  /* Glass / card */
-  --card-blur:    none;
-  --card-shadow:  none;
-  --noise-opacity: 0;
-
-  /* Nav / sidebar */
-  --nav-bg:     #161616;
-  --nav-border: rgba(255,255,255,0.07);
-  --nav-shadow: 0 10px 30px rgba(0,0,0,0.5);
-
-  /* Input sólido — select/option precisam de fundo opaco (browsers ignoram rgba) */
-  --bg-input-solid: #1e1e1e;
-
-  --sidebar-width: 240px;
-  --topbar-height: 56px;
-  --transition: 200ms cubic-bezier(0.4,0,0.2,1);
+// Expõe para getTenantId() sem criar dependência circular
+function _syncGlobal() {
+  globalThis.__eduos_auth = { currentUser };
 }
 
-/* ── LIGHT FLAT ──────────────────────────────────────────── */
-[data-theme="light"] {
-  --bg-base:     #f2f3f5;
-  --bg-gradient: #f2f3f5;
-  --bg-surface:  #ffffff;
-  --bg-elevated: #f9fafb;
-  --bg-overlay:  #f0f0f2;
-  --bg-hover:    #e8e8ea;
-  --bg-active:   #e0e0e3;
+// ─── Login real ───────────────────────────────────────────────────────────────
+export async function doLogin(email, password) {
+  const errorEl = document.getElementById('login-error');
+  errorEl.style.display = 'none';
 
-  --border-subtle:  #e2e4e8;
-  --border-default: #e2e4e8;
-  --border-strong:  #c8cacd;
+  setLoginLoading(true);
+  try {
+    const { getClient } = await import('./supabase.js');
+    const client = await getClient();
 
-  --text-primary:   #111111;
-  --text-secondary: #555e6b;  /* era #6b7280 → 5.3:1 ✓ WCAG AA */
-  --text-tertiary:  #6e7882;  /* era #9ca3af (2.8:1) → 4.6:1 ✓ WCAG AA */
-  --text-inverse:   #ffffff;
+    let userId;
 
-  --accent:       #16a34a;
-  --accent-soft:  rgba(22,163,74,0.1);
-  --accent-hover: #15803d;
+    // Reutiliza sessão ativa se o e-mail bater (sem re-autenticar)
+    if (_cachedSession?.user?.email === email) {
+      userId = _cachedSession.user.id;
+    } else {
+      const { data: authData, error: authError } =
+        await client.auth.signInWithPassword({ email, password });
+      if (authError) throw authError;
+      userId = authData.user.id;
+      _cachedSession = null;
+    }
 
-  --blue:        #3b82f6;
-  --blue-soft:   rgba(59,130,246,0.1);
-  --green:       #16a34a;
-  --green-soft:  rgba(22,163,74,0.1);
-  --amber:       #d97706;
-  --amber-soft:  rgba(217,119,6,0.1);
-  --red:         #dc2626;
-  --red-soft:    rgba(220,38,38,0.1);
-  --purple:      #7c3aed;
-  --purple-soft: rgba(124,58,237,0.1);
+    const { data: perfil, error: perfilError } = await client
+      .from('perfis')
+      .select('nome, role, tenant_id')
+      .eq('user_id', userId)
+      .single();
 
-  --radius-sm:   6px;
-  --radius-md:   12px;
-  --radius-lg:   12px;
-  --radius-xl:   16px;
-  --radius-main: 12px;
+    if (perfilError) throw new Error('Perfil não encontrado. Contate o administrador.');
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.08);
-  --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.16);
+    currentUser = {
+      id:        userId,
+      email,
+      name:      perfil.nome,
+      role:      perfil.role,
+      initials:  _makeInitials(perfil.nome),
+      perfil:    perfil.role,
+      tenant_id: perfil.tenant_id,
+    };
+    _syncGlobal();
 
-  --card-blur:    none;
-  --card-shadow:  0 2px 8px rgba(0,0,0,0.06);
-  --noise-opacity: 0;
+    showApp();
+    navigate(perfil.role === 'aluno' ? 'portal-aluno' : 'dashboard');
+    loadAndApplyBranding(); // White-label: aplica cores/logo do tenant
+    showLoadingScreen();
 
-  --nav-bg:     #ffffff;
-  --nav-border: #e2e4e8;
-  --nav-shadow: 0 10px 30px rgba(0,0,0,0.08);
-
-  --bg-input-solid: #f9fafb;
+  } catch (err) {
+    const msgs = {
+      'Invalid login credentials': 'E-mail ou senha incorretos.',
+      'Email not confirmed':        'Confirme seu e-mail antes de fazer login.',
+    };
+    errorEl.textContent = msgs[err.message] ?? err.message ?? 'Erro ao fazer login.';
+    errorEl.style.display = 'block';
+  } finally {
+    setLoginLoading(false);
+  }
 }
 
-/* ── NEON GLASS (Terminal / Brutalista) ──────────────────── */
-[data-theme="neon-glass"] {
-  --bg-base:     #080907;
-  --bg-gradient: radial-gradient(ellipse 80% 80% at 30% 20%, #242c22 0%, #080907 100%);
-  --bg-surface:  rgba(18,18,18,0.4);
-  --bg-elevated: rgba(0,0,0,0.3);
-  --bg-overlay:  rgba(255,255,255,0.04);
-  --bg-hover:    rgba(255,255,255,0.05);
-  --bg-active:   rgba(255,255,255,0.09);
-
-  --border-subtle:  rgba(255,255,255,0.08);
-  --border-default: rgba(255,255,255,0.08);
-  --border-strong:  rgba(255,255,255,0.16);
-
-  --text-primary:   #f0f0f0;
-  --text-secondary: rgba(255,255,255,0.56);  /* era .50 → 5.2:1 ✓ */
-  --text-tertiary:  rgba(255,255,255,0.44);  /* era .35 → 4.7:1 ✓ */
-  --text-inverse:   #121212;
-
-  --accent:       #82e0aa;
-  --accent-soft:  rgba(130,224,170,0.1);
-  --accent-hover: #9de8bc;
-
-  --blue:        #7eb8f5;
-  --blue-soft:   rgba(126,184,245,0.1);
-  --green:       #82e0aa;
-  --green-soft:  rgba(130,224,170,0.1);
-  --amber:       #f5b041;
-  --amber-soft:  rgba(245,176,65,0.1);
-  --red:         #e74c3c;
-  --red-soft:    rgba(231,76,60,0.1);
-  --purple:      #bb8fce;
-  --purple-soft: rgba(187,143,206,0.1);
-
-  --radius-sm:   4px;
-  --radius-md:   8px;
-  --radius-lg:   8px;
-  --radius-xl:   12px;
-  --radius-main: 8px;
-
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.5);
-  --shadow-md: 0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
-  --shadow-lg: 0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
-
-  --card-blur:    blur(24px) saturate(120%);
-  --card-shadow:  0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05);
-  --noise-opacity: 0.35;
-
-  --nav-bg:     rgba(15,15,15,0.65);
-  --nav-border: rgba(255,255,255,0.08);
-  --nav-shadow: 0 10px 30px rgba(0,0,0,0.6);
-
-  --bg-input-solid: #0f0f0f;
+// ─── Logout ───────────────────────────────────────────────────────────────────
+export async function logout() {
+  currentUser = null;
+  _syncGlobal();
+  try {
+    const { getClient } = await import('./supabase.js');
+    const client = await getClient();
+    await client.auth.signOut();
+  } catch (err) { console.error("Erro no logout", err); }
+  hideApp();
 }
 
-/* ── OCEAN GLASS (Premium, Arredondado) ──────────────────── */
-[data-theme="ocean-glass"] {
-  --bg-base: #060d14;
-  --bg-gradient:
-    radial-gradient(ellipse 75% 55% at 12% 12%, rgba(6,45,62,0.95) 0%, transparent 58%),
-    radial-gradient(ellipse 65% 50% at 88% 88%, rgba(26,11,8,0.9) 0%, transparent 58%),
-    linear-gradient(180deg, #060d14 0%, #030810 100%);
-  --bg-surface:  rgba(255,255,255,0.03);
-  --bg-elevated: rgba(255,255,255,0.05);
-  --bg-overlay:  rgba(255,255,255,0.04);
-  --bg-hover:    rgba(255,255,255,0.06);
-  --bg-active:   rgba(255,255,255,0.10);
+// ─── Restaurar sessão ao carregar ─────────────────────────────────────────────
+// Nunca auto-redireciona. Apenas cache a sessão e prepara a UI de login.
+export async function initAuth() {
+  try {
+    const { getClient } = await import('./supabase.js');
+    const client = await getClient();
 
-  --border-subtle:  rgba(255,255,255,0.13);
-  --border-default: rgba(255,255,255,0.13);
-  --border-strong:  rgba(255,255,255,0.22);
+    const { data: { session } } = await client.auth.getSession();
+    if (!session?.user) return false;
 
-  --text-primary:   #ffffff;
-  --text-secondary: rgba(255,255,255,0.56);  /* era .52 → 5.2:1 ✓ */
-  --text-tertiary:  rgba(255,255,255,0.44);  /* era .36 → 4.7:1 ✓ */
-  --text-inverse:   #060d14;
+    // Verifica se o perfil é válido (logout preventivo se não houver)
+    const { data: perfil, error: perfilError } = await client
+      .from('perfis')
+      .select('nome, role, tenant_id')
+      .eq('user_id', session.user.id)
+      .single();
 
-  --accent:       #63ffab;
-  --accent-soft:  rgba(99,255,171,0.09);
-  --accent-hover: #82e0aa;
+    if (perfilError || !perfil) {
+      await client.auth.signOut();
+      const errEl = document.getElementById('login-error');
+      if (errEl) {
+        errEl.textContent = 'Conta sem perfil configurado. Contate o administrador.';
+        errEl.style.display = 'block';
+      }
+      return false;
+    }
 
-  --blue:        #7eb8f5;
-  --blue-soft:   rgba(126,184,245,0.1);
-  --green:       #63ffab;
-  --green-soft:  rgba(99,255,171,0.09);
-  --amber:       #ffdc73;
-  --amber-soft:  rgba(255,220,115,0.09);
-  --red:         #ff6b81;
-  --red-soft:    rgba(255,107,129,0.09);
-  --purple:      #b685ff;
-  --purple-soft: rgba(182,133,255,0.09);
+    // Cacheia sessão e adapta UI para "um clique"
+    _cachedSession = session;
+    _setupSessionUI(session, perfil.nome);
+    loadAndApplyBranding(); // aplica branding mesmo antes do clique (sidebar visível)
 
-  --radius-sm:   8px;
-  --radius-md:   16px;
-  --radius-lg:   16px;
-  --radius-xl:   20px;
-  --radius-main: 16px;
-
-  --shadow-sm: 0 4px 12px rgba(0,0,0,0.3);
-  --shadow-md: 0 15px 35px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
-  --shadow-lg: 0 15px 35px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
-
-  --card-blur:    blur(36px) saturate(190%) brightness(1.04);
-  --card-shadow:  0 15px 35px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.2);
-  --noise-opacity: 0.12;
-
-  --nav-bg:     rgba(6,18,28,0.7);
-  --nav-border: rgba(255,255,255,0.15);
-  --nav-shadow: 0 10px 40px rgba(0,0,0,0.5), inset 0 1.5px 0 rgba(255,255,255,0.18);
-
-  --bg-input-solid: #081422;
+  } catch (_) { /* sem sessão */ }
+  return false; // sempre exibe a tela de login
 }
 
-/* ===== NOISE OVERLAY =====
-   type="turbulence" → grão nítido e contrastado (vs fractalNoise que é suave)
-   baseFrequency="0.65" → granulação média, visível e definida
-   numOctaves="4" → múltiplas camadas de detalhe
-   animate seed → grain cinematográfico vivo (troca padrão 12×/s)
-   mix-blend-mode: overlay → integra com o fundo sem cobrir
-   background-size: 250px → tile consistente, sem distorção
-   ================================================================ */
-.noise-overlay {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  pointer-events: none; z-index: 9999;
-  opacity: var(--noise-opacity);
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.65' numOctaves='4' seed='2' stitchTiles='stitch'%3E%3Canimate attributeName='seed' from='0' to='100' dur='0.08s' repeatCount='indefinite'/%3E%3C/feTurbulence%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 250px 250px;
-  transition: opacity 0.4s;
-}
+// ─── Helpers internos ─────────────────────────────────────────────────────────
 
-/* ===== RESET ===== */
-*, *::before, *::after {
-  box-sizing: border-box; margin: 0; padding: 0;
-  -webkit-tap-highlight-color: transparent;
-}
-html { font-size: 14px; }
-body {
-  font-family: var(--font-sans);
-  background: var(--bg-gradient);
-  color: var(--text-primary);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden;
-  height: 100vh;
-  transition: background 0.4s, color 0.3s;
-}
+/**
+ * Adapta o formulário de login quando já há uma sessão ativa:
+ *  - Pré-preenche o e-mail
+ *  - Esconde o campo de senha (não é necessário redigitar)
+ *  - Muda o botão para "Continuar como [nome]"
+ *  - Se o usuário editar o e-mail, restaura o formulário normal
+ */
+function _setupSessionUI(session, nomeUsuario) {
+  const emailEl   = document.getElementById('login-email');
+  const passField = document.getElementById('login-pass')?.closest('.form-field');
+  const btnEl     = document.getElementById('login-btn');
+  const hintEl    = document.getElementById('login-session-hint');
 
-/* ===== SCROLLBAR ===== */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+  if (emailEl) emailEl.value = session.user.email;
 
-/* ===== SELEÇÃO DE TEXTO ===== */
-::selection {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-::-moz-selection {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
+  if (passField) passField.style.display = 'none';
 
-/* ===== PREFERS-REDUCED-MOTION ===== */
-/* Para usuários com sensibilidade a movimento (vestibular disorders, epilepsia) */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration:   0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration:  0.01ms !important;
-    scroll-behavior:      auto   !important;
+  if (btnEl) {
+    const primeiro = nomeUsuario?.split(' ')[0] ?? 'você';
+    btnEl.innerHTML = `Continuar como ${primeiro} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
   }
 
-  /* Noise grain: desativa animação do seed (mantém textura estática) */
-  .noise-overlay {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='250' height='250'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='turbulence' baseFrequency='0.65' numOctaves='4' seed='42' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='250' height='250' filter='url(%23n)'/%3E%3C/svg%3E");
+  if (hintEl) {
+    hintEl.textContent = `Sessão ativa · ${session.user.email}`;
+    hintEl.style.display = 'block';
   }
 
-  /* Login orbs: sem flutuação */
-  .login-bg-orb { animation: none !important; }
+  // Se o usuário alterar o e-mail, restaura formulário normal
+  emailEl?.addEventListener('input', function _onEmailChange() {
+    if (this.value !== session.user.email) {
+      _cachedSession = null;
+      if (passField) passField.style.display = '';
+      if (btnEl) btnEl.innerHTML = `Entrar na plataforma <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+      if (hintEl) hintEl.style.display = 'none';
+      emailEl.removeEventListener('input', _onEmailChange);
+    }
+  });
+}
+
+function _makeInitials(name) {
+  if (!name) return '?';
+  return name.split(' ').filter(Boolean).map(p => p[0]).slice(0, 2).join('').toUpperCase();
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
+
+  // Fecha o drawer mobile se estiver aberto
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('sidebar-overlay')?.classList.remove('open');
+
+  if (currentUser) {
+    document.getElementById('user-avatar-sidebar').textContent = currentUser.initials;
+    document.getElementById('user-name-sidebar').textContent   = currentUser.name;
+    document.getElementById('user-role-sidebar').textContent   = currentUser.role;
+
+    // Popula info do usuário no bottom sheet mobile
+    const sheetAvatar = document.getElementById('sheet-user-avatar');
+    const sheetName   = document.getElementById('sheet-user-name');
+    const sheetRole   = document.getElementById('sheet-user-role');
+    if (sheetAvatar) sheetAvatar.textContent = currentUser.initials;
+    if (sheetName)   sheetName.textContent   = currentUser.name;
+    if (sheetRole)   sheetRole.textContent   = currentUser.role;
+
+    // [FIX CRÍTICO] Filtra nav items pelo perfil
+    showNavForPerfil(currentUser.perfil ?? currentUser.role ?? '');
+  }
+}
+
+/**
+ * Oculta itens do sidebar que o perfil não pode acessar.
+ * Usa a mesma tabela ROUTE_PERMISSIONS do router.js (replicada aqui para evitar import cíclico).
+ * Admin e super_admin veem tudo.
+ */
+function showNavForPerfil(perfil) {
+  const p = (perfil ?? '').toLowerCase();
+  const isAdmin = p === 'admin' || p === 'super_admin' || p === 'administrador';
+
+  // Permissões replicadas do router.js (sem import cíclico)
+  const PERMS = {
+    dashboard:     ['secretaria', 'coordenador', 'financeiro', 'comercial', 'instrutor'],
+    alunos:        ['secretaria', 'coordenador', 'comercial'],
+    turmas:        ['secretaria', 'coordenador', 'instrutor'],
+    cursos:        ['secretaria', 'coordenador'],
+    instrutores:   ['secretaria', 'coordenador'],
+    matriculas:    ['secretaria', 'comercial'],
+    pipeline:      ['secretaria', 'comercial', 'coordenador'],
+    certificados:  ['secretaria', 'coordenador'],
+    empresas:      ['secretaria', 'comercial', 'financeiro'],
+    renovacoes:    ['secretaria', 'comercial', 'coordenador'],
+    financeiro:    ['financeiro'],
+    relatorios:    ['financeiro', 'coordenador'],
+    rbac:           [],
+    configuracoes:  [],
+    'portal-aluno': ['aluno'],
+  };
+
+  document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+    const page = item.dataset.page;
+    if (isAdmin) {
+      item.style.display = '';
+      return;
+    }
+    const allowed = PERMS[page];
+    const podeAcessar = allowed === undefined || allowed.includes(p);
+    item.style.display = podeAcessar ? '' : 'none';
+  });
+}
+
+function hideApp() {
+  _cachedSession = null;
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('login-screen').style.display = '';
+
+  const emailEl   = document.getElementById('login-email');
+  const passEl    = document.getElementById('login-pass');
+  const passField = passEl?.closest('.form-field');
+  const btnEl     = document.getElementById('login-btn');
+  const hintEl    = document.getElementById('login-session-hint');
+
+  if (emailEl)   emailEl.value = '';
+  if (passEl)    passEl.value  = '';
+  if (passField) passField.style.display = '';
+  if (btnEl)     btnEl.innerHTML = `Entrar na plataforma <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
+  if (hintEl)    hintEl.style.display = 'none';
+}
+
+function setLoginLoading(loading) {
+  const btn = document.getElementById('login-btn');
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.innerHTML = loading
+    ? `<span style="opacity:0.7">Autenticando...</span>`
+    : `Entrar na plataforma <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M5 12h14M12 5l7 7-7 7"/></svg>`;
 }
