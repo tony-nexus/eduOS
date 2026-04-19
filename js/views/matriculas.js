@@ -444,7 +444,7 @@ async function saveMatricula() {
       const alunoIds = _selectedAlunos.map(a => a.id);
       const { data: mAtivas } = await supabase
         .from('matriculas')
-        .select('aluno_id, turma:turma_id(id, codigo, data_inicio, data_fim)')
+        .select('aluno_id, turma:turma_id(id, codigo, data_inicio, data_fim, status)')
         .in('aluno_id', alunoIds)
         .in('status', ['em_andamento', 'matriculado'])
         .not('turma_id', 'is', null)
@@ -453,7 +453,11 @@ async function saveMatricula() {
 
       const conflitos = [];
       for (const aluno of _selectedAlunos) {
-        const ativas = (mAtivas ?? []).filter(m => m.aluno_id === aluno.id);
+        // Exclui turmas concluídas ou canceladas — aluno pode iniciar nova turma
+        const ativas = (mAtivas ?? []).filter(m =>
+          m.aluno_id === aluno.id &&
+          !['concluida', 'cancelada'].includes(m.turma?.status)
+        );
         for (const m of ativas) {
           if (datasConflitam(turmaSel.data_inicio, turmaSel.data_fim, m.turma?.data_inicio, m.turma?.data_fim)) {
             conflitos.push(`${aluno.nome.split(' ')[0]} ↔ turma ${m.turma?.codigo}`);
