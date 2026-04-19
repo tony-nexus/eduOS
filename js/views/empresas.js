@@ -127,27 +127,27 @@ function applyFilter() {
 
 function modalEmpresa(emp = null) {
   const isEdit = !!emp;
-  const req = isEdit ? ' <span style="color:var(--red)">*</span>' : '';
+  const R = ' <span style="color:var(--red)">*</span>';
   openModal(isEdit ? 'Editar Empresa' : 'Nova Empresa', `
     <div class="form-grid">
       <div class="form-group full">
-        <label>Razão Social / Nome Fantasia <span style="color:var(--red)">*</span></label>
+        <label>Razão Social / Nome Fantasia${R}</label>
         <input id="f-nome" type="text" value="${emp?.nome || ''}" placeholder="Ex: TechCorp Soluções Ltda">
       </div>
       <div class="form-group">
-        <label>CNPJ${req}</label>
+        <label>CNPJ${R}</label>
         <input id="f-cnpj" type="text" value="${emp?.cnpj || ''}" placeholder="00.000.000/0001-00">
       </div>
       <div class="form-group">
-        <label>Responsável de RH/SST${req}</label>
+        <label>Responsável de RH/SST${R}</label>
         <input id="f-resp" type="text" value="${emp?.responsavel || ''}" placeholder="Nome do contato principal">
       </div>
       <div class="form-group">
-        <label>Telefone Contato${req}</label>
+        <label>Telefone Contato${R}</label>
         <input id="f-tel" type="text" value="${emp?.telefone || ''}" placeholder="(11) 99999-9999">
       </div>
       <div class="form-group">
-        <label>E-mail Comercial${req}</label>
+        <label>E-mail Comercial${R}</label>
         <input id="f-email" type="email" value="${emp?.email || ''}" placeholder="contato@empresa.com">
       </div>
       <div class="form-group">
@@ -179,11 +179,11 @@ function modalEmpresa(emp = null) {
       : r.replace(/^(\d{2})(\d{5})(\d{0,4}).*/,'($1) $2-$3').trim();
   });
 
-  bindBlur('f-nome',  'Nome',     ['required']);
-  bindBlur('f-cnpj',  'CNPJ',    isEdit ? ['required', 'cnpj'] : ['cnpj']);
-  bindBlur('f-email', 'E-mail',  isEdit ? ['required', 'email'] : ['email']);
-  bindBlur('f-tel',   'Telefone', isEdit ? ['required', 'phone'] : ['phone']);
-  if (isEdit) bindBlur('f-resp', 'Responsável', ['required']);
+  bindBlur('f-nome',  'Nome',        ['required']);
+  bindBlur('f-cnpj',  'CNPJ',        ['required', 'cnpj']);
+  bindBlur('f-resp',  'Responsável', ['required']);
+  bindBlur('f-email', 'E-mail',      ['required', 'email']);
+  bindBlur('f-tel',   'Telefone',    ['required', 'phone']);
 
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => saveEmpresa(emp?.id, isEdit));
@@ -256,11 +256,11 @@ async function saveEmpresa(id, isEdit = false) {
   const status      = document.getElementById('f-status').value;
 
   const fields = [
-    { id: 'f-nome',  value: nome,          rules: ['required'],                   label: 'Nome' },
-    { id: 'f-cnpj',  value: cnpj   || '',  rules: isEdit ? ['required','cnpj']  : ['cnpj'],          label: 'CNPJ' },
-    { id: 'f-resp',  value: responsavel||'', rules: isEdit ? ['required']        : [],                label: 'Responsável' },
-    { id: 'f-email', value: email  || '',  rules: isEdit ? ['required','email'] : ['email'],          label: 'E-mail' },
-    { id: 'f-tel',   value: telefone||'',  rules: isEdit ? ['required','phone'] : ['phone'],          label: 'Telefone' },
+    { id: 'f-nome',  value: nome,           rules: ['required'],           label: 'Nome' },
+    { id: 'f-cnpj',  value: cnpj    || '',  rules: ['required', 'cnpj'],  label: 'CNPJ' },
+    { id: 'f-resp',  value: responsavel||'',rules: ['required'],           label: 'Responsável' },
+    { id: 'f-email', value: email   || '',  rules: ['required', 'email'], label: 'E-mail' },
+    { id: 'f-tel',   value: telefone|| '',  rules: ['required', 'phone'], label: 'Telefone' },
   ];
   if (!validateForm(fields)) return;
 
@@ -295,7 +295,13 @@ async function saveEmpresa(id, isEdit = false) {
     await loadData();
   } catch (err) {
     console.error(err);
-    toast('Erro ao salvar empresa.', 'error');
+    if (err.code === '23505' && err.message?.includes('cnpj')) {
+      toast('Este CNPJ já está cadastrado para outra empresa.', 'error');
+      const input = document.getElementById('f-cnpj');
+      if (input) { input.style.borderColor = 'var(--red)'; input.focus(); }
+    } else {
+      toast('Erro ao salvar empresa.', 'error');
+    }
     btn.disabled = false;
     btn.textContent = id ? 'Salvar Alterações' : 'Criar Empresa';
   }
