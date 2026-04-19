@@ -6,7 +6,6 @@
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtMoney, fmtDate, esc } from '../ui/components.js';
 import { validateForm } from '../ui/validate.js';
-import EssealDatePicker from '../../esseal-date-picker-main/index.js';
 
 let _pagamentos = [];
 let _matriculas = [];
@@ -209,9 +208,9 @@ function renderAbaCobrancas(container) {
         </select>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:11.5px;color:var(--text-tertiary);white-space:nowrap">Venc. de</span>
-          <input type="text" readonly placeholder="Selecionar..." class="select-input" id="filtro-data-de" style="width:110px">
+          <input type="date" class="select-input" id="filtro-data-de" style="width:auto">
           <span style="font-size:11.5px;color:var(--text-tertiary)">até</span>
-          <input type="text" readonly placeholder="Selecionar..." class="select-input" id="filtro-data-ate" style="width:110px">
+          <input type="date" class="select-input" id="filtro-data-ate" style="width:auto">
         </div>
       </div>
       <div style="overflow-x:auto">
@@ -243,18 +242,6 @@ function renderAbaCobrancas(container) {
   ['search-fin','filtro-status-fin','filtro-tipo-fin','filtro-curso-fin','filtro-data-de','filtro-data-ate'].forEach(id => {
     const el = document.getElementById(id);
     if (el) { el.addEventListener('input', applyFilter); el.addEventListener('change', applyFilter); }
-  });
-
-  const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#63ffab';
-  new EssealDatePicker('#filtro-data-de', {
-    primaryColor,
-    format: (d) => d.toISOString().split('T')[0],
-    onChange: applyFilter
-  });
-  new EssealDatePicker('#filtro-data-ate', {
-    primaryColor,
-    format: (d) => d.toISOString().split('T')[0],
-    onChange: applyFilter
   });
 
   applyFilter();
@@ -622,7 +609,7 @@ function modalConfirmarPagamento(pag) {
     <div class="form-grid">
       <div class="form-group">
         <label>Data do Recebimento <span style="color:var(--red)">*</span></label>
-        <input id="f-data-pag" type="text" readonly placeholder="Selecione..." value="${hoje}">
+        <input id="f-data-pag" type="date" value="${hoje}">
       </div>
       <div class="form-group">
         <label>Forma de Pagamento</label>
@@ -674,13 +661,6 @@ function modalConfirmarPagamento(pag) {
 
   document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
   document.getElementById('modal-save')?.addEventListener('click',   () => confirmarPagamento(pag));
-
-  // ── Inicializa o EssealDatePicker ──
-  const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#63ffab';
-  new EssealDatePicker('#f-data-pag', {
-    primaryColor,
-    format: (d) => d.toISOString().split('T')[0]
-  });
 }
 
 function setDropFile(input, file) {
@@ -843,7 +823,7 @@ function modalPagamento(pag = null) {
       </div>
       <div class="form-group">
         <label>Vencimento <span style="color:var(--red)">*</span></label>
-        <input id="f-venc" type="text" readonly placeholder="Selecione..." value="${pag?.data_vencimento || ''}">
+        <input id="f-venc" type="date" value="${pag?.data_vencimento || ''}">
         <div id="hint-venc" style="display:none;font-size:11px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><polyline points="20 6 9 17 4 12"/></svg>
           <span id="hint-venc-text"></span>
@@ -924,13 +904,6 @@ function modalPagamento(pag = null) {
       }
     });
   }
-
-  // ── Inicializa o EssealDatePicker ──
-  const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#63ffab';
-  new EssealDatePicker('#f-venc', {
-    primaryColor,
-    format: (d) => d.toISOString().split('T')[0]
-  });
 }
 
 async function savePagamento(id) {

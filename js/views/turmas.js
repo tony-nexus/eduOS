@@ -14,7 +14,6 @@ import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
 import { validateForm, fieldError, fieldOk } from '../ui/validate.js';
 import { autoSyncTurmaStatus, autoEnrollAguardando, autoEmitirCertificados } from '../core/automations.js';
-import EssealDatePicker from '../../esseal-date-picker-main/index.js';
 
 let _turmas     = [];
 let _cursos     = [];
@@ -355,12 +354,12 @@ function modalTurma(turma = null) {
 
       <div class="form-group">
         <label>Data Início <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-inicio" type="text" readonly placeholder="Selecione..." value="${esc(turma?.data_inicio || '')}">
+        <input id="f-inicio" type="date" value="${esc(turma?.data_inicio || '')}">
       </div>
 
       <div class="form-group">
         <label>Data Fim <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-fim" type="text" readonly placeholder="Selecione..." value="${esc(turma?.data_fim || '')}">
+        <input id="f-fim" type="date" value="${esc(turma?.data_fim || '')}">
       </div>
 
       <div class="form-group">
@@ -393,9 +392,10 @@ function modalTurma(turma = null) {
   `);
 
   // ── Bloqueia seleção de datas passadas no calendário (apenas nova turma) ──
-  let minDate = null;
   if (!isEdit) {
-    minDate = new Date(); // bloqueia passado
+    const hoje = new Date().toISOString().split('T')[0];
+    document.getElementById('f-inicio')?.setAttribute('min', hoje);
+    document.getElementById('f-fim')?.setAttribute('min', hoje);
   }
 
   // ── Auto-geração de código apenas para turmas novas ──────────────────────
@@ -423,29 +423,11 @@ function modalTurma(turma = null) {
     if (hidden) hidden.value = statusAtual;
   }
 
-  // ── Inicializa o EssealDatePicker ──
-  const primaryColor = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#63ffab';
-  
-  if (document.getElementById('f-inicio')) {
-    new EssealDatePicker('#f-inicio', {
-      primaryColor,
-      minDate,
-      format: (d) => d.toISOString().split('T')[0],
-      onChange: () => {
-        atualizarStatusBadge();
-        if (!isEdit) triggerAutoCode();
-      }
-    });
-  }
-
-  if (document.getElementById('f-fim')) {
-    new EssealDatePicker('#f-fim', {
-      primaryColor,
-      minDate,
-      format: (d) => d.toISOString().split('T')[0],
-      onChange: atualizarStatusBadge
-    });
-  }
+  document.getElementById('f-inicio')?.addEventListener('change', () => {
+    atualizarStatusBadge();
+    if (!isEdit) triggerAutoCode();
+  });
+  document.getElementById('f-fim')?.addEventListener('change', atualizarStatusBadge);
 
   if (!isEdit) {
     document.getElementById('f-curso')?.addEventListener('change', triggerAutoCode);
