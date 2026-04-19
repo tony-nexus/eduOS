@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Certificado - EduOS</title>
+  <style>
+    /* Premium Dark Mode / University Style Certificate */
+    :root {
+      --bg-color: #0f172a;
+      --text-color: #f1f5f9;
+      --accent: #10b981;
+      --border: #334155;
+      --font-serif: 'Playfair Display', serif;
+      --font-sans: 'Inter', sans-serif;
+    }
+    
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      font-family: var(--font-sans);
+    }
+    
+    .certificate-container {
+      width: 1000px;
+      height: 700px;
+      padding: 40px;
+      box-sizing: border-box;
+      position: relative;
+    }
+    
+    .certificate-border {
+      width: 100%;
+      height: 100%;
+      border: 8px solid var(--border);
+      outline: 2px solid var(--accent);
+      outline-offset: -12px;
+      padding: 40px;
+      box-sizing: border-box;
+      position: relative;
+      background: linear-gradient(135deg, rgba(16,185,129,0.05) 0%, rgba(15,23,42,1) 100%);
+      text-align: center;
+      border-radius: 8px;
+    }
+    
+    .logo-container img {
+      height: 80px;
+      margin-bottom: 20px;
+    }
+    
+    .title {
+      font-family: var(--font-serif);
+      font-size: 48px;
+      font-weight: 700;
+      color: var(--accent);
+      margin: 10px 0 30px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+    }
+    
+    .subtitle {
+      font-size: 18px;
+      color: #94a3b8;
+      margin-bottom: 40px;
+      font-style: italic;
+    }
+    
+    .recipient-name {
+      font-family: var(--font-serif);
+      font-size: 36px;
+      font-weight: bold;
+      color: #ffffff;
+      margin: 20px 0;
+      border-bottom: 2px solid var(--border);
+      display: inline-block;
+      padding-bottom: 10px;
+      min-width: 600px;
+    }
+    
+    .description {
+      font-size: 16px;
+      color: #cbd5e1;
+      max-width: 700px;
+      margin: 0 auto 50px;
+      line-height: 1.6;
+    }
+    
+    .course-name {
+      font-weight: bold;
+      color: var(--accent);
+      font-size: 20px;
+    }
+    
+    .footer {
+      position: absolute;
+      bottom: 50px;
+      width: calc(100% - 80px);
+      left: 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    
+    .signature {
+      width: 200px;
+      border-top: 1px solid var(--border);
+      padding-top: 10px;
+    }
+    
+    .signature-name {
+      font-weight: bold;
+      color: #e2e8f0;
+      font-size: 14px;
+    }
+    
+    .signature-role {
+      font-size: 12px;
+      color: #64748b;
+    }
+    
+    .qr-container {
+      text-align: center;
+    }
+    
+    .qr-placeholder {
+      width: 80px;
+      height: 80px;
+      background: #ffffff;
+      margin: 0 auto 10px;
+      display: grid;
+      place-items: center;
+      color: #000;
+      font-size: 10px;
+    }
+    
+    .qr-code-text {
+      font-family: monospace;
+      font-size: 10px;
+      color: #94a3b8;
+    }
+
+    @media print {
+      body {
+        background-color: transparent;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .certificate-container {
+        width: 100%;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+      }
+      .certificate-border {
+        border: 4px solid var(--border);
+        background: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="certificate-container">
+    <div class="certificate-border">
+      <div class="logo-container">
+        <!-- Substituir src base64 futuramente com dados da coluna logo da tabela configuracoes -->
+        <img id="cert-logo" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0MCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTBiOTgxIiBzdHJva2Utd2lkdGg9IjUiLz48dGV4dCB4PSI1MCIgeT0iNTUiIGZvbnQtZmFtaWx5PSJBcmlhbCIgZm9udC1zaXplPSIyMCIgZmlsbD0iIzEwYjk4MSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+RURVPC90ZXh0Pjwvc3ZnPg==" alt="EduOS Logo">
+      </div>
+      
+      <div class="title">CERTIFICADO de CONCLUSÃO</div>
+      
+      <div class="subtitle">Concedido com sucesso a</div>
+      
+      <div class="recipient-name" id="cert-nome">[Nome do Aluno]</div>
+      
+      <div class="description">
+        Certificamos que o aluno concluiu com êxito todos os requisitos acadêmicos correspondentes ao curso de 
+        <span class="course-name" id="cert-curso">[Nome do Curso]</span>, 
+        obtendo aproveitamento satisfatório. Emitido em <span id="cert-data">[Data de Emissão]</span>.
+      </div>
+      
+      <div class="footer">
+        <div class="signature">
+          <div class="signature-name">Diretoria Acadêmica</div>
+          <div class="signature-role">EduOS Premium</div>
+        </div>
+        
+        <div class="qr-container">
+          <div class="qr-placeholder" id="cert-qr">QR</div>
+          <div class="qr-code-text" id="cert-codigo">CÓDIGO: [CRT-XXXXXX]</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Exemplo de injeção dinâmica
+    function loadCertificateData(certData) {
+        document.getElementById('cert-nome').innerText = certData.aluno_nome;
+        document.getElementById('cert-curso').innerText = certData.curso_nome;
+        document.getElementById('cert-data').innerText = new Date(certData.data_emissao).toLocaleDateString('pt-BR');
+        document.getElementById('cert-codigo').innerText = `CÓDIGO: ${certData.codigo_verificacao}`;
+        
+        // Exemplo: document.getElementById('cert-logo').src = certData.institution_logo_base64;
+    }
+  </script>
+</body>
+</html>
