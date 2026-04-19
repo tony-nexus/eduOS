@@ -107,6 +107,7 @@ function applyFilter() {
       <td>
         <div style="display:flex;gap:4px">
           <button class="action-btn action-editar" data-id="${e.id}">Editar</button>
+          <button class="action-btn danger action-excluir" data-id="${e.id}" data-nome="${esc(e.nome)}">Excluir</button>
         </div>
       </td>
     </tr>
@@ -115,33 +116,38 @@ function applyFilter() {
   document.querySelectorAll('.action-editar').forEach(btn => {
     btn.addEventListener('click', () => {
       const e = _empresas.find(x => x.id == btn.dataset.id);
-      if(e) modalEmpresa(e);
+      if (e) modalEmpresa(e);
     });
+  });
+
+  document.querySelectorAll('.action-excluir').forEach(btn => {
+    btn.addEventListener('click', () => modalExcluirEmpresa(btn.dataset.id, btn.dataset.nome));
   });
 }
 
 function modalEmpresa(emp = null) {
   const isEdit = !!emp;
+  const req = isEdit ? ' <span style="color:var(--red)">*</span>' : '';
   openModal(isEdit ? 'Editar Empresa' : 'Nova Empresa', `
     <div class="form-grid">
       <div class="form-group full">
-        <label>Razão Social / Nome Fantasia *</label>
+        <label>Razão Social / Nome Fantasia <span style="color:var(--red)">*</span></label>
         <input id="f-nome" type="text" value="${emp?.nome || ''}" placeholder="Ex: TechCorp Soluções Ltda">
       </div>
       <div class="form-group">
-        <label>CNPJ</label>
+        <label>CNPJ${req}</label>
         <input id="f-cnpj" type="text" value="${emp?.cnpj || ''}" placeholder="00.000.000/0001-00">
       </div>
       <div class="form-group">
-        <label>Responsável de RH/SST</label>
+        <label>Responsável de RH/SST${req}</label>
         <input id="f-resp" type="text" value="${emp?.responsavel || ''}" placeholder="Nome do contato principal">
       </div>
       <div class="form-group">
-        <label>Telefone Contato</label>
+        <label>Telefone Contato${req}</label>
         <input id="f-tel" type="text" value="${emp?.telefone || ''}" placeholder="(11) 99999-9999">
       </div>
       <div class="form-group">
-        <label>E-mail Comercial</label>
+        <label>E-mail Comercial${req}</label>
         <input id="f-email" type="email" value="${emp?.email || ''}" placeholder="contato@empresa.com">
       </div>
       <div class="form-group">
@@ -172,43 +178,100 @@ function modalEmpresa(emp = null) {
       ? r.replace(/^(\d{2})(\d{4})(\d{0,4}).*/,'($1) $2-$3').trim()
       : r.replace(/^(\d{2})(\d{5})(\d{0,4}).*/,'($1) $2-$3').trim();
   });
+
   bindBlur('f-nome',  'Nome',     ['required']);
-  bindBlur('f-cnpj',  'CNPJ',    ['cnpj']);
-  if (emp?.email)    bindBlur('f-email', 'E-mail',    ['required', 'email']);
-  else               bindBlur('f-email', 'E-mail',    ['email']);
-  if (emp?.telefone) bindBlur('f-tel',   'Telefone',  ['required', 'phone']);
-  else               bindBlur('f-tel',   'Telefone',  ['phone']);
+  bindBlur('f-cnpj',  'CNPJ',    isEdit ? ['required', 'cnpj'] : ['cnpj']);
+  bindBlur('f-email', 'E-mail',  isEdit ? ['required', 'email'] : ['email']);
+  bindBlur('f-tel',   'Telefone', isEdit ? ['required', 'phone'] : ['phone']);
+  if (isEdit) bindBlur('f-resp', 'Responsável', ['required']);
+
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
-  document.getElementById('modal-save')?.addEventListener('click', () => saveEmpresa(emp?.id, emp ?? {}));
+  document.getElementById('modal-save')?.addEventListener('click', () => saveEmpresa(emp?.id, isEdit));
 }
 
-async function saveEmpresa(id, empOriginal = {}) {
-  const nome = document.getElementById('f-nome').value.trim();
-  const cnpj = document.getElementById('f-cnpj').value.trim() || null;
+function modalExcluirEmpresa(id, nome) {
+  openModal('Excluir Empresa', `
+    <div class="danger-banner" style="margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20" style="color:var(--red);flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <strong style="color:var(--red)">Ação irreversível</strong>
+      </div>
+      <p style="font-size:13px;color:var(--text-secondary);margin:0">
+        A empresa <strong style="color:var(--text-primary)">${esc(nome)}</strong> será excluída permanentemente.
+        Alunos vinculados a ela <strong>não serão excluídos</strong>, mas perderão o vínculo com a empresa.
+      </p>
+    </div>
+    <p style="font-size:12.5px;color:var(--text-tertiary);margin-bottom:16px">
+      Digite o nome da empresa para confirmar:
+    </p>
+    <input id="confirm-nome" type="text" placeholder="${esc(nome)}" autocomplete="off"
+           style="width:100%;margin-bottom:4px">
+    <div id="confirm-error" style="font-size:11.5px;color:var(--red);min-height:16px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+      <button class="btn btn-primary" id="btn-confirm-excluir"
+              style="background:var(--red);border-color:var(--red)" disabled>
+        Excluir Empresa
+      </button>
+    </div>
+  `);
+
+  const input  = document.getElementById('confirm-nome');
+  const btnDel = document.getElementById('btn-confirm-excluir');
+
+  input?.addEventListener('input', () => {
+    btnDel.disabled = input.value.trim() !== nome.trim();
+  });
+
+  document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
+
+  btnDel?.addEventListener('click', async () => {
+    btnDel.disabled = true;
+    btnDel.textContent = 'Excluindo...';
+    try {
+      const { error } = await supabase
+        .from('empresas')
+        .delete()
+        .eq('id', id)
+        .eq('tenant_id', getTenantId());
+      if (error) throw error;
+      closeModal();
+      toast('Empresa excluída.', 'success');
+      await loadData();
+    } catch (err) {
+      console.error(err);
+      document.getElementById('confirm-error').textContent = 'Erro ao excluir. Tente novamente.';
+      btnDel.disabled = false;
+      btnDel.textContent = 'Excluir Empresa';
+    }
+  });
+}
+
+async function saveEmpresa(id, isEdit = false) {
+  const nome        = document.getElementById('f-nome').value.trim();
+  const cnpj        = document.getElementById('f-cnpj').value.trim() || null;
   const responsavel = document.getElementById('f-resp').value.trim() || null;
-  const telefone = document.getElementById('f-tel').value.trim() || null;
-  const email = document.getElementById('f-email').value.trim() || null;
-  const status = document.getElementById('f-status').value;
+  const telefone    = document.getElementById('f-tel').value.trim()  || null;
+  const email       = document.getElementById('f-email').value.trim() || null;
+  const status      = document.getElementById('f-status').value;
 
-  const emailRules = empOriginal.email    ? ['required', 'email'] : ['email'];
-  const telRules   = empOriginal.telefone ? ['required', 'phone'] : ['phone'];
-
-  const ok = validateForm([
-    { id: 'f-nome',  value: nome,       rules: ['required'], label: 'Nome' },
-    { id: 'f-cnpj',  value: cnpj||'',   rules: ['cnpj'],     label: 'CNPJ' },
-    { id: 'f-email', value: email||'',  rules: emailRules,   label: 'E-mail' },
-    { id: 'f-tel',   value: telefone||'', rules: telRules,   label: 'Telefone' },
-  ]);
-  if (!ok) return;
+  const fields = [
+    { id: 'f-nome',  value: nome,          rules: ['required'],                   label: 'Nome' },
+    { id: 'f-cnpj',  value: cnpj   || '',  rules: isEdit ? ['required','cnpj']  : ['cnpj'],          label: 'CNPJ' },
+    { id: 'f-resp',  value: responsavel||'', rules: isEdit ? ['required']        : [],                label: 'Responsável' },
+    { id: 'f-email', value: email  || '',  rules: isEdit ? ['required','email'] : ['email'],          label: 'E-mail' },
+    { id: 'f-tel',   value: telefone||'',  rules: isEdit ? ['required','phone'] : ['phone'],          label: 'Telefone' },
+  ];
+  if (!validateForm(fields)) return;
 
   const payload = {
     tenant_id: getTenantId(),
     nome,
-    cnpj:        cnpj        || null,
-    responsavel: responsavel || null,
-    telefone:    telefone    || null,
-    email:       email       || null,
-    status
+    cnpj,
+    responsavel,
+    telefone,
+    email,
+    status,
   };
 
   const btn = document.getElementById('modal-save');
