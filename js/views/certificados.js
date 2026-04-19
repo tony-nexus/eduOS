@@ -11,6 +11,7 @@
 
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
+import { initDatePicker } from '../ui/date-picker.js';
 
 let _certs = [];
 let _alunos = [];
@@ -388,11 +389,11 @@ function modalEmitir() {
       </div>
       <div class="form-group">
         <label>Data de Emissão</label>
-        <input id="f-emissao" type="date" value="${new Date().toISOString().split('T')[0]}">
+        <input id="f-emissao" type="text" class="dp-input" placeholder="Selecione a data" readonly value="${new Date().toISOString().split('T')[0]}">
       </div>
       <div class="form-group">
         <label>Data de Validade (opcional)</label>
-        <input id="f-validade" type="date">
+        <input id="f-validade" type="text" class="dp-input" placeholder="Selecione a data" readonly>
         <small style="color:var(--text-tertiary)" id="f-validade-help">Preenchido auto se curso tiver expiração.</small>
       </div>
     </div>
@@ -402,6 +403,10 @@ function modalEmitir() {
     </div>
   `);
 
+  // Date pickers
+  initDatePicker(document.getElementById('f-emissao'));
+  initDatePicker(document.getElementById('f-validade'));
+
   document.getElementById('f-curso')?.addEventListener('change', function() {
     const rawVal = this.options[this.selectedIndex]?.dataset.val;
     const months = parseInt(rawVal) || 0;
@@ -410,18 +415,21 @@ function modalEmitir() {
 
     if (rawVal === 'null' || rawVal === '' || rawVal === '0') {
       // Curso vitalício — sem data de validade
-      input.value    = '';
-      input.disabled = true;
+      input.value = '';
+      input.style.pointerEvents = 'none';
+      input.style.opacity = '0.4';
       if (help) help.innerHTML = '<span style="color:var(--accent);font-family:var(--font-mono)">Vitalício — certificado sem prazo de expiração.</span>';
     } else if (months > 0) {
-      input.disabled = false;
+      input.style.pointerEvents = '';
+      input.style.opacity = '';
       const d = new Date(document.getElementById('f-emissao').value || new Date());
       d.setMonth(d.getMonth() + months);
-      input.value = d.toISOString().split('T')[0];
+      input.value = d.toLocaleDateString('en-CA');
       if (help) help.textContent = `Calculado automaticamente: ${months} meses após a emissão.`;
     } else {
-      input.disabled = false;
-      input.value    = '';
+      input.style.pointerEvents = '';
+      input.style.opacity = '';
+      input.value = '';
       if (help) help.textContent = 'Preencha manualmente ou selecione um curso.';
     }
   });

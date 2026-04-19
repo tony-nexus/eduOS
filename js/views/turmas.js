@@ -14,6 +14,7 @@ import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtDate, esc } from '../ui/components.js';
 import { validateForm, fieldError, fieldOk } from '../ui/validate.js';
 import { autoSyncTurmaStatus, autoEnrollAguardando, autoEmitirCertificados } from '../core/automations.js';
+import { initDatePicker } from '../ui/date-picker.js';
 
 let _turmas     = [];
 let _cursos     = [];
@@ -354,12 +355,12 @@ function modalTurma(turma = null) {
 
       <div class="form-group">
         <label>Data Início <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-inicio" type="date" value="${esc(turma?.data_inicio || '')}">
+        <input id="f-inicio" type="text" class="dp-input" placeholder="Selecione a data" readonly value="${esc(turma?.data_inicio || '')}">
       </div>
 
       <div class="form-group">
         <label>Data Fim <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-fim" type="date" value="${esc(turma?.data_fim || '')}">
+        <input id="f-fim" type="text" class="dp-input" placeholder="Selecione a data" readonly value="${esc(turma?.data_fim || '')}">
       </div>
 
       <div class="form-group">
@@ -391,11 +392,11 @@ function modalTurma(turma = null) {
     </div>
   `);
 
-  // ── Bloqueia seleção de datas passadas no calendário (apenas nova turma) ──
-  if (!isEdit) {
-    const hoje = new Date().toISOString().split('T')[0];
-    document.getElementById('f-inicio')?.setAttribute('min', hoje);
-    document.getElementById('f-fim')?.setAttribute('min', hoje);
+  // ── Date pickers ─────────────────────────────────────────────────────────
+  {
+    const minDate = !isEdit ? (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })() : null;
+    initDatePicker(document.getElementById('f-inicio'), { minDate });
+    initDatePicker(document.getElementById('f-fim'),    { minDate });
   }
 
   // ── Auto-geração de código apenas para turmas novas ──────────────────────

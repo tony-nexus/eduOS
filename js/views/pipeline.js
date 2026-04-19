@@ -12,10 +12,12 @@
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, toast, esc, fmtDate } from '../ui/components.js';
 import { navigate } from '../core/router.js';
+import { initDatePicker } from '../ui/date-picker.js';
 
 let _turmas        = [];
 let _matriculas    = [];   // matrículas da turma ativa
 let _activeId      = null; // turma selecionada
+let _filterPickers = [];
 let _refreshTimer  = null; // ID do setInterval de auto-refresh
 const REFRESH_INTERVAL_MS = 30_000; // 30 segundos
 
@@ -123,6 +125,8 @@ function _updateLastRefresh() {
 // ─── Render principal ─────────────────────────────────────────────────────────
 export async function render() {
   stopRefresh(); // limpa timer anterior caso o usuário navegue de volta
+  _filterPickers.forEach(p => { try { p.destroy(); } catch {} });
+  _filterPickers = [];
   _activeId = null;
 
   setContent(`
@@ -191,11 +195,11 @@ export async function render() {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
               <div>
                 <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">De</div>
-                <input type="date" class="select-input" id="filter-periodo-de" style="font-size:12px;width:100%;padding:5px 6px">
+                <input type="text" class="select-input dp-input" id="filter-periodo-de" placeholder="AAAA-MM-DD" readonly style="font-size:12px;width:100%;padding:5px 6px">
               </div>
               <div>
                 <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">Até</div>
-                <input type="date" class="select-input" id="filter-periodo-ate" style="font-size:12px;width:100%;padding:5px 6px">
+                <input type="text" class="select-input dp-input" id="filter-periodo-ate" placeholder="AAAA-MM-DD" readonly style="font-size:12px;width:100%;padding:5px 6px">
               </div>
             </div>
 
@@ -244,6 +248,12 @@ export async function render() {
     const el = document.getElementById(id);
     el?.addEventListener(id === 'search-turmas-pipe' ? 'input' : 'change', applyMasterFilter);
   });
+
+  // Pickers de filtro de período
+  const elDe  = document.getElementById('filter-periodo-de');
+  const elAte = document.getElementById('filter-periodo-ate');
+  if (elDe)  _filterPickers.push(initDatePicker(elDe));
+  if (elAte) _filterPickers.push(initDatePicker(elAte));
 
   if (_isMobile()) {
     document.getElementById('pipe-detail-panel')?.classList.add('mob-hide');

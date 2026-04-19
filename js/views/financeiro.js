@@ -6,10 +6,12 @@
 import { supabase, getTenantId } from '../core/supabase.js';
 import { setContent, openModal, closeModal, toast, fmtMoney, fmtDate, esc } from '../ui/components.js';
 import { validateForm } from '../ui/validate.js';
+import { initDatePicker } from '../ui/date-picker.js';
 
 let _pagamentos = [];
 let _matriculas = [];
 let _abaAtiva   = 'cobrancas';
+let _filterPickers = [];
 
 const STATUS_LABEL = { pendente:'Pendente', recebido:'Recebido', atraso:'Em Atraso', cancelado:'Cancelado', isento:'Isento' };
 const STATUS_BADGE = { pendente:'badge-amber', recebido:'badge-green', atraso:'badge-red', cancelado:'badge-gray', isento:'badge-purple' };
@@ -17,6 +19,10 @@ const TIPO_LABEL   = { pix:'PIX', boleto:'Boleto', cartao_credito:'Cartão Créd
 
 // ─── Render principal ─────────────────────────────────────────────────────────
 export async function render() {
+  // Destrói pickers de filtro de render anterior (navegação)
+  _filterPickers.forEach(p => { try { p.destroy(); } catch {} });
+  _filterPickers = [];
+
   setContent(`
     <div class="page-header">
       <div><h1>Financeiro</h1><p>Cobranças, recebimentos e análise de inadimplência</p></div>
@@ -61,6 +67,12 @@ export async function render() {
   await Promise.all([loadData(), loadAux()]);
 
   setAba(_abaAtiva);
+
+  // Pickers de filtro (nível de página — fora de modal)
+  const pDe  = document.getElementById('filtro-data-de');
+  const pAte = document.getElementById('filtro-data-ate');
+  if (pDe)  _filterPickers.push(initDatePicker(pDe));
+  if (pAte) _filterPickers.push(initDatePicker(pAte));
 }
 
 // ─── Troca de aba ─────────────────────────────────────────────────────────────
@@ -208,9 +220,9 @@ function renderAbaCobrancas(container) {
         </select>
         <div style="display:flex;align-items:center;gap:6px">
           <span style="font-size:11.5px;color:var(--text-tertiary);white-space:nowrap">Venc. de</span>
-          <input type="date" class="select-input" id="filtro-data-de" style="width:auto">
+          <input type="text" class="select-input dp-input" id="filtro-data-de" placeholder="AAAA-MM-DD" readonly style="width:110px">
           <span style="font-size:11.5px;color:var(--text-tertiary)">até</span>
-          <input type="date" class="select-input" id="filtro-data-ate" style="width:auto">
+          <input type="text" class="select-input dp-input" id="filtro-data-ate" placeholder="AAAA-MM-DD" readonly style="width:110px">
         </div>
       </div>
       <div style="overflow-x:auto">
@@ -609,7 +621,7 @@ function modalConfirmarPagamento(pag) {
     <div class="form-grid">
       <div class="form-group">
         <label>Data do Recebimento <span style="color:var(--red)">*</span></label>
-        <input id="f-data-pag" type="date" value="${hoje}">
+        <input id="f-data-pag" type="text" class="dp-input" placeholder="Selecione a data" readonly value="${hoje}">
       </div>
       <div class="form-group">
         <label>Forma de Pagamento</label>
@@ -658,6 +670,9 @@ function modalConfirmarPagamento(pag) {
     if (file) { setDropFile(inp, file); showCompPreview(file); }
   });
   inp?.addEventListener('change', e => { if (e.target.files[0]) showCompPreview(e.target.files[0]); });
+
+  // Date picker
+  initDatePicker(document.getElementById('f-data-pag'));
 
   document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
   document.getElementById('modal-save')?.addEventListener('click',   () => confirmarPagamento(pag));
@@ -823,7 +838,7 @@ function modalPagamento(pag = null) {
       </div>
       <div class="form-group">
         <label>Vencimento <span style="color:var(--red)">*</span></label>
-        <input id="f-venc" type="date" value="${pag?.data_vencimento || ''}">
+        <input id="f-venc" type="text" class="dp-input" placeholder="Selecione a data" readonly value="${pag?.data_vencimento || ''}">
         <div id="hint-venc" style="display:none;font-size:11px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"><polyline points="20 6 9 17 4 12"/></svg>
           <span id="hint-venc-text"></span>
@@ -855,6 +870,9 @@ function modalPagamento(pag = null) {
       <button class="btn btn-primary" id="modal-save">${isEdit ? 'Salvar Alterações' : 'Registrar Cobrança'}</button>
     </div>
   `);
+
+  // Date picker
+  initDatePicker(document.getElementById('f-venc'));
 
   document.getElementById('modal-cancel')?.addEventListener('click', closeModal);
   document.getElementById('modal-save')?.addEventListener('click',   () => savePagamento(pag?.id));

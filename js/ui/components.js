@@ -25,6 +25,9 @@ export function openModal(title, bodyHTML, wide = false) {
 
 export function closeModal() {
   document.getElementById('modal-backdrop').classList.remove('open');
+  // Destrói date pickers registrados (evita acúmulo de DOM e listeners)
+  (window.__hlvDatePickers || []).forEach(p => { try { p.destroy(); } catch {} });
+  window.__hlvDatePickers = [];
 }
 
 // ─── Toast ────────────────────────────────────────────────────────────────────

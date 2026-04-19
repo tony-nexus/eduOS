@@ -17,6 +17,7 @@ import { getClient, getTenantId } from '../core/supabase.js';
 import { currentUser } from '../core/auth.js';
 import { setContent, openModal, closeModal, toast } from '../ui/components.js';
 import { validateForm, fieldError, fieldOk, bindBlur } from '../ui/validate.js';
+import { initDatePicker } from '../ui/date-picker.js';
 import { criarMatriculaAutomatica } from '../core/automations.js';
 
 // Cache local — evita re-fetch desnecessário ao filtrar
@@ -770,7 +771,7 @@ function modalNovoAluno() {
           </div>
           <div class="form-group">
             <label for="f-nasc">Data de Nascimento</label>
-            <input id="f-nasc" name="data_nascimento" type="date" autocomplete="bday">
+            <input id="f-nasc" name="data_nascimento" type="text" class="dp-input" placeholder="Selecione a data" readonly autocomplete="off">
           </div>
         </div>
 
@@ -938,6 +939,9 @@ function modalNovoAluno() {
       </button>
     </div>
   `, true);
+
+  // Date picker
+  initDatePicker(document.getElementById('f-nasc'));
 
   // Masks
   bindMasksNovoAluno();
@@ -1127,7 +1131,7 @@ function modalEditarAluno(aluno) {
           </div>
           <div class="form-group">
             <label for="e-nasc">Nascimento</label>
-            <input id="e-nasc" type="date" value="${aluno.data_nascimento || ''}">
+            <input id="e-nasc" type="text" class="dp-input" placeholder="Selecione a data" readonly value="${aluno.data_nascimento || ''}">
           </div>
         </div>
         <div class="input-row">
@@ -1240,6 +1244,9 @@ function modalEditarAluno(aluno) {
       if (hidden) document.getElementById('e-empresa').value = '';
     });
   });
+
+  // Date picker
+  initDatePicker(document.getElementById('e-nasc'));
 
   // Validação em tempo real nos campos obrigatórios da edição
   bindBlur('e-nome',  'Nome',     ['required', 'name']);
