@@ -34,19 +34,17 @@ const STATUS_TURMA_LABEL = {
 
 const KANBAN_COLS = [
   { key: 'matriculado',         label: 'Matriculados',  color: 'var(--blue)'   },
-  { key: 'aguardando_turma',    label: 'Ag. Turma',     color: 'var(--amber)'  },
   { key: 'em_andamento',        label: 'Em Andamento',  color: 'var(--accent)' },
   { key: 'reprovado',           label: 'Reprovados',    color: 'var(--red)'    },
   { key: 'concluido',           label: 'Concluído',     color: 'var(--green)'  },
   { key: 'certificado_emitido', label: 'Cert. Emitido', color: 'var(--purple)' },
 ];
 
-// Transições de status válidas
+// Transições de status válidas (dentro da turma)
 const TRANSICOES = {
-  matriculado:         ['aguardando_turma', 'em_andamento', 'cancelado'],
-  aguardando_turma:    ['matriculado', 'em_andamento', 'cancelado'],
+  matriculado:         ['em_andamento', 'cancelado'],
   em_andamento:        ['concluido', 'reprovado', 'cancelado'],
-  reprovado:           ['aguardando_turma'],
+  reprovado:           ['em_andamento', 'cancelado'],
   concluido:           ['certificado_emitido'],
   certificado_emitido: [],
 };
@@ -67,21 +65,14 @@ function startRefresh() {
     // Atualiza silenciosamente a turma ativa (sem esqueleto)
     if (_activeId) {
       try {
-        const turma = _turmas.find(t => t.id === _activeId);
-        const [r1, r2] = await Promise.all([
-          supabase.from('matriculas')
-            .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
-            .eq('tenant_id', getTenantId())
-            .eq('turma_id', _activeId),
-          turma ? supabase.from('matriculas')
-            .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
-            .eq('tenant_id', getTenantId())
-            .eq('curso_id', turma.curso_id)
-            .eq('status', 'aguardando_turma')
-            .is('turma_id', null) : Promise.resolve({ data: [] }),
-        ]);
-        if (!r1.error) {
-          _matriculas = [...(r1.data || []), ...(r2.data || [])];
+        const { data, error } = await supabase
+          .from('matriculas')
+          .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
+          .eq('tenant_id', getTenantId())
+          .eq('turma_id', _activeId);
+        if (!error && data) {
+          _matriculas = data;
+          const turma = _turmas.find(t => t.id === _activeId);
           if (turma) renderDetailPanel(turma, _matriculas);
         }
       } catch (_) { /* silencioso */ }
@@ -157,34 +148,57 @@ export async function render() {
       <!-- ── MASTER: lista de turmas ──────────────────────────────── -->
       <div class="pipe-master-panel">
         <div class="table-wrap" style="padding:0;overflow:hidden">
-          <div style="padding:10px 12px;border-bottom:1px solid var(--border-subtle);display:flex;gap:6px;align-items:center">
-            <div class="search-input-wrap" style="flex:1;min-width:0">
+          <!-- Filtros -->
+          <div style="padding:10px 12px;border-bottom:1px solid var(--border-subtle)">
+
+            <!-- Busca -->
+            <div class="search-input-wrap" style="margin-bottom:8px">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
               </svg>
               <input class="search-input" id="search-turmas-pipe" placeholder="Código ou curso..." aria-label="Buscar turma">
             </div>
-            <select class="select-input" id="filter-status-pipe" style="font-size:12px;padding:6px 6px;min-width:0;max-width:110px">
-              <option value="">Todos</option>
-              <option value="agendada">Agendada</option>
-              <option value="em_andamento">Em Andamento</option>
-              <option value="concluida">Concluída</option>
-              <option value="cancelada">Cancelada</option>
-            </select>
-          </div>
-          <div style="padding:8px 12px;border-bottom:1px solid var(--border-subtle);display:flex;gap:6px;flex-wrap:wrap">
-            <select class="select-input" id="filter-curso-pipe" style="font-size:11.5px;padding:5px 6px;flex:1;min-width:0">
-              <option value="">Todos os cursos</option>
-            </select>
-            <select class="select-input" id="filter-instrutor-pipe" style="font-size:11.5px;padding:5px 6px;flex:1;min-width:0">
-              <option value="">Todos os instrutores</option>
-            </select>
-          </div>
-          <div style="padding:8px 12px;border-bottom:1px solid var(--border-subtle);display:flex;gap:6px;align-items:center">
-            <span style="font-size:11px;color:var(--text-tertiary);flex-shrink:0">Período:</span>
-            <input type="date" class="select-input" id="filter-periodo-de" style="font-size:11.5px;padding:5px 6px;flex:1;min-width:0" title="Data início de">
-            <span style="font-size:11px;color:var(--text-tertiary)">→</span>
-            <input type="date" class="select-input" id="filter-periodo-ate" style="font-size:11.5px;padding:5px 6px;flex:1;min-width:0" title="Data início até">
+
+            <!-- Status + Curso em grid 2 colunas -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+              <div>
+                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">Status</div>
+                <select class="select-input" id="filter-status-pipe" style="font-size:12px;width:100%;padding:5px 6px">
+                  <option value="">Todos</option>
+                  <option value="agendada">Agendada</option>
+                  <option value="em_andamento">Em Andamento</option>
+                  <option value="concluida">Concluída</option>
+                  <option value="cancelada">Cancelada</option>
+                </select>
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">Curso</div>
+                <select class="select-input" id="filter-curso-pipe" style="font-size:12px;width:100%;padding:5px 6px">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Instrutor (linha inteira) -->
+            <div style="margin-bottom:6px">
+              <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">Instrutor</div>
+              <select class="select-input" id="filter-instrutor-pipe" style="font-size:12px;width:100%;padding:5px 6px">
+                <option value="">Todos</option>
+              </select>
+            </div>
+
+            <!-- Período em grid 2 colunas -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+              <div>
+                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">De</div>
+                <input type="date" class="select-input" id="filter-periodo-de" style="font-size:12px;width:100%;padding:5px 6px">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">Até</div>
+                <input type="date" class="select-input" id="filter-periodo-ate" style="font-size:12px;width:100%;padding:5px 6px">
+              </div>
+            </div>
+
           </div>
           <div id="pipe-turma-list" style="padding:10px 10px 4px;max-height:calc(100vh - 260px);overflow-y:auto">
             ${Array(3).fill('<div class="skeleton" style="height:70px;border-radius:6px;margin-bottom:7px"></div>').join('')}
@@ -364,21 +378,13 @@ async function selecionarTurma(id) {
   if (!turma) return;
 
   try {
-    const [r1, r2] = await Promise.all([
-      supabase.from('matriculas')
-        .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
-        .eq('tenant_id', getTenantId())
-        .eq('turma_id', id),
-      // Ag. Turma: alunos aguardando sem turma atribuída no mesmo curso
-      supabase.from('matriculas')
-        .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
-        .eq('tenant_id', getTenantId())
-        .eq('curso_id', turma.curso_id)
-        .eq('status', 'aguardando_turma')
-        .is('turma_id', null),
-    ]);
-    if (r1.error) throw r1.error;
-    _matriculas = [...(r1.data || []), ...(r2.data || [])];
+    const { data, error } = await supabase
+      .from('matriculas')
+      .select('id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
+      .eq('tenant_id', getTenantId())
+      .eq('turma_id', id);
+    if (error) throw error;
+    _matriculas = data || [];
     renderDetailPanel(turma, _matriculas);
   } catch (err) {
     toast(`Erro ao carregar pipeline: ${err.message}`, 'error');
