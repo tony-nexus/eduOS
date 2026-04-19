@@ -1,80 +1,123 @@
 /**
- * /js/ui/components.js
- * Helpers de UI: Modal, Toast, setContent, formatters.
- *
- * CORREÇÕES APLICADAS:
- *  - fmtDate() corrigido para timezone BR (evita off-by-one em UTC-3)
- *  - toast() com guard t.isConnected antes de remover (evita erro pós-navegação)
- *  - esc() helper de escape HTML para prevenir XSS nos modais
+ * /js/ui/branding.js
+ * Aplica as configurações de White-label do tenant ao DOM e às variáveis CSS.
+ * Chamado após login e ao salvar configurações de aparência.
  */
 
-// ─── XSS escape ───────────────────────────────────────────────────────────────
-export function esc(str) {
-  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+const STYLE_ID = 'tenant-branding';
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
-export function openModal(title, bodyHTML, wide = false) {
-  document.getElementById('modal-title').textContent = title;
-  document.getElementById('modal-body').innerHTML    = bodyHTML;
-  const modal = document.getElementById('modal-content');
-  modal.style.width    = wide ? '760px' : '600px';
-  modal.style.maxWidth = 'calc(100vw - 32px)';
-  document.getElementById('modal-backdrop').classList.add('open');
-}
+/**
+ * Busca dados do tenant e aplica o branding.
+ * Requer currentUser já populado em globalThis.__eduos_auth.
+ */
+export async function loadAndApplyBranding() {
+  try {
+    const { supabase, getTenantId } = await import('../core/supabase.js');
+    const tenantId = getTenantId();
+    if (!tenantId) return;
 
-export function closeModal() {
-  document.getElementById('modal-backdrop').classList.remove('open');
-}
+    const { data: tenant } = await supabase
+      .from('tenants')
+      .select('nome, logo_url, cor_primaria, cor_secundaria, tema_padrao')
+      .eq('id', tenantId)
+      .single();
 
-// ─── Toast ────────────────────────────────────────────────────────────────────
-const TOAST_ICONS = {
-  success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
-  error:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>',
-  warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
-  info:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
-};
-
-export function toast(msg, type = 'info') {
-  const t = document.createElement('div');
-  t.className = `toast ${type}`;
-  t.innerHTML = (TOAST_ICONS[type] ?? TOAST_ICONS.info) + `<span>${esc(msg)}</span>`;
-  document.getElementById('toast-container').appendChild(t);
-
-  setTimeout(() => {
-    t.style.opacity   = '0';
-    t.style.transform = 'translateX(20px)';
-    t.style.transition = '0.3s';
-    // CORREÇÃO: guard isConnected antes de remove()
-    setTimeout(() => { if (t.isConnected) t.remove(); }, 300);
-  }, 3000);
-}
-
-// ─── Content injection ────────────────────────────────────────────────────────
-export function setContent(html) {
-  document.getElementById('main-content').innerHTML = html;
-}
-
-// ─── Formatters ───────────────────────────────────────────────────────────────
-export function fmtMoney(v) {
-  return 'R$\u00a0' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    if (tenant) applyBranding(tenant);
+  } catch (_) { /* branding não crítico */ }
 }
 
 /**
- * CORREÇÃO: fmtDate() sem erro de timezone.
- * new Date('2025-01-15') interpreta como UTC 00:00, que em BRT (UTC-3)
- * se torna 2025-01-14 23:00. Construção manual evita esse off-by-one.
+ * Aplica um objeto tenant ao DOM (pode ser chamado para preview em tempo real).
+ * @param {Object} tenant - { nome, logo_url, cor_primaria, cor_secundaria, tema_padrao }
  */
-export function fmtDate(d) {
-  if (!d) return '—';
-  // Suporte a strings ISO e objetos Date
-  if (typeof d === 'string' && d.length === 10) {
-    const [y, m, day] = d.split('-').map(Number);
-    return new Date(y, m - 1, day).toLocaleDateString('pt-BR');
-  }
-  return new Date(d).toLocaleDateString('pt-BR');
+export function applyBranding(tenant) {
+  if (!tenant) return;
+
+  _applyColors(tenant.cor_primaria, tenant.cor_secundaria);
+  _applyLogo(tenant.logo_url, tenant.nome);
+  _applyTheme(tenant.tema_padrao);
 }
 
-export function randInt(a, b) {
-  return Math.floor(Math.random() * (b - a + 1)) + a;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function _applyColors(primary, secondary) {
+  let style = document.getElementById(STYLE_ID);
+  if (!style) {
+    style = document.createElement('style');
+    style.id = STYLE_ID;
+    document.head.appendChild(style);
+  }
+
+  const rules = [];
+
+  if (primary && /^#[0-9a-fA-F]{6}$/.test(primary)) {
+    const soft = _hexToRgba(primary, 0.12);
+    rules.push(`
+      :root,
+      [data-theme="dark"],
+      [data-theme="light"],
+      [data-theme="neon-glass"],
+      [data-theme="ocean-glass"] {
+        --accent:       ${primary};
+        --accent-soft:  ${soft};
+        --accent-hover: ${primary};
+        --green:        ${primary};
+        --green-soft:   ${soft};
+      }
+    `);
+  }
+
+  if (secondary && /^#[0-9a-fA-F]{6}$/.test(secondary)) {
+    const softSec = _hexToRgba(secondary, 0.12);
+    rules.push(`
+      :root,
+      [data-theme="dark"],
+      [data-theme="light"],
+      [data-theme="neon-glass"],
+      [data-theme="ocean-glass"] {
+        --blue:      ${secondary};
+        --blue-soft: ${softSec};
+      }
+    `);
+  }
+
+  style.textContent = rules.join('\n');
+}
+
+function _applyLogo(logoUrl, nome) {
+  const letter = (nome?.[0] ?? 'E').toUpperCase();
+
+  const brandIcon  = document.querySelector('.sidebar-brand-icon');
+  const loginIcon  = document.querySelector('.login-logo-icon');
+
+  if (logoUrl) {
+    const imgStyle = 'width:28px;height:28px;object-fit:contain;border-radius:4px;display:block;';
+    if (brandIcon) brandIcon.innerHTML = `<img src="${logoUrl}" alt="Logo" style="${imgStyle}">`;
+    if (loginIcon) loginIcon.innerHTML = `<img src="${logoUrl}" alt="Logo" style="${imgStyle}">`;
+  } else {
+    if (brandIcon) brandIcon.textContent = letter;
+    if (loginIcon) loginIcon.textContent = letter;
+  }
+
+  // Atualiza o nome na sidebar se couber sem truncar demais
+  const brandName = document.querySelector('.sidebar-brand-name');
+  if (brandName && nome) {
+    const display = nome.length <= 14 ? nome : nome.substring(0, 13) + '…';
+    brandName.innerHTML = display;
+  }
+}
+
+function _applyTheme(tema) {
+  if (!tema) return;
+  // Só aplica se o usuário não tiver uma preferência pessoal salva
+  if (!localStorage.getItem('eduos-theme')) {
+    document.documentElement.setAttribute('data-theme', tema);
+  }
+}
+
+function _hexToRgba(hex, alpha) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

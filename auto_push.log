@@ -1,187 +1,54 @@
 /**
- * /js/views/renovacoes.js
- * Read-only feed de renovações baseado em validade de certificados do banco
+ * /js/views/rbac.js
  */
 
-import { supabase, getTenantId } from '../core/supabase.js';
-import { setContent, toast, esc, fmtDate } from '../ui/components.js';
-import { criarRenovacao } from '../core/automations.js';
+import { setContent, toast } from '../ui/components.js';
 
-let _alerts = [];
-
-const NIVEL_MAP = {
-  vencido: { badge:'badge-red',   label:'Vencido' },
-  critico: { badge:'badge-red',   label:'Crítico' },
-  atencao: { badge:'badge-amber', label:'Atenção' },
-  aviso:   { badge:'badge-blue',  label:'Aviso'   },
-};
+const PERFIS = [
+  {nome:'Super Admin',  cor:'var(--red)',    desc:'Operador da plataforma SaaS. Acesso total entre tenants.', permissoes:['Tudo — cross-tenant']},
+  {nome:'Admin',        cor:'var(--accent)', desc:'Gestor da instituição. Acesso completo dentro do tenant.', permissoes:['Todos os módulos','Gestão de usuários','Configurações','Relatórios']},
+  {nome:'Coordenador',  cor:'var(--blue)',   desc:'Foco acadêmico e pedagógico.', permissoes:['Alunos (R)','Turmas (R+W)','Diário (R+W)','Certificados (R+W)','Relatórios']},
+  {nome:'Secretaria',   cor:'var(--purple)', desc:'Atendimento e documentação.', permissoes:['Alunos (R+W)','Matrículas (R+W)','Certificados (R+W)','Empresas (R)']},
+  {nome:'Financeiro',   cor:'var(--green)',  desc:'Cobranças e recebimentos.', permissoes:['Pagamentos (R+W)','Relatórios financeiros','Empresas (R)']},
+  {nome:'Comercial',    cor:'var(--amber)',  desc:'Pipeline de vendas e renovações.', permissoes:['Alunos (R+W)','Pipeline (R)','Renovações (R+W)','Empresas (R+W)']},
+  {nome:'Instrutor',    cor:'var(--blue)',   desc:'Somente suas turmas vinculadas.', permissoes:['Turmas próprias (R)','Diário próprio (R+W)','Alunos de suas turmas (R)','Certificados (R)']},
+  {nome:'Aluno',        cor:'var(--text-secondary)', desc:'Portal de autoatendimento.', permissoes:['Próprias matrículas (R)','Próprios certificados (R)','Próprio histórico (R)']},
+];
 
 export async function render() {
   setContent(`
     <div class="page-header">
-      <div><h1>Renovações</h1><p>Certificados vencidos e a vencer</p></div>
+      <div><h1>Permissões RBAC</h1><p>Controle de acesso baseado em perfis</p></div>
       <div class="page-header-actions">
-        <button class="btn btn-primary" id="btn-renovar-todos">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
-          Criar Todas as Renovações
-        </button>
+        <button class="btn btn-primary" id="btn-novo-perfil">Novo Perfil</button>
       </div>
     </div>
-    <div class="stats-row" id="renovacoes-kpis">
-      <div class="stat-card"><div class="skeleton" style="height:40px;width:100%"></div></div>
-      <div class="stat-card"><div class="skeleton" style="height:40px;width:100%"></div></div>
-      <div class="stat-card"><div class="skeleton" style="height:40px;width:100%"></div></div>
-      <div class="stat-card"><div class="skeleton" style="height:40px;width:100%"></div></div>
+    <div style="background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:20px;margin-bottom:20px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px">Princípio de Segurança Multi-Tenant</div>
+      <div style="font-size:12.5px;color:var(--text-secondary);line-height:1.7">
+        Toda operação de banco de dados começa com <code style="background:var(--bg-overlay);padding:1px 6px;border-radius:4px;font-family:var(--font-mono);font-size:11.5px">tenant_id = get_tenant_id()</code> antes de qualquer verificação de perfil — garantindo isolamento total entre instituições. As políticas RLS são aplicadas no nível do banco de dados (PostgreSQL), não apenas na aplicação.
+      </div>
     </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Aluno / Empresa</th><th>Curso</th><th>Situação</th><th>Nível</th><th>Ações</th></tr></thead>
-        <tbody id="renovacoes-tbody">
-          <tr><td colspan="5" style="text-align:center;padding:40px"><div class="skeleton" style="width:16px;height:16px;border-radius:50%;display:inline-block"></div> Carregando Alertas...</td></tr>
-        </tbody>
-      </table>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+      ${PERFIS.map(p => `
+        <div class="card" style="padding:18px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <div style="width:10px;height:10px;border-radius:50%;background:${p.cor};flex-shrink:0"></div>
+            <div style="font-weight:600;font-size:14px">${p.nome}</div>
+          </div>
+          <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:12px;line-height:1.5">${p.desc}</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+            ${p.permissoes.map(perm => `
+              <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--text-secondary)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="${p.cor}" stroke-width="2.5" width="12" height="12"><polyline points="20 6 9 17 4 12"/></svg>
+                ${perm}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('')}
     </div>
   `);
 
-  document.getElementById('btn-renovar-todos')?.addEventListener('click', () => renovarTodos());
-
-  await loadData();
-}
-
-async function loadData() {
-  try {
-    // Busca certificados vencidos ou a vencer em até 90 dias
-    const limitDate = new Date(Date.now() + 90*24*60*60*1000).toISOString().split('T')[0];
-    const { data, error } = await supabase
-      .from('certificados')
-      .select('*, aluno:aluno_id(nome, empresa:empresa_id(nome)), curso:curso_id(nome)')
-      .eq('tenant_id', getTenantId())
-      .not('data_validade', 'is', null)
-      .lte('data_validade', limitDate)
-      .order('data_validade');
-
-    if (error) throw error;
-
-    if (data?.length) {
-      _alerts = data.map(c => {
-        const dias = Math.round((new Date(c.data_validade) - new Date()) / (1000*60*60*24));
-        const nivel = dias < 0 ? 'vencido' : dias <= 30 ? 'critico' : dias <= 60 ? 'atencao' : 'aviso';
-        return {
-          id:           c.id,
-          aluno_id:     c.aluno_id,
-          curso_id:     c.curso_id,
-          aluno:        c.aluno?.nome         ?? '—',
-          empresa:      c.aluno?.empresa?.nome ?? '—',
-          curso:        c.curso?.nome          ?? '—',
-          data_validade: c.data_validade,
-          dias,
-          nivel,
-        };
-      });
-    } else {
-      _alerts = [];
-    }
-  } catch (err) {
-    console.error(err);
-    toast('Erro ao carregar renovações', 'error');
-    _alerts = [];
-  }
-  
-  renderKPIs(_alerts);
-  renderTabela(_alerts);
-}
-
-function renderKPIs(alerts) {
-  const vencidos = alerts.filter(a => a.nivel === 'vencido').length;
-  const criticos = alerts.filter(a => a.nivel === 'critico').length;
-  const atencao  = alerts.filter(a => a.nivel === 'atencao').length;
-  const alerta   = alerts.filter(a => a.nivel === 'aviso').length;
-
-  const el = document.getElementById('renovacoes-kpis');
-  if(!el) return;
-
-  el.innerHTML = `
-    <div class="stat-card"><div class="stat-label">Vencidos</div><div class="stat-value" style="color:var(--red)">${vencidos}</div></div>
-    <div class="stat-card"><div class="stat-label">Críticos (30d)</div><div class="stat-value" style="color:var(--amber)">${criticos}</div></div>
-    <div class="stat-card"><div class="stat-label">Atenção (60d)</div><div class="stat-value" style="color:var(--blue)">${atencao}</div></div>
-    <div class="stat-card"><div class="stat-label">Aviso (90d)</div><div class="stat-value" style="color:var(--text-tertiary)">${alerta}</div></div>
-  `;
-}
-
-function renderTabela(alerts) {
-  const tbody = document.getElementById('renovacoes-tbody');
-  if(!tbody) return;
-
-  if(!alerts.length) {
-    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-tertiary)">Não há alertas de vencimento para os próximos 90 dias.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = alerts.map(a => {
-    const n = NIVEL_MAP[a.nivel] ?? NIVEL_MAP.aviso;
-    const diasTxt = a.dias < 0 ? `Venceu há ${Math.abs(a.dias)} dias` : `Vence em ${a.dias} dias`;
-    return `<tr>
-      <td>
-        <div style="font-weight:500;font-size:13px">${esc(a.aluno)}</div>
-        <div style="font-size:11.5px;color:var(--text-tertiary)">${esc(a.empresa)}</div>
-      </td>
-      <td style="font-size:12.5px;color:var(--text-secondary)">${esc(a.curso)}</td>
-      <td style="font-size:12.5px;color:${a.dias<0?'var(--red)':'var(--text-secondary)'}">${diasTxt} — ${fmtDate(a.data_validade)}</td>
-      <td><span class="badge ${n.badge}">${n.label}</span></td>
-      <td>
-        <div style="display:flex;gap:4px">
-          <button class="action-btn action-renovar"
-            data-aluno-id="${a.aluno_id}"
-            data-curso-id="${a.curso_id}"
-            data-aluno="${esc(a.aluno)}"
-            data-curso="${esc(a.curso)}">
-            Criar Renovação
-          </button>
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
-
-  document.querySelectorAll('.action-renovar').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      btn.textContent = 'Criando...';
-      const result = await criarRenovacao(btn.dataset.alunoId, btn.dataset.cursoId);
-      if (result.ok) {
-        toast(`Renovação criada para ${btn.dataset.aluno} — ${btn.dataset.curso}!`, 'success');
-        await loadData();
-      } else {
-        toast(result.reason, 'warning');
-        btn.disabled = false;
-        btn.textContent = 'Criar Renovação';
-      }
-    });
-  });
-}
-
-// ─── Renovação em massa ───────────────────────────────────────────────────────
-async function renovarTodos() {
-  const elegíveis = _alerts.filter(a => a.nivel === 'vencido' || a.nivel === 'critico');
-  if (!elegíveis.length) {
-    toast('Nenhum certificado vencido ou crítico para renovar.', 'info');
-    return;
-  }
-
-  const btn = document.getElementById('btn-renovar-todos');
-  if (btn) { btn.disabled = true; btn.textContent = 'Processando...'; }
-
-  let criados = 0, pulados = 0;
-  for (const a of elegíveis) {
-    const result = await criarRenovacao(a.aluno_id, a.curso_id);
-    if (result.ok) criados++;
-    else pulados++;
-  }
-
-  if (btn) { btn.disabled = false; btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Criar Todas as Renovações'; }
-
-  toast(
-    `${criados} renovação(ões) criada(s)${pulados > 0 ? ` · ${pulados} já possuíam matrícula ativa` : ''}.`,
-    criados > 0 ? 'success' : 'info'
-  );
-  if (criados > 0) await loadData();
+  document.getElementById('btn-novo-perfil')?.addEventListener('click', () => toast('Novo perfil personalizado em breve', 'warning'));
 }

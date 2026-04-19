@@ -1,623 +1,815 @@
 /**
- * /js/views/pipeline.js
- * Pipeline Operacional — Master-Detail Layout
+ * /js/views/instrutores.js  v2 — Master-Detail Layout
  *
- * Padrão:
- *   ┌──────────────────┬──────────────────────────────────────────┐
- *   │  MASTER (~35%)   │  DETAIL (~65%)                           │
- *   │  Lista de turmas │  Kanban da turma selecionada             │
- *   └──────────────────┴──────────────────────────────────────────┘
+ * Estrutura de tela:
+ *   ┌─────────────────┬──────────────────────────────────────┐
+ *   │  MASTER (~35%)  │  DETAIL (~65%)                       │
+ *   │  Lista de       │  Turmas do instrutor selecionado     │
+ *   │  instrutores    │  + Modal de alunos por turma         │
+ *   └─────────────────┴──────────────────────────────────────┘
+ *
+ * Dados de turmas e alunos usam mock enquanto as queries
+ * Supabase do detalhe não estão configuradas.
+ * Para integrar: substitua as funções marcadas com "TODO: Supabase".
  */
 
-import { supabase, getTenantId } from '../core/supabase.js';
-import { setContent, toast, esc, fmtDate } from '../ui/components.js';
-import { navigate } from '../core/router.js';
+import { supabase, getTenantId }                   from '../core/supabase.js';
+import { setContent, openModal, closeModal, toast,
+         fmtDate, esc }                            from '../ui/components.js';
+import { validateForm, bindBlur }                  from '../ui/validate.js';
 
-let _turmas        = [];
-let _matriculas    = [];   // matrículas da turma ativa
-let _activeId      = null; // turma selecionada
-let _refreshTimer  = null; // ID do setInterval de auto-refresh
-const REFRESH_INTERVAL_MS = 30_000; // 30 segundos
+// ─── State do módulo ──────────────────────────────────────────────────────────
+let _cache    = [];    // instrutores do tenant (via Supabase)
+let _activeId = null;  // ID do instrutor selecionado no momento
 
-const STATUS_TURMA_BADGE = {
+// ─── Maps de status (consistentes com turmas.js) ──────────────────────────────
+const STATUS_BADGE = {
   agendada:     'badge-blue',
   em_andamento: 'badge-amber',
   concluida:    'badge-green',
   cancelada:    'badge-red',
 };
-const STATUS_TURMA_LABEL = {
+const STATUS_LABEL = {
   agendada:     'Agendada',
   em_andamento: 'Em Andamento',
   concluida:    'Concluída',
   cancelada:    'Cancelada',
 };
-
-const KANBAN_COLS = [
-  { key: 'matriculado',         label: 'Matriculados',  color: 'var(--blue)'   },
-  { key: 'em_andamento',        label: 'Em Andamento',  color: 'var(--accent)' },
-  { key: 'reprovado',           label: 'Reprovados',    color: 'var(--red)'    },
-  { key: 'concluido',           label: 'Concluído',     color: 'var(--green)'  },
-  { key: 'certificado_emitido', label: 'Cert. Emitido', color: 'var(--purple)' },
-];
-
-// Transições de status válidas (dentro da turma)
-const TRANSICOES = {
-  matriculado:         ['em_andamento', 'cancelado'],
-  em_andamento:        ['concluido', 'reprovado', 'cancelado'],
-  reprovado:           ['em_andamento', 'cancelado'],
-  concluido:           ['certificado_emitido'],
-  certificado_emitido: [],
+const ALUNO_BADGE = {
+  matriculado:         'badge-blue',
+  aguardando_turma:    'badge-amber',
+  em_andamento:        'badge-amber',
+  concluido:           'badge-green',
+  certificado_emitido: 'badge-purple',
+  reprovado:           'badge-red',
+  cancelado:           'badge-gray',
+};
+const ALUNO_LABEL = {
+  matriculado:         'Matriculado',
+  aguardando_turma:    'Ag. Turma',
+  em_andamento:        'Em Andamento',
+  concluido:           'Concluído',
+  certificado_emitido: 'Cert. Emitido',
+  reprovado:           'Reprovado',
+  cancelado:           'Cancelado',
 };
 
-function _isMobile() { return window.innerWidth <= 768; }
-
-// ─── Limpa timer ao sair da página ───────────────────────────────────────────
-function stopRefresh() {
-  if (_refreshTimer) {
-    clearInterval(_refreshTimer);
-    _refreshTimer = null;
-  }
+// ─── Fetch turmas do instrutor (Supabase) ────────────────────────────────────
+async function loadTurmasDoInstrutor(instrutorId) {
+  const { data, error } = await supabase
+    .from('turmas')
+    .select('id, codigo, status, ocupadas, vagas, data_inicio, data_fim, curso:curso_id(nome)')
+    .eq('tenant_id', getTenantId())
+    .eq('instrutor_id', instrutorId)
+    .order('data_inicio', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(t => ({ ...t, curso_nome: t.curso?.nome ?? '—' }));
 }
 
-function startRefresh() {
-  stopRefresh();
-  _refreshTimer = setInterval(async () => {
-    // Atualiza silenciosamente a turma ativa (sem esqueleto)
-    if (_activeId) {
-      try {
-        const { data, error } = await supabase
-          .from('matriculas')
-          .select('id, aluno_id, curso_id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
-          .eq('tenant_id', getTenantId())
-          .eq('turma_id', _activeId);
-        if (!error && data) {
-          _matriculas = data;
-          const turma = _turmas.find(t => t.id === _activeId);
-          if (turma) renderDetailPanel(turma, _matriculas);
-        }
-      } catch (_) { /* silencioso */ }
-    }
-    // Atualiza contadores do master (vagas ocupadas podem ter mudado)
-    try {
-      const { data } = await supabase
-        .from('turmas')
-        .select('id, status, vagas, ocupadas')
-        .eq('tenant_id', getTenantId());
-      if (data) {
-        data.forEach(t => {
-          const cached = _turmas.find(c => c.id === t.id);
-          if (cached) {
-            cached.status   = t.status;
-            cached.vagas    = t.vagas;
-            cached.ocupadas = t.ocupadas;
-          }
-        });
-        // Re-renderiza lista master silenciosamente
-        const q    = (document.getElementById('search-turmas-pipe')?.value   || '').toLowerCase();
-        const st   = document.getElementById('filter-status-pipe')?.value    || '';
-        const cur  = document.getElementById('filter-curso-pipe')?.value     || '';
-        const inst = document.getElementById('filter-instrutor-pipe')?.value || '';
-        const de   = document.getElementById('filter-periodo-de')?.value     || '';
-        const ate  = document.getElementById('filter-periodo-ate')?.value    || '';
-        renderMasterList(_turmas.filter(t => {
-          if (q   && !t.codigo.toLowerCase().includes(q) && !(t.curso_nome ?? '').toLowerCase().includes(q)) return false;
-          if (st  && t.status !== st)          return false;
-          if (cur && t.curso_id !== cur)       return false;
-          if (inst && t.instrutor_id !== inst) return false;
-          if (de  && t.data_inicio && t.data_inicio < de)  return false;
-          if (ate && t.data_inicio && t.data_inicio > ate) return false;
-          return true;
-        }));
-      }
-    } catch (_) { /* silencioso */ }
-
-    _updateLastRefresh();
-  }, REFRESH_INTERVAL_MS);
-}
-
-function _updateLastRefresh() {
-  const el = document.getElementById('pipe-last-refresh');
-  if (el) el.textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+// ─── Fetch alunos de uma turma (Supabase) ────────────────────────────────────
+async function loadAlunosDaTurma(turmaId) {
+  const { data, error } = await supabase
+    .from('matriculas')
+    .select('id, status, aluno:aluno_id(nome, cpf, rnm)')
+    .eq('tenant_id', getTenantId())
+    .eq('turma_id', turmaId)
+    .neq('status', 'cancelado');
+  if (error) throw error;
+  return (data || []).map(m => ({
+    id:     m.id,
+    nome:   m.aluno?.nome ?? '—',
+    doc:    m.aluno?.cpf ? `CPF: ${m.aluno.cpf}`
+          : m.aluno?.rnm ? `RNM: ${m.aluno.rnm}` : '—',
+    status: m.status,
+  }));
 }
 
 // ─── Render principal ─────────────────────────────────────────────────────────
 export async function render() {
-  stopRefresh(); // limpa timer anterior caso o usuário navegue de volta
   _activeId = null;
 
   setContent(`
     <div class="page-header">
       <div>
-        <h1>Pipeline Operacional</h1>
-        <p style="display:flex;align-items:center;gap:8px">
-          Jornada completa do aluno por turma
-          <span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--green)">
-            <span style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite"></span>
-            Automático
-          </span>
-          <span id="pipe-last-refresh" style="font-size:11px;color:var(--text-tertiary)"></span>
-        </p>
+        <h1>Instrutores</h1>
+        <p>Cadastro e vínculo com turmas</p>
       </div>
       <div class="page-header-actions">
-        <button class="btn btn-primary" id="btn-nova-mat-pipeline">Nova Matrícula</button>
+        <button class="btn btn-primary" id="btn-novo-inst">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" width="13" height="13" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5"  y1="12" x2="19" y2="12"/>
+          </svg>
+          Novo Instrutor
+        </button>
       </div>
     </div>
 
-    <div class="pipe-layout">
+    <div class="inst-layout">
 
-      <!-- ── MASTER: lista de turmas ──────────────────────────────── -->
-      <div class="pipe-master-panel">
+      <!-- ── MASTER: lista de instrutores ──────────────────────────────── -->
+      <div class="inst-master-panel">
         <div class="table-wrap" style="padding:0;overflow:hidden">
-          <!-- Filtros -->
-          <div style="padding:10px 12px;border-bottom:1px solid var(--border-subtle)">
 
-            <!-- Busca -->
-            <div class="search-input-wrap" style="margin-bottom:8px">
+          <div class="table-toolbar"
+               style="padding:10px 12px;border-bottom:1px solid var(--border-subtle)">
+            <div class="search-input-wrap" style="flex:1">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
               </svg>
-              <input class="search-input" id="search-turmas-pipe" placeholder="Código ou curso..." aria-label="Buscar turma">
+              <input class="search-input" id="search-inst"
+                     placeholder="Buscar instrutor..."
+                     aria-label="Buscar instrutor">
             </div>
-
-            <!-- Status + Curso em grid 2 colunas -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
-              <div>
-                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">Status</div>
-                <select class="select-input" id="filter-status-pipe" style="font-size:12px;width:100%;padding:5px 6px">
-                  <option value="">Todos</option>
-                  <option value="agendada">Agendada</option>
-                  <option value="em_andamento">Em Andamento</option>
-                  <option value="concluida">Concluída</option>
-                  <option value="cancelada">Cancelada</option>
-                </select>
-              </div>
-              <div>
-                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">Curso</div>
-                <select class="select-input" id="filter-curso-pipe" style="font-size:12px;width:100%;padding:5px 6px">
-                  <option value="">Todos</option>
-                </select>
-              </div>
-            </div>
-
-            <!-- Instrutor (linha inteira) -->
-            <div style="margin-bottom:6px">
-              <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">Instrutor</div>
-              <select class="select-input" id="filter-instrutor-pipe" style="font-size:12px;width:100%;padding:5px 6px">
-                <option value="">Todos</option>
-              </select>
-            </div>
-
-            <!-- Período em grid 2 colunas -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-              <div>
-                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">De</div>
-                <input type="date" class="select-input" id="filter-periodo-de" style="font-size:12px;width:100%;padding:5px 6px">
-              </div>
-              <div>
-                <div style="font-size:10px;color:var(--text-tertiary);margin-bottom:3px;font-weight:500;text-transform:uppercase;letter-spacing:.04em">Até</div>
-                <input type="date" class="select-input" id="filter-periodo-ate" style="font-size:12px;width:100%;padding:5px 6px">
-              </div>
-            </div>
-
           </div>
-          <div id="pipe-turma-list" style="padding:10px 10px 4px;max-height:calc(100vh - 260px);overflow-y:auto">
-            ${Array(3).fill('<div class="skeleton" style="height:70px;border-radius:6px;margin-bottom:7px"></div>').join('')}
+
+          <div id="inst-list"
+               style="padding:10px 10px 4px;max-height:calc(100vh - 260px);overflow-y:auto">
+            ${Array(3).fill(
+              '<div class="skeleton" style="height:60px;border-radius:6px;margin-bottom:7px"></div>'
+            ).join('')}
           </div>
+
           <div style="padding:8px 14px;border-top:1px solid var(--border-subtle)">
-            <span class="table-info" id="pipe-turma-count">—</span>
+            <span class="table-info" id="inst-count">—</span>
           </div>
         </div>
       </div>
 
-      <!-- ── DETAIL: kanban da turma selecionada ───────────────────── -->
-      <div class="pipe-detail-panel" id="pipe-detail-panel">
-        <div id="pipe-detail-content">${_renderDetailEmpty()}</div>
+      <!-- ── DETAIL: turmas do instrutor selecionado ───────────────────── -->
+      <div class="inst-detail-panel" id="inst-detail-panel">
+        <div id="detail-content">${_renderDetailEmpty()}</div>
       </div>
 
     </div>
   `);
 
-  document.getElementById('btn-nova-mat-pipeline')?.addEventListener('click', () => navigate('matriculas'));
-
-  // Filtros do master
-  const applyMasterFilter = () => {
-    const q    = (document.getElementById('search-turmas-pipe')?.value  || '').toLowerCase();
-    const st   = document.getElementById('filter-status-pipe')?.value   || '';
-    const cur  = document.getElementById('filter-curso-pipe')?.value    || '';
-    const inst = document.getElementById('filter-instrutor-pipe')?.value || '';
-    const de   = document.getElementById('filter-periodo-de')?.value    || '';
-    const ate  = document.getElementById('filter-periodo-ate')?.value   || '';
-
-    renderMasterList(_turmas.filter(t => {
-      if (q   && !t.codigo.toLowerCase().includes(q) && !(t.curso_nome ?? '').toLowerCase().includes(q)) return false;
-      if (st  && t.status !== st)          return false;
-      if (cur && t.curso_id !== cur)       return false;
-      if (inst && t.instrutor_id !== inst) return false;
-      if (de  && t.data_inicio && t.data_inicio < de)  return false;
-      if (ate && t.data_inicio && t.data_inicio > ate) return false;
-      return true;
-    }));
-  };
-
-  ['search-turmas-pipe','filter-status-pipe','filter-curso-pipe',
-   'filter-instrutor-pipe','filter-periodo-de','filter-periodo-ate'].forEach(id => {
-    const el = document.getElementById(id);
-    el?.addEventListener(id === 'search-turmas-pipe' ? 'input' : 'change', applyMasterFilter);
-  });
-
-  if (_isMobile()) {
-    document.getElementById('pipe-detail-panel')?.classList.add('mob-hide');
+  // No mobile, o detail começa oculto (só aparece após selecionar instrutor)
+  if (window.innerWidth <= 768) {
+    document.getElementById('inst-detail-panel')?.classList.add('mob-hide');
   }
 
-  await loadTurmas();
+  document.getElementById('btn-novo-inst')
+    ?.addEventListener('click', () => modalInstrutor());
+
+  document.getElementById('search-inst')
+    ?.addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      renderMasterList(
+        _cache.filter(i =>
+          i.nome.toLowerCase().includes(q) ||
+          (i.email ?? '').toLowerCase().includes(q)
+        )
+      );
+    });
+
+  await loadData();
 }
 
-// ─── Fetch turmas ─────────────────────────────────────────────────────────────
-async function loadTurmas() {
+// ─── Fetch instrutores (Supabase) ─────────────────────────────────────────────
+async function loadData() {
   try {
     const { data, error } = await supabase
-      .from('turmas')
-      .select('id, codigo, curso_id, instrutor_id, status, vagas, ocupadas, data_inicio, data_fim, curso:curso_id(nome), instrutor:instrutor_id(nome)')
+      .from('instrutores')
+      .select('*')
       .eq('tenant_id', getTenantId())
-      .order('data_inicio', { ascending: false });
-
+      .order('nome');
     if (error) throw error;
-    _turmas = (data || []).map(t => ({
-      ...t,
-      curso_nome:     t.curso?.nome     ?? '—',
-      instrutor_nome: t.instrutor?.nome ?? null,
-    }));
+    _cache = data || [];
   } catch (err) {
     console.error(err);
-    toast('Erro ao carregar turmas', 'error');
-    _turmas = [];
+    toast('Erro ao carregar instrutores', 'error');
+    _cache = [];
   }
-  _populateMasterFilters();
-  renderMasterList(_turmas);
-  _updateLastRefresh();
-  startRefresh();
-}
 
-function _populateMasterFilters() {
-  const cursos     = [...new Map(_turmas.filter(t => t.curso_id).map(t => [t.curso_id, t.curso_nome])).entries()];
-  const instrutores = [...new Map(_turmas.filter(t => t.instrutor_id).map(t => [t.instrutor_id, t.instrutor_nome])).entries()];
+  renderMasterList(_cache);
 
-  const selCurso = document.getElementById('filter-curso-pipe');
-  const selInst  = document.getElementById('filter-instrutor-pipe');
-  if (selCurso) selCurso.innerHTML = '<option value="">Todos os cursos</option>' +
-    cursos.map(([id, nome]) => `<option value="${id}">${esc(nome)}</option>`).join('');
-  if (selInst) selInst.innerHTML = '<option value="">Todos os instrutores</option>' +
-    instrutores.map(([id, nome]) => `<option value="${id}">${esc(nome)}</option>`).join('');
+  // Reseleciona o instrutor ativo após re-fetch (ex: pós-edição)
+  if (_activeId && _cache.find(i => i.id === _activeId)) {
+    selecionarInstrutor(_activeId);
+  }
 }
 
 // ─── Render lista master ──────────────────────────────────────────────────────
-function renderMasterList(list) {
-  const el    = document.getElementById('pipe-turma-list');
-  const count = document.getElementById('pipe-turma-count');
-  if (!el) return;
+function renderMasterList(inst) {
+  const list  = document.getElementById('inst-list');
+  const count = document.getElementById('inst-count');
+  if (!list) return;
 
-  if (count) count.textContent = `${list.length} turma${list.length !== 1 ? 's' : ''}`;
+  if (count) {
+    count.textContent = `${inst.length} instrutor${inst.length !== 1 ? 'es' : ''}`;
+  }
 
-  if (!list.length) {
-    el.innerHTML = `<p style="text-align:center;padding:28px 12px;color:var(--text-tertiary);font-size:13px">Nenhuma turma encontrada.</p>`;
+  if (!inst.length) {
+    list.innerHTML = `
+      <p style="text-align:center;padding:28px 12px;
+                color:var(--text-tertiary);font-size:13px">
+        Nenhum instrutor encontrado.
+      </p>`;
     return;
   }
 
-  el.innerHTML = list.map(t => {
-    const pct      = t.vagas > 0 ? Math.round((t.ocupadas ?? 0) / t.vagas * 100) : 0;
-    const pctColor = pct >= 100 ? 'var(--red)' : pct >= 80 ? 'var(--amber)' : 'var(--accent)';
-    const isActive = t.id === _activeId;
+  list.innerHTML = inst.map(i => {
+    const isActive = i.id === _activeId;
+    const inicialNome = esc(i.nome.charAt(0).toUpperCase());
+
     return `
       <div class="inst-item${isActive ? ' active' : ''}"
-           data-id="${t.id}" role="button" tabindex="0" aria-pressed="${isActive}">
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap">
-            <span class="inst-item-name">${esc(t.codigo)}</span>
-            <span class="badge ${STATUS_TURMA_BADGE[t.status] ?? 'badge-gray'}"
-                  style="font-size:10px;padding:1px 6px">
-              ${STATUS_TURMA_LABEL[t.status] ?? t.status}
-            </span>
-          </div>
-          <div class="inst-item-meta">${esc(t.curso_nome)}${t.instrutor_nome ? ` · <span style="color:var(--text-tertiary)">${esc(t.instrutor_nome)}</span>` : ''}</div>
-          <div style="margin-top:5px;display:flex;align-items:center;gap:8px">
-            <div class="progress-bar" style="flex:1;height:3px">
-              <div class="progress-fill" style="width:${pct}%;background:${pctColor}"></div>
-            </div>
-            <span style="font-size:10.5px;color:var(--text-tertiary);font-family:var(--font-mono);flex-shrink:0">
-              ${t.ocupadas ?? 0}/${t.vagas}
-            </span>
-          </div>
-          <div style="font-size:10.5px;color:var(--text-tertiary);margin-top:2px">
-            ${t.data_inicio ? fmtDate(t.data_inicio) : '—'}${t.data_fim ? ' → ' + fmtDate(t.data_fim) : ''}
-          </div>
+           data-id="${i.id}"
+           role="button" tabindex="0"
+           aria-pressed="${isActive}"
+           aria-label="${esc(i.nome)}">
+
+        <div class="inst-item-avatar" aria-hidden="true">${inicialNome}</div>
+
+        <div class="inst-item-info">
+          <div class="inst-item-name">${esc(i.nome)}</div>
+          <div class="inst-item-meta">${esc(i.email ?? 'Sem e-mail')}</div>
+        </div>
+
+        <div style="display:flex;gap:3px;flex-shrink:0">
+          <button class="action-btn inst-editar"
+                  data-id="${i.id}"
+                  title="Editar instrutor"
+                  aria-label="Editar ${esc(i.nome)}"
+                  style="padding:5px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" width="12" height="12" aria-hidden="true">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+          <button class="action-btn danger inst-excluir"
+                  data-id="${i.id}"
+                  title="Excluir instrutor"
+                  aria-label="Excluir ${esc(i.nome)}"
+                  style="padding:5px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" width="12" height="12" aria-hidden="true">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+            </svg>
+          </button>
         </div>
       </div>`;
   }).join('');
 
-  el.querySelectorAll('.inst-item').forEach(card => {
-    card.addEventListener('click', () => selecionarTurma(card.dataset.id));
+  // ── Click no card (exceto nos botões internos) ────────────────────────────
+  list.querySelectorAll('.inst-item').forEach(card => {
+    card.addEventListener('click', e => {
+      if (e.target.closest('.inst-editar, .inst-excluir')) return;
+      selecionarInstrutor(card.dataset.id);
+    });
     card.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selecionarTurma(card.dataset.id); }
+      if ((e.key === 'Enter' || e.key === ' ') &&
+          !e.target.closest('.inst-editar, .inst-excluir')) {
+        e.preventDefault();
+        selecionarInstrutor(card.dataset.id);
+      }
     });
   });
+
+  list.querySelectorAll('.inst-editar').forEach(btn =>
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const i = _cache.find(x => x.id == btn.dataset.id);
+      if (i) modalInstrutor(i);
+    })
+  );
+
+  list.querySelectorAll('.inst-excluir').forEach(btn =>
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const i = _cache.find(x => x.id == btn.dataset.id);
+      if (i) confirmarExclusaoInstrutor(i);
+    })
+  );
 }
 
-// ─── Selecionar turma → carrega kanban ───────────────────────────────────────
-async function selecionarTurma(id) {
+// ─── Selecionar instrutor → atualiza detail ───────────────────────────────────
+function _isMobile() { return window.innerWidth <= 768; }
+
+async function selecionarInstrutor(id) {
   _activeId = id;
 
-  // Atualiza estado visual
-  document.querySelectorAll('#pipe-turma-list .inst-item').forEach(card => {
-    const active = card.dataset.id === id;
-    card.classList.toggle('active', active);
-    card.setAttribute('aria-pressed', String(active));
+  // Atualiza estado visual de todos os cards da lista
+  document.querySelectorAll('.inst-item').forEach(card => {
+    const isActive = card.dataset.id === id;
+    card.classList.toggle('active', isActive);
+    card.setAttribute('aria-pressed', String(isActive));
   });
 
-  // Mobile: alterna painéis
+  // Mobile: esconde lista, exibe detalhe
   if (_isMobile()) {
-    document.querySelector('.pipe-master-panel')?.classList.add('mob-hide');
-    document.getElementById('pipe-detail-panel')?.classList.remove('mob-hide');
+    document.querySelector('.inst-master-panel')?.classList.add('mob-hide');
+    document.getElementById('inst-detail-panel')?.classList.remove('mob-hide');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  // Skeleton
-  const detailContent = document.getElementById('pipe-detail-content');
-  if (detailContent) {
-    detailContent.innerHTML = `
-      <div style="min-height:300px;display:flex;align-items:center;justify-content:center;
-                  border:1px solid var(--border-subtle);border-radius:var(--radius-md);
-                  background:var(--bg-surface)">
-        <div style="display:flex;align-items:center;gap:10px;color:var(--text-tertiary);font-size:13px">
-          <div class="skeleton" style="width:18px;height:18px;border-radius:50%;flex-shrink:0"></div>
-          Carregando pipeline...
+  // Skeleton de carregamento no detail
+  const detail = document.getElementById('detail-content');
+  if (detail) {
+    detail.innerHTML = `
+      <div style="min-height:300px;display:flex;align-items:center;
+                  justify-content:center;border:1px solid var(--border-subtle);
+                  border-radius:var(--radius-md);background:var(--bg-surface)">
+        <div style="display:flex;align-items:center;gap:10px;
+                    color:var(--text-tertiary);font-size:13px">
+          <div class="skeleton"
+               style="width:18px;height:18px;border-radius:50%;flex-shrink:0">
+          </div>
+          Carregando turmas...
         </div>
       </div>`;
   }
 
-  const turma = _turmas.find(t => t.id === id);
-  if (!turma) return;
+  const instrutor = _cache.find(i => i.id === id);
+  if (!instrutor) return;
 
   try {
-    const { data, error } = await supabase
-      .from('matriculas')
-      .select('id, aluno_id, curso_id, status, aluno:aluno_id(nome), curso:curso_id(nome)')
-      .eq('tenant_id', getTenantId())
-      .eq('turma_id', id);
-    if (error) throw error;
-    _matriculas = data || [];
-    renderDetailPanel(turma, _matriculas);
+    const turmas = await loadTurmasDoInstrutor(id);
+    renderDetailPanel(instrutor, turmas);
   } catch (err) {
-    toast(`Erro ao carregar pipeline: ${err.message}`, 'error');
-    if (detailContent) detailContent.innerHTML = _renderDetailEmpty();
+    toast(`Erro ao carregar turmas: ${err.message}`, 'error');
+    if (detail) detail.innerHTML = _renderDetailEmpty();
   }
 }
 
-// ─── Estado vazio do detail ───────────────────────────────────────────────────
+// ─── Detail: estado vazio ─────────────────────────────────────────────────────
 function _renderDetailEmpty() {
   return `
     <div class="inst-detail-empty">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" width="56" height="56">
-        <rect x="3" y="3" width="5" height="18" rx="1"/>
-        <rect x="10" y="3" width="5" height="12" rx="1"/>
-        <rect x="17" y="3" width="5" height="15" rx="1"/>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="1.2" width="56" height="56" aria-hidden="true">
+        <circle cx="18" cy="18" r="3"/>
+        <circle cx="6"  cy="6"  r="3"/>
+        <circle cx="6"  cy="18" r="3"/>
+        <circle cx="18" cy="6"  r="3"/>
+        <line x1="9"  y1="6"  x2="15" y2="6"/>
+        <line x1="9"  y1="18" x2="15" y2="18"/>
+        <line x1="6"  y1="9"  x2="6"  y2="15"/>
       </svg>
-      <div style="font-weight:600;font-size:14px;color:var(--text-secondary)">Nenhuma turma selecionada</div>
-      <div>Clique em uma turma na lista ao lado para visualizar o pipeline de matrículas.</div>
+      <div style="font-weight:600;font-size:14px;color:var(--text-secondary)">
+        Nenhum instrutor selecionado
+      </div>
+      <div>
+        Clique em um instrutor na lista ao lado para visualizar
+        suas turmas e os alunos matriculados.
+      </div>
     </div>`;
 }
 
-// ─── Render painel de detalhe (kanban) ────────────────────────────────────────
-function renderDetailPanel(turma, matriculas) {
-  const detailContent = document.getElementById('pipe-detail-content');
-  if (!detailContent) return;
+// ─── Detail: painel completo ──────────────────────────────────────────────────
+function renderDetailPanel(instrutor, turmas) {
+  const detail = document.getElementById('detail-content');
+  if (!detail) return;
 
-  const pct      = turma.vagas > 0 ? Math.round((turma.ocupadas ?? 0) / turma.vagas * 100) : 0;
-  const pctColor = pct >= 100 ? 'var(--red)' : pct >= 80 ? 'var(--amber)' : 'var(--accent)';
+  // Especialidades
+  let esps = [];
+  if (Array.isArray(instrutor.especialidades))        esps = instrutor.especialidades;
+  else if (typeof instrutor.especialidades === 'string')
+    esps = instrutor.especialidades.split(',').map(s => s.trim()).filter(Boolean);
 
-  // Header da turma
+  // KPIs
+  const nTotal   = turmas.length;
+  const nAtivas  = turmas.filter(t => ['agendada','em_andamento'].includes(t.status)).length;
+  const nAlunos  = turmas.reduce((s, t) => s + (t.ocupadas || 0), 0);
+
+  // ── Header do instrutor ───────────────────────────────────────────────────
   const header = `
-    <div class="card" style="padding:14px 18px;margin-bottom:12px">
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <div class="card" style="padding:20px 24px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+
+        <div style="width:52px;height:52px;border-radius:50%;flex-shrink:0;
+                    background:linear-gradient(135deg,var(--blue),var(--purple));
+                    display:grid;place-items:center;
+                    font-size:20px;font-weight:700;color:#fff"
+             aria-hidden="true">
+          ${esc(instrutor.nome.charAt(0).toUpperCase())}
+        </div>
+
         <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap">
-            <span style="font-weight:700;font-size:15px;font-family:var(--font-mono)">
-              ${esc(turma.codigo)}
-            </span>
-            <span class="badge ${STATUS_TURMA_BADGE[turma.status] ?? 'badge-gray'}">
-              ${STATUS_TURMA_LABEL[turma.status] ?? turma.status}
-            </span>
+          <div style="font-weight:600;font-size:16px;margin-bottom:2px">
+            ${esc(instrutor.nome)}
           </div>
-          <div style="font-size:12.5px;color:var(--text-tertiary)">${esc(turma.curso_nome)}</div>
-        </div>
-        <div style="display:flex;gap:20px;text-align:center;flex-shrink:0;align-items:center">
-          <div>
-            <div style="font-size:20px;font-weight:700;color:var(--blue);line-height:1">${matriculas.length}</div>
-            <div style="font-size:10.5px;color:var(--text-tertiary);margin-top:2px">Matrículas</div>
+          <div style="font-size:12.5px;color:var(--text-tertiary);margin-bottom:8px">
+            ${esc(instrutor.email ?? '—')}
+            ${instrutor.telefone ? ` &nbsp;·&nbsp; ${esc(instrutor.telefone)}` : ''}
           </div>
-          <div>
-            <div style="font-size:14px;font-weight:600;color:${pctColor};line-height:1;font-family:var(--font-mono)">${turma.ocupadas ?? 0}/${turma.vagas}</div>
-            <div style="font-size:10.5px;color:var(--text-tertiary);margin-top:2px">Vagas</div>
-          </div>
-        </div>
-      </div>
-    </div>`;
-
-  // Kanban
-  const cols = KANBAN_COLS.map(c => {
-    const items = matriculas.filter(m => m.status === c.key);
-    return { ...c, items };
-  });
-
-  const kanban = `
-    <div class="kanban-board pipe-kanban-detail" id="kanban-board">
-      ${cols.map(c => `
-        <div class="kanban-col" data-status="${c.key}">
-          <div class="kanban-col-header">
-            <span class="kanban-col-title">
-              <span class="dot" style="background:${c.color}"></span>
-              ${c.label}
-            </span>
-            <span class="kanban-col-count">${c.items.length}</span>
-          </div>
-          <div class="kanban-col-body" data-status="${c.key}">
-            ${c.items.map(m => `
-              <div class="kanban-card" draggable="true" data-id="${m.id}"
-                   data-nome="${esc(m.aluno?.nome || '—')}">
-                <div class="kanban-card-name">${esc(m.aluno?.nome || '—')}</div>
-                <div class="kanban-card-meta">
-                  <span class="badge badge-gray" style="font-size:10px">${esc(m.curso?.nome || '—')}</span>
-                </div>
-              </div>
-            `).join('')}
-            ${c.items.length === 0
-              ? '<div style="font-size:11px;color:var(--text-tertiary);text-align:center;padding:10px 0">Vazio</div>'
+          <div style="display:flex;flex-wrap:wrap;gap:5px">
+            ${esps.map(e => `<span class="badge badge-accent">${esc(e)}</span>`).join('')}
+            ${!esps.length
+              ? '<span style="font-size:11px;color:var(--text-tertiary)">Sem especialidades cadastradas</span>'
               : ''}
           </div>
         </div>
-      `).join('')}
+
+        <div style="display:flex;gap:24px;flex-shrink:0;text-align:center">
+          <div>
+            <div style="font-size:24px;font-weight:700;color:var(--blue);line-height:1">
+              ${nTotal}
+            </div>
+            <div style="font-size:11px;color:var(--text-tertiary);margin-top:3px">Turmas</div>
+          </div>
+          <div>
+            <div style="font-size:24px;font-weight:700;color:var(--accent);line-height:1">
+              ${nAtivas}
+            </div>
+            <div style="font-size:11px;color:var(--text-tertiary);margin-top:3px">Ativas</div>
+          </div>
+          <div>
+            <div style="font-size:24px;font-weight:700;color:var(--amber);line-height:1">
+              ${nAlunos}
+            </div>
+            <div style="font-size:11px;color:var(--text-tertiary);margin-top:3px">Alunos</div>
+          </div>
+        </div>
+
+      </div>
     </div>`;
 
-  detailContent.innerHTML = `
-    <button class="btn btn-secondary inst-back-btn" aria-label="Voltar à lista de turmas">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+  // ── Tabela de turmas ──────────────────────────────────────────────────────
+  let tableHtml;
+
+  if (!turmas.length) {
+    tableHtml = `
+      <div class="table-wrap">
+        <p style="text-align:center;padding:48px;
+                  color:var(--text-tertiary);font-size:13px">
+          Este instrutor não possui turmas cadastradas.
+        </p>
+      </div>`;
+  } else {
+    const rows = turmas.map(t => {
+      const pct   = t.vagas > 0 ? Math.round((t.ocupadas / t.vagas) * 100) : 0;
+      const pctColor = pct >= 100 ? 'var(--red)'
+                     : pct >= 80  ? 'var(--amber)'
+                     : 'var(--accent)';
+      return `
+        <tr>
+          <td>
+            <span class="badge ${STATUS_BADGE[t.status] ?? 'badge-gray'}">
+              ${STATUS_LABEL[t.status] ?? esc(t.status)}
+            </span>
+          </td>
+          <td style="font-weight:500;font-size:13px">${esc(t.curso_nome)}</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="progress-bar" style="width:52px">
+                <div class="progress-fill"
+                     style="width:${pct}%;background:${pctColor}"></div>
+              </div>
+              <span style="font-size:11.5px;color:var(--text-tertiary);
+                           font-family:var(--font-mono)">
+                ${t.ocupadas ?? 0}/${t.vagas ?? 0}
+              </span>
+            </div>
+          </td>
+          <td style="font-size:12.5px;white-space:nowrap">
+            ${t.data_inicio ? fmtDate(t.data_inicio) : '—'}
+          </td>
+          <td style="font-size:12.5px;white-space:nowrap">
+            ${t.data_fim ? fmtDate(t.data_fim) : '—'}
+          </td>
+          <td>
+            <button class="action-btn inst-ver-alunos"
+                    data-turma-id="${t.id}"
+                    data-turma-codigo="${esc(t.codigo)}"
+                    title="Ver alunos matriculados"
+                    aria-label="Ver alunos da turma ${esc(t.codigo)}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" width="12" height="12" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
+              Alunos
+            </button>
+          </td>
+        </tr>`;
+    }).join('');
+
+    tableHtml = `
+      <div class="table-wrap">
+        <div class="table-toolbar">
+          <span style="font-size:12.5px;color:var(--text-secondary);
+                       font-family:var(--font-mono)">
+            ${nTotal} turma${nTotal !== 1 ? 's' : ''} encontrada${nTotal !== 1 ? 's' : ''}
+          </span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>Curso</th>
+                <th>Alunos</th>
+                <th>Início</th>
+                <th>Fim</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  detail.innerHTML = `
+    <button class="btn btn-secondary inst-back-btn" aria-label="Voltar à lista de instrutores">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" width="14" height="14" aria-hidden="true">
         <line x1="19" y1="12" x2="5" y2="12"/>
         <polyline points="12 19 5 12 12 5"/>
       </svg>
       Voltar
     </button>
-  ` + header + kanban;
+  ` + header + tableHtml;
 
   // Botão voltar (mobile)
-  detailContent.querySelector('.inst-back-btn')?.addEventListener('click', () => {
+  detail.querySelector('.inst-back-btn')?.addEventListener('click', () => {
     _activeId = null;
-    document.querySelectorAll('#pipe-turma-list .inst-item').forEach(c => {
+    document.querySelectorAll('.inst-item').forEach(c => {
       c.classList.remove('active');
       c.setAttribute('aria-pressed', 'false');
     });
-    document.querySelector('.pipe-master-panel')?.classList.remove('mob-hide');
-    document.getElementById('pipe-detail-panel')?.classList.add('mob-hide');
-    document.getElementById('pipe-detail-content').innerHTML = _renderDetailEmpty();
+    document.querySelector('.inst-master-panel')?.classList.remove('mob-hide');
+    document.getElementById('inst-detail-panel')?.classList.add('mob-hide');
+    document.getElementById('detail-content').innerHTML = _renderDetailEmpty();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 
-  setupDragAndDrop(turma);
+  // ── Bind: lupa → modal de alunos por turma ────────────────────────────────
+  detail.querySelectorAll('.inst-ver-alunos').forEach(btn =>
+    btn.addEventListener('click', () =>
+      abrirAlunosDaTurma(btn.dataset.turmaId, btn.dataset.turmaCodigo)
+    )
+  );
 }
 
-// ─── Drag & Drop ─────────────────────────────────────────────────────────────
-function setupDragAndDrop(turma) {
-  const cards   = document.querySelectorAll('#pipe-detail-content .kanban-card');
-  const columns = document.querySelectorAll('#pipe-detail-content .kanban-col-body');
+// ─── Modal: Alunos matriculados na turma ──────────────────────────────────────
+async function abrirAlunosDaTurma(turmaId, turmaCodigo) {
+  openModal(`Alunos — Turma ${esc(turmaCodigo)}`, `
+    <div style="display:flex;align-items:center;justify-content:center;
+                padding:40px;gap:10px;color:var(--text-tertiary);font-size:13px">
+      <div class="skeleton"
+           style="width:18px;height:18px;border-radius:50%;flex-shrink:0"></div>
+      Carregando alunos...
+    </div>
+  `);
 
-  cards.forEach(card => {
-    card.addEventListener('dragstart', () => card.classList.add('dragging'));
-    card.addEventListener('dragend',   () => card.classList.remove('dragging'));
-  });
+  try {
+    const alunos = await loadAlunosDaTurma(turmaId);
+    const body   = document.getElementById('modal-body');
+    if (!body) return;
 
-  columns.forEach(col => {
-    col.addEventListener('dragover',  e => { e.preventDefault(); col.classList.add('drag-over'); });
-    col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
+    if (!alunos.length) {
+      body.innerHTML = `
+        <p style="text-align:center;padding:40px;
+                  color:var(--text-tertiary);font-size:13px">
+          Nenhum aluno matriculado nesta turma.
+        </p>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" id="modal-cancel">Fechar</button>
+        </div>`;
+      document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
+      return;
+    }
 
-    col.addEventListener('drop', async e => {
-      e.preventDefault();
-      col.classList.remove('drag-over');
+    // Contadores de status para o resumo
+    const counts = alunos.reduce((acc, a) => {
+      acc[a.status] = (acc[a.status] || 0) + 1;
+      return acc;
+    }, {});
 
-      const draggingCard = document.querySelector('#pipe-detail-content .dragging');
-      if (!draggingCard) return;
+    const resumoPills = Object.entries(counts)
+      .map(([st, n]) =>
+        `<span class="badge ${ALUNO_BADGE[st] ?? 'badge-gray'}">
+           ${n} ${ALUNO_LABEL[st] ?? st}
+         </span>`)
+      .join('');
 
-      const newStatus = col.dataset.status;
-      const cardId    = draggingCard.dataset.id;
+    body.innerHTML = `
+      <!-- Barra de resumo -->
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;
+                  padding:12px 16px;background:var(--bg-elevated);
+                  border-bottom:1px solid var(--border-subtle)">
+        <span style="font-size:11.5px;color:var(--text-secondary);
+                     font-family:var(--font-mono);margin-right:4px">
+          ${alunos.length} aluno${alunos.length !== 1 ? 's' : ''}
+        </span>
+        ${resumoPills}
+      </div>
 
-      const matricula = _matriculas.find(m => m.id == cardId);
-      if (!matricula || matricula.status === newStatus) return;
+      <!-- Lista de alunos -->
+      <div style="max-height:420px;overflow-y:auto">
+        ${alunos.map((a, idx) => `
+          <div style="display:flex;align-items:center;gap:12px;
+                      padding:11px 16px;
+                      border-bottom:1px solid var(--border-subtle);
+                      ${idx % 2 === 0 ? 'background:var(--bg-base)' : ''}">
 
-      // Valida transição
-      const permitidas = TRANSICOES[matricula.status] ?? [];
-      if (!permitidas.includes(newStatus)) {
-        toast(`Transição inválida: ${matricula.status} → ${newStatus}`, 'warning');
-        return;
-      }
+            <div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;
+                        background:linear-gradient(135deg,var(--accent-soft),var(--blue-soft));
+                        border:1px solid var(--border-default);
+                        display:grid;place-items:center;
+                        font-size:12px;font-weight:600;color:var(--text-primary)"
+                 aria-hidden="true">
+              ${esc(a.nome.charAt(0).toUpperCase())}
+            </div>
 
-      // Valida vagas ao entrar em estados ativos
-      if (['matriculado', 'em_andamento'].includes(newStatus) &&
-          !['matriculado', 'em_andamento', 'aguardando_turma'].includes(matricula.status)) {
-        if ((turma.ocupadas ?? 0) >= turma.vagas) {
-          toast('Turma sem vagas disponíveis.', 'warning');
-          return;
-        }
-      }
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:500;font-size:13px;
+                          white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                ${esc(a.nome)}
+              </div>
+              <div style="font-size:11.5px;color:var(--text-tertiary);
+                          font-family:var(--font-mono);margin-top:1px">
+                ${esc(a.doc)}
+              </div>
+            </div>
 
-      const oldStatus  = matricula.status;
-      matricula.status = newStatus;
+            <span class="badge ${ALUNO_BADGE[a.status] ?? 'badge-gray'}">
+              ${ALUNO_LABEL[a.status] ?? esc(a.status)}
+            </span>
 
-      // Re-render otimista
-      renderDetailPanel(turma, _matriculas);
+          </div>`).join('')}
+      </div>
 
-      try {
-        const { error } = await supabase
-          .from('matriculas')
-          .update({ status: newStatus })
-          .eq('id', cardId)
-          .eq('tenant_id', getTenantId());
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="modal-cancel">Fechar</button>
+      </div>`;
 
-        if (error) throw error;
+    document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
 
-        // Quando avança para certificado_emitido, emite o certificado automaticamente
-        if (newStatus === 'certificado_emitido') {
-          await autoEmitirCertificadoUnico(matricula, cardId);
-        }
-
-        toast(`${esc(draggingCard.dataset.nome)} → ${newStatus.replace(/_/g, ' ')}`, 'success');
-      } catch (err) {
-        matricula.status = oldStatus;
-        renderDetailPanel(turma, _matriculas);
-        toast('Erro ao alterar status.', 'error');
-      }
-    });
-  });
+  } catch (err) {
+    toast(`Erro ao carregar alunos: ${err.message}`, 'error');
+    closeModal();
+  }
 }
 
-// ─── Emite certificado ao mover para certificado_emitido no pipeline ──────────
-async function autoEmitirCertificadoUnico(matricula, matriculaId) {
-  const tenant = getTenantId();
+// ══════════════════════════════════════════════════════════════════════════════
+//  CRUD — Novo / Editar / Excluir Instrutor (sem alterações funcionais)
+// ══════════════════════════════════════════════════════════════════════════════
 
-  // Já tem certificado válido/a_vencer para este aluno+curso?
-  const { count: existe } = await supabase
-    .from('certificados')
-    .select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenant)
-    .eq('aluno_id', matricula.aluno_id)
-    .eq('curso_id', matricula.curso_id)
-    .in('status', ['valido', 'a_vencer']);
+// ─── Modal Instrutor ──────────────────────────────────────────────────────────
+function modalInstrutor(inst = null) {
+  const isEdit = !!inst;
 
-  if (existe > 0) return; // já emitido
-
-  const { data: curso } = await supabase
-    .from('cursos')
-    .select('validade_meses')
-    .eq('id', matricula.curso_id)
-    .single();
-
-  const hoje = new Date();
-  const meses = curso?.validade_meses ?? null;
-  let dataValidade = null;
-  if (meses !== null) {
-    dataValidade = new Date(hoje);
-    dataValidade.setMonth(dataValidade.getMonth() + meses);
+  let espString = '';
+  if (inst) {
+    if (Array.isArray(inst.especialidades))          espString = inst.especialidades.join(', ');
+    else if (typeof inst.especialidades === 'string') espString = inst.especialidades;
   }
 
-  const codigo =
-    'CRT-' +
-    Math.random().toString(36).slice(2, 8).toUpperCase() +
-    '-' +
-    Date.now().toString(36).toUpperCase();
+  openModal(isEdit ? 'Editar Instrutor' : 'Novo Instrutor', `
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>Nome Completo <span style="color:var(--red)" aria-hidden="true">*</span></label>
+        <input id="f-nome" type="text" value="${inst?.nome || ''}"
+               placeholder="Ex: Carlos Eduardo Lima" autocomplete="name">
+      </div>
+      <div class="form-group">
+        <label>E-mail <span style="color:var(--red)" aria-hidden="true">*</span></label>
+        <input id="f-email" type="email" value="${inst?.email || ''}"
+               placeholder="instrutor@email.com" autocomplete="email" inputmode="email">
+      </div>
+      <div class="form-group">
+        <label>Telefone <span style="color:var(--red)" aria-hidden="true">*</span></label>
+        <input id="f-tel" type="text" value="${inst?.telefone || ''}"
+               placeholder="(11) 99999-9999" autocomplete="tel" inputmode="tel">
+      </div>
+      <div class="form-group full">
+        <label>Especialidades <span style="color:var(--red)" aria-hidden="true">*</span>
+          <span style="font-weight:400;color:var(--text-tertiary)">(separadas por vírgula)</span>
+        </label>
+        <input id="f-esp" type="text" value="${espString}"
+               placeholder="Ex: NR-35, NR-33, Primeiros Socorros">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+      <button class="btn btn-primary"   id="modal-save">
+        ${isEdit ? 'Salvar Alterações' : 'Criar Instrutor'}
+      </button>
+    </div>
+  `);
 
-  await supabase.from('certificados').insert({
-    tenant_id:          tenant,
-    aluno_id:           matricula.aluno_id,
-    curso_id:           matricula.curso_id,
-    data_emissao:       hoje.toISOString().split('T')[0],
-    data_validade:      dataValidade ? dataValidade.toISOString().split('T')[0] : null,
-    status:             'valido',
-    codigo_verificacao: codigo,
-  });
+  bindBlur('f-nome',  'Nome',           ['required']);
+  bindBlur('f-email', 'E-mail',         ['required', 'email']);
+  bindBlur('f-tel',   'Telefone',       ['required', 'phone']);
+  bindBlur('f-esp',   'Especialidades', ['required']);
+
+  document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
+  document.getElementById('modal-save')?.addEventListener('click',   () => saveInstrutor(inst?.id));
+}
+
+// ─── Save ─────────────────────────────────────────────────────────────────────
+async function saveInstrutor(id) {
+  const nome   = document.getElementById('f-nome').value.trim();
+  const email  = document.getElementById('f-email').value.trim();
+  const tel    = document.getElementById('f-tel').value.trim();
+  const espRaw = document.getElementById('f-esp').value.trim();
+
+  const ok = validateForm([
+    { id: 'f-nome',  value: nome,   rules: ['required'],          label: 'Nome' },
+    { id: 'f-email', value: email,  rules: ['required', 'email'], label: 'E-mail' },
+    { id: 'f-tel',   value: tel,    rules: ['required', 'phone'], label: 'Telefone' },
+    { id: 'f-esp',   value: espRaw, rules: ['required'],          label: 'Especialidades' },
+  ]);
+  if (!ok) return;
+
+  const especialidades = espRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+  const payload = {
+    tenant_id: getTenantId(),
+    nome, email,
+    telefone:      tel,
+    especialidades,
+  };
+
+  const btn = document.getElementById('modal-save');
+  btn.disabled    = true;
+  btn.textContent = 'Salvando...';
+
+  try {
+    let error;
+    if (id) {
+      ({ error } = await supabase
+        .from('instrutores').update(payload)
+        .eq('id', id).eq('tenant_id', getTenantId()));
+    } else {
+      ({ error } = await supabase.from('instrutores').insert(payload));
+    }
+    if (error) throw error;
+    closeModal();
+    toast(id ? 'Instrutor atualizado!' : 'Instrutor cadastrado!', 'success');
+    await loadData();
+  } catch (err) {
+    console.error(err);
+    toast('Erro ao salvar instrutor', 'error');
+    btn.disabled    = false;
+    btn.textContent = id ? 'Salvar Alterações' : 'Criar Instrutor';
+  }
+}
+
+// ─── Excluir Instrutor ────────────────────────────────────────────────────────
+function confirmarExclusaoInstrutor(inst) {
+  openModal('Excluir Instrutor', `
+    <div class="danger-banner">
+      <div class="danger-banner-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" width="22" height="22">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+          <path d="M9 6V4h6v2"/>
+        </svg>
+      </div>
+      <div class="danger-banner-info">
+        <div class="danger-banner-title">Excluir instrutor permanentemente</div>
+        <div class="danger-banner-sub">${esc(inst.nome)}</div>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;line-height:1.6">
+      Esta ação é irreversível. Turmas vinculadas a este instrutor
+      <strong style="color:var(--red)">perderão o vínculo</strong>.
+    </p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+      <button class="btn btn-danger"    id="btn-confirmar-exclusao">Excluir Instrutor</button>
+    </div>
+  `);
+  document.getElementById('modal-cancel')
+    ?.addEventListener('click', () => closeModal());
+  document.getElementById('btn-confirmar-exclusao')
+    ?.addEventListener('click', () => excluirInstrutor(inst.id));
+}
+
+async function excluirInstrutor(id) {
+  const btn = document.getElementById('btn-confirmar-exclusao');
+  btn.disabled    = true;
+  btn.textContent = 'Excluindo...';
+  try {
+    const { error } = await supabase
+      .from('instrutores').delete()
+      .eq('id', id).eq('tenant_id', getTenantId());
+    if (error) throw error;
+
+    // Se o instrutor excluído era o selecionado, limpa o detail
+    if (_activeId === id) {
+      _activeId = null;
+      const detail = document.getElementById('detail-content');
+      if (detail) detail.innerHTML = _renderDetailEmpty();
+    }
+
+    closeModal();
+    toast('Instrutor excluído com sucesso.', 'success');
+    await loadData();
+  } catch (err) {
+    toast(`Erro ao excluir: ${err.message}`, 'error');
+    btn.disabled    = false;
+    btn.textContent = 'Excluir Instrutor';
+  }
 }

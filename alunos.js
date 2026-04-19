@@ -1,65 +1,48 @@
 /**
- * /js/ui/loading.js
- * Tela de loading pós-login — animação de barra + mensagens de sistema.
- * Disparada apenas no fluxo de doLogin() (não na restauração de sessão).
+ * /js/ui/charts.js
+ * Componentes de gráfico reutilizáveis (mini-chart e fin-chart).
  */
 
-const MESSAGES = [
-  '> autenticando_sessão...',
-  '> carregando_perfil...',
-  '> sincronizando_dados...',
-  '> verificando_permissões...',
-  '> montando_módulos...',
-  '> preparando_interface...',
-  '> sistema_pronto.',
-];
+/**
+ * Renderiza um gráfico de barras financeiro.
+ * @param {string} containerId - ID do elemento container
+ * @param {string[]} labels - Labels dos meses/períodos
+ * @param {number[]} values - Valores numéricos
+ */
+export function renderFinChart(containerId, labels, values) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const max = Math.max(...values, 1);
+  container.innerHTML = `
+    <div class="fin-chart">
+      ${labels.map((m, i) => `
+        <div class="fin-bar-group">
+          <div class="fin-bar-stack">
+            <div class="fin-bar" style="background:var(--accent);opacity:0.85;height:${Math.round(values[i] / max * 72)}px"></div>
+          </div>
+          <span class="fin-bar-label">${m}</span>
+        </div>
+      `).join('')}
+    </div>`;
+}
 
-export function showLoadingScreen() {
-  const screen  = document.getElementById('loading-screen');
-  const barFill = document.getElementById('ls-bar-fill');
-  const status  = document.getElementById('ls-status');
-  const percent = document.getElementById('ls-percent');
-
-  if (!screen) return;
-
-  // Reseta estado
-  screen.style.display = 'flex';
-  screen.classList.remove('ls-fade-out');
-  barFill.style.width = '0%';
-  percent.textContent = '0%';
-  status.textContent  = MESSAGES[0];
-
-  let progress = 0;
-  let msgIdx   = 0;
-
-  const interval = setInterval(() => {
-    progress += Math.floor(Math.random() * 12) + 3;
-
-    if (progress >= 100) {
-      progress = 100;
-      clearInterval(interval);
-
-      barFill.style.width  = '100%';
-      percent.textContent  = '100%';
-      status.textContent   = MESSAGES[MESSAGES.length - 1];
-
-      setTimeout(() => {
-        screen.classList.add('ls-fade-out');
-        setTimeout(() => {
-          screen.style.display = 'none';
-          screen.classList.remove('ls-fade-out');
-        }, 600);
-      }, 400);
-
-    } else {
-      barFill.style.width = `${progress}%`;
-      percent.textContent = `${progress}%`;
-
-      const expectedIdx = Math.floor((progress / 100) * (MESSAGES.length - 1));
-      if (expectedIdx !== msgIdx && expectedIdx < MESSAGES.length) {
-        msgIdx = expectedIdx;
-        status.textContent = MESSAGES[msgIdx];
-      }
-    }
-  }, 180);
+/**
+ * Renderiza um mini gráfico de barras inline.
+ * @param {string} containerId
+ * @param {number[]} values
+ * @param {string[]} labels
+ */
+export function renderMiniChart(containerId, values, labels) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const max = Math.max(...values, 1);
+  container.innerHTML = `
+    <div class="mini-chart">
+      ${values.map((v, i) => `
+        <div class="mini-bar-wrap">
+          <div class="mini-bar" style="height:${Math.round(v / max * 68)}px"></div>
+          ${labels?.[i] ? `<span class="mini-bar-label">${labels[i]}</span>` : ''}
+        </div>
+      `).join('')}
+    </div>`;
 }

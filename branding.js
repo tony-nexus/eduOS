@@ -1,35 +1,130 @@
 /**
- * /js/core/supabase.js
- * Configuração do cliente Supabase para o EduOS.
+ * /js/core/init.js
+ * Ponto de entrada do EduOS.
  *
  * CORREÇÕES APLICADAS:
- *  - getTenantId() agora lê currentUser.tenant_id em vez de UUID hardcoded
+ *  - registerEventListeners() chamado ANTES do await initAuth() (fix race condition)
+ *  - Hamburger mobile: abre/fecha sidebar via drawer overlay
+ *  - Botão de busca mobile (ícone lupa no topbar)
  */
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.4';
+import { doLogin, logout, initAuth } from './auth.js';
+import { navigate } from './router.js';
+import { initTheme, toggleTheme } from '../ui/theme.js';
+import { closeModal } from '../ui/components.js';
 
-const SUPABASE_URL = 'https://wyetjiymimfdtiwmvjsj.supabase.co';
-const SUPABASE_ANON = 'sb_publishable_yaSMkD0y6xr9C08F3uebUA_mc8zxXkB';
+async function bootstrap() {
+  initTheme();
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
-  auth: { autoRefreshToken: true, persistSession: true, detectSessionInUrl: false },
-});
+  // CORREÇÃO: listeners registrados ANTES do await para evitar race condition
+  registerEventListeners();
 
-export const getClient = async () => supabase;
+  const hasSession = await initAuth();
 
-/**
- * Retorna o tenant_id do usuário logado.
- * - Usuário real  → lê currentUser.tenant_id (preenchido via tabela perfis no login)
- */
-export function getTenantId() {
-  try {
-    const u = globalThis.__eduos_auth?.currentUser;
-    if (u?.tenant_id) return u.tenant_id;
-  } catch (_) { /* módulo ainda não carregado */ }
-  return null;
+  if (!hasSession) {
+    document.getElementById('login-screen').style.display = '';
+  }
 }
 
-export async function getSupabaseUser() {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+function registerEventListeners() {
+
+  // ── Login email + senha ───────────────────────────────────────────────────
+  document.getElementById('login-btn')?.addEventListener('click', () => {
+    const email    = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-pass').value;
+    doLogin(email, password);
+  });
+
+  ['login-email', 'login-pass'].forEach(id => {
+    document.getElementById(id)?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('login-btn')?.click();
+    });
+  });
+
+  // ── Demo chips (Removido) ──────────────────────────────────────────────────
+
+
+  // ── Logout ────────────────────────────────────────────────────────────────
+  document.getElementById('user-chip-logout')?.addEventListener('click', () => logout());
+
+  // ── Navegação sidebar + sheet + bottom nav ────────────────────────────────
+  document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+    const doNav = () => {
+      navigate(item.dataset.page);
+      document.getElementById('sidebar')?.classList.remove('open');
+      document.getElementById('sidebar-overlay')?.classList.remove('open');
+      _closeSheet();
+    };
+    item.addEventListener('click', doNav);
+    // Suporte a teclado: Enter e Space acionam como clique (role="button")
+    item.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); doNav(); }
+    });
+  });
+
+  // ── Hamburger mobile ──────────────────────────────────────────────────────
+  document.getElementById('hamburger-btn')?.addEventListener('click', () => {
+    document.getElementById('sidebar')?.classList.toggle('open');
+    document.getElementById('sidebar-overlay')?.classList.toggle('open');
+  });
+
+  // ── Sidebar Collapse (Desktop) ────────────────────────────────────────────
+  const colBtn = document.getElementById('sidebar-collapse-btn');
+  if (colBtn) {
+    if (localStorage.getItem('eduos_sidebar_collapsed') === 'true') {
+      document.body.classList.add('sidebar-collapsed');
+    }
+    colBtn.addEventListener('click', () => {
+      document.body.classList.toggle('sidebar-collapsed');
+      localStorage.setItem('eduos_sidebar_collapsed', document.body.classList.contains('sidebar-collapsed'));
+    });
+  }
+
+  // ── Overlay fecha sidebar ─────────────────────────────────────────────────
+  document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
+    document.getElementById('sidebar')?.classList.remove('open');
+    document.getElementById('sidebar-overlay')?.classList.remove('open');
+  });
+
+  // ── Botão "Mais" abre bottom sheet ────────────────────────────────────────
+  document.getElementById('mbn-more-btn')?.addEventListener('click', () => {
+    const isOpen = document.getElementById('mobile-sheet')?.classList.contains('open');
+    isOpen ? _closeSheet() : _openSheet();
+  });
+
+  // ── Overlay fecha bottom sheet ────────────────────────────────────────────
+  document.getElementById('sheet-overlay')?.addEventListener('click', () => _closeSheet());
+
+  // ── Logout no bottom sheet ────────────────────────────────────────────────
+  document.getElementById('sheet-logout-btn')?.addEventListener('click', () => logout());
+
+  // ── Modal backdrop ────────────────────────────────────────────────────────
+  document.getElementById('modal-backdrop')?.addEventListener('click', e => {
+    if (e.target === document.getElementById('modal-backdrop')) closeModal();
+  });
+
+  document.getElementById('modal-close-btn')?.addEventListener('click', () => closeModal());
+
+  // ── Escape fecha modal ────────────────────────────────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  // ── Toggle de tema ────────────────────────────────────────────────────────
+  document.getElementById('theme-toggle')?.addEventListener('click', () => toggleTheme());
 }
+
+// ── Bottom sheet helpers ──────────────────────────────────────────────────────
+function _openSheet() {
+  document.getElementById('mobile-sheet')?.classList.add('open');
+  document.getElementById('sheet-overlay')?.classList.add('open');
+  document.getElementById('mbn-more-btn')?.classList.add('active');
+}
+
+function _closeSheet() {
+  document.getElementById('mobile-sheet')?.classList.remove('open');
+  document.getElementById('sheet-overlay')?.classList.remove('open');
+  document.getElementById('mbn-more-btn')?.classList.remove('active');
+}
+
+bootstrap();
