@@ -88,7 +88,7 @@ async function loadAux() {
       supabase.from('alunos').select('id, nome, cpf, rnm, cnh_num').eq('tenant_id', getTenantId()).eq('status', 'ativo').order('nome'),
       supabase.from('cursos').select('id, nome, valor_padrao').eq('tenant_id', getTenantId()).eq('ativo', true).order('nome'),
       // Apenas turmas agendadas aceitam novas matrículas — inclui datas para verificação de conflito
-      supabase.from('turmas').select('id, codigo, curso_id, vagas, ocupadas, status, data_inicio, data_fim')
+      supabase.from('turmas').select('id, codigo, curso_id, vagas, ocupadas, status, data_inicio, data_fim, instrutor:instrutor_id(nome)')
         .eq('tenant_id', getTenantId())
         .eq('status', 'agendada')
         .order('data_inicio', { ascending: true }),
@@ -478,11 +478,17 @@ function renderTurmaOpcoes(turmas) {
             ${disp > 0 ? `${disp} vaga${disp !== 1 ? 's' : ''}` : 'Sem vagas'}
           </span>
         </div>
-        <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:6px">
+        <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:4px">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"
                style="vertical-align:middle;margin-right:3px"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           ${esc(datas)}
         </div>
+        ${t.instrutor?.nome ? `
+        <div style="font-size:11px;color:var(--text-tertiary);margin-bottom:6px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="10" height="10"
+               style="vertical-align:middle;margin-right:3px"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          ${esc(t.instrutor.nome)}
+        </div>` : ''}
         <div style="height:3px;border-radius:2px;background:var(--border-subtle)">
           <div style="height:100%;border-radius:2px;width:${pctOcup}%;background:${cor};transition:width .3s"></div>
         </div>
