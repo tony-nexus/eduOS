@@ -1,0 +1,566 @@
+2026-04-07 17:08:15,360  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:08:15,360  INFO  Branch de destino: main
+2026-04-07 17:08:15,360  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:08:54,679  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:08:58,489  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 17:08:58,590  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\.claude\settings.local.json
+2026-04-07 17:08:58,612  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\00-index\MOC.md
+2026-04-07 17:08:58,633  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:08:58,646  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\visao-geral.md
+2026-04-07 17:08:58,660  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-alunos.md
+2026-04-07 17:08:58,675  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-auth.md
+2026-04-07 17:08:58,692  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-certificados.md
+2026-04-07 17:08:58,707  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:08:58,720  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-cursos.md
+2026-04-07 17:08:58,735  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-dashboard.md
+2026-04-07 17:08:58,750  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-date-picker.md
+2026-04-07 17:08:58,762  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-empresas.md
+2026-04-07 17:08:58,776  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-filter-multiselect.md
+2026-04-07 17:08:58,795  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-financeiro.md
+2026-04-07 17:08:58,810  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-global-filters.md
+2026-04-07 17:08:58,823  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-instrutores.md
+2026-04-07 17:08:58,839  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-matriculas.md
+2026-04-07 17:08:58,854  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-pipeline.md
+2026-04-07 17:08:58,868  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-planning-engine.md
+2026-04-07 17:08:58,880  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-rbac.md
+2026-04-07 17:08:58,892  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-relatorios.md
+2026-04-07 17:08:58,905  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-renovacoes.md
+2026-04-07 17:08:58,920  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-security.md
+2026-04-07 17:08:58,934  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-sla-calculator.md
+2026-04-07 17:08:58,948  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-turmas.md
+2026-04-07 17:08:58,966  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-utils.md
+2026-04-07 17:08:58,983  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:08:58,996  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\modelo-registro.md
+2026-04-07 17:08:59,010  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\schema-xlsx-import.md
+2026-04-07 17:08:59,023  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\storage-local.md
+2026-04-07 17:08:59,040  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\04-api\api-global-filters.md
+2026-04-07 17:08:59,059  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\04-api\api-modulos.md
+2026-04-07 17:08:59,074  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\04-api\api-sla-calculator.md
+2026-04-07 17:08:59,098  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:08:59,111  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-calculo-sla.md
+2026-04-07 17:08:59,131  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-importacao-dados.md
+2026-04-07 17:08:59,149  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-planejamento.md
+2026-04-07 17:08:59,166  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:08:59,183  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\07-decisoes\decisao-security-crypto.md
+2026-04-07 17:08:59,203  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\07-decisoes\decisao-stack-vanilla.md
+2026-04-07 17:08:59,217  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\07-decisoes\decisao-tabulator.md
+2026-04-07 17:08:59,221  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\Insert_Demo_Tenant.sql
+2026-04-07 17:08:59,247  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M10_HLV_Tenant_e_Perfil.sql
+2026-04-07 17:08:59,279  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M12_WhiteLabel_Tenants.sql
+2026-04-07 17:08:59,297  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M4_Alunos_Documento_Estrangeiro.sql
+2026-04-07 17:08:59,313  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M5_Alunos_Multi_Documento.sql
+2026-04-07 17:08:59,328  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M6_Apply_MultiDoc_Now.sql
+2026-04-07 17:08:59,349  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M8_Add_Reprovado_Status.sql
+2026-04-07 17:08:59,366  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\M9_Financeiro_Comprovante.sql
+2026-04-07 17:08:59,385  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\SQL\PRODUCAO.sql
+2026-04-07 17:08:59,406  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\certificado.html
+2026-04-07 17:08:59,462  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\css\components.css
+2026-04-07 17:08:59,477  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\css\globals.css
+2026-04-07 17:08:59,492  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\css\layout.css
+2026-04-07 17:08:59,517  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\index.html
+2026-04-07 17:08:59,551  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\auth.js
+2026-04-07 17:08:59,577  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\automations.js
+2026-04-07 17:08:59,600  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\init.js
+2026-04-07 17:08:59,607  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\router.js
+2026-04-07 17:08:59,654  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\core\supabase.js
+2026-04-07 17:08:59,659  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\schema.json
+2026-04-07 17:08:59,701  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\branding.js
+2026-04-07 17:08:59,706  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\charts.js
+2026-04-07 17:08:59,758  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\components.js
+2026-04-07 17:08:59,782  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\loading.js
+2026-04-07 17:08:59,806  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\theme.js
+2026-04-07 17:08:59,836  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 17:08:59,874  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 17:08:59,903  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\certificados.js
+2026-04-07 17:08:59,931  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\configuracoes.js
+2026-04-07 17:08:59,961  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\cursos.js
+2026-04-07 17:08:59,990  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\dashboard.js
+2026-04-07 17:09:00,024  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\empresas.js
+2026-04-07 17:09:00,058  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\financeiro.js
+2026-04-07 17:09:00,087  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\instrutores.js
+2026-04-07 17:09:00,112  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\matriculas.js
+2026-04-07 17:09:00,138  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\pipeline.js
+2026-04-07 17:09:00,143  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\rbac.js
+2026-04-07 17:09:00,189  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\relatorios.js
+2026-04-07 17:09:00,215  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\renovacoes.js
+2026-04-07 17:09:00,247  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 17:09:01,507  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:08:58
+2026-04-07 17:09:01,580  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:09:03,918  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:09:03
+2026-04-07 17:09:03,979  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:11:35,712  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:11:35,712  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:11:39,193  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:11:39,398  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:11:39
+2026-04-07 17:11:39,459  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:11:42,817  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:11:42
+2026-04-07 17:11:42,881  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:11:54,967  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:11:54,968  INFO  Branch de destino: main
+2026-04-07 17:11:54,968  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:12:03,193  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:12:07,278  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:12:07
+2026-04-07 17:12:07,329  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:14:51,314  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:14:51,314  INFO  Branch de destino: master
+2026-04-07 17:14:51,314  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:15:05,063  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:15:05,064  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:15:05,064  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:15:08,508  ERROR  git add falhou: fatal: Unable to create 'C:/Projetos/HLV_edu-main/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+2026-04-07 17:15:08,718  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:15:08
+2026-04-07 17:15:08,766  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:18:39,833  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:39,833  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:39,834  INFO  Mudança detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:39,834  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:39,834  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:18:43,175  INFO  Commit criado: auto: atualização automática em 2026-04-07 17:18:42
+2026-04-07 17:18:43,223  ERROR  git push falhou: error: src refspec main does not match any
+error: failed to push some refs to 'origin'
+2026-04-07 17:18:43,884  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:18:43
+2026-04-07 17:18:44,148  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:18:57,676  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:18:57,676  INFO  Branch de destino: master
+2026-04-07 17:18:57,676  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:19:03,623  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:19:03,623  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:19:06,966  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:19:06
+2026-04-07 17:19:07,078  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:19:07,455  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:19:07
+2026-04-07 17:19:07,574  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:20:16,925  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:20:16,926  INFO  Branch de destino: master
+2026-04-07 17:20:16,926  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:20:21,298  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:20:24,899  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:20:24
+2026-04-07 17:20:25,022  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:20:25,218  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:20:25
+2026-04-07 17:20:25,335  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:20:25,376  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:20:25
+2026-04-07 17:20:25,483  ERROR  git push falhou: fatal: 'origin' does not appear to be a git repository
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
+2026-04-07 17:23:02,966  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:23:02,966  INFO  Branch de destino: master
+2026-04-07 17:23:02,966  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:23:09,736  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,738  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:09,738  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:23:13,191  ERROR  git commit falhou: fatal: Unable to create 'C:/Projetos/HLV_edu-main/.git/index.lock': File exists.
+
+Another git process seems to be running in this repository, e.g.
+an editor opened by 'git commit'. Please make sure all processes
+are terminated then try again. If it still fails, a git process
+may have crashed in this repository earlier:
+remove the file manually to continue.
+2026-04-07 17:23:13,368  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:23:13
+2026-04-07 17:25:16,930  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:25:16,930  INFO  Branch de destino: master
+2026-04-07 17:25:16,930  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:25:28,090  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:25:28,091  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README - Copia.md
+2026-04-07 17:25:29,101  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:29,101  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:29,367  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:33,260  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:25:33
+2026-04-07 17:25:47,017  INFO  Push realizado com sucesso -> origin/master
+2026-04-07 17:25:57,875  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:57,875  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:57,878  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:25:57,878  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:26:01,334  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:26:01
+2026-04-07 17:26:10,970  INFO  Push realizado com sucesso -> origin/master
+2026-04-07 17:26:38,350  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\Novo(a) Documento de Texto.txt
+2026-04-07 17:26:41,299  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\Teste.txt
+2026-04-07 17:26:45,292  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:26:45
+2026-04-07 17:26:56,896  INFO  Push realizado com sucesso -> origin/master
+2026-04-07 17:39:26,625  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 17:39:52,482  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude\settings.local.json
+2026-04-07 17:39:52,483  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 17:39:52,483  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M12_WhiteLabel_Tenants.sql
+2026-04-07 17:39:52,483  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\Teste.txt
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:39:52,484  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:39:52,485  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:39:52,485  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:39:52,485  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:39:52,485  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:39:52,485  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:39:52,486  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:39:52,486  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:39:52,486  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:39:52,486  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:39:52,486  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:39:52,487  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:39:52,487  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:39:52,487  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:39:52,487  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\meta3.html
+2026-04-07 17:39:52,488  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\meta3.html
+2026-04-07 17:39:52,489  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV
+2026-04-07 17:39:52,489  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL
+2026-04-07 17:39:52,489  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL\EduOS_Schema.sql
+2026-04-07 17:39:52,490  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL\EduOS_Schema.sql
+2026-04-07 17:39:52,490  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\certificado.html
+2026-04-07 17:39:52,490  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\certificado.html
+2026-04-07 17:39:52,490  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css
+2026-04-07 17:39:52,491  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\components.css
+2026-04-07 17:39:52,491  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\components.css
+2026-04-07 17:39:52,491  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\globals.css
+2026-04-07 17:39:52,491  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\globals.css
+2026-04-07 17:39:52,492  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\layout.css
+2026-04-07 17:39:52,492  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\layout.css
+2026-04-07 17:39:52,493  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\eduos_2.html
+2026-04-07 17:39:52,494  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\eduos_2.html
+2026-04-07 17:39:52,494  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\index.html
+2026-04-07 17:39:52,494  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\index.html
+2026-04-07 17:39:52,495  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js
+2026-04-07 17:39:52,495  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core
+2026-04-07 17:39:52,495  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\auth.js
+2026-04-07 17:39:52,495  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core
+2026-04-07 17:39:52,496  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\auth.js
+2026-04-07 17:39:52,496  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\auth.js
+2026-04-07 17:39:52,496  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\auth.js
+2026-04-07 17:39:52,496  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\init.js
+2026-04-07 17:39:52,497  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\init.js
+2026-04-07 17:39:52,497  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\router.js
+2026-04-07 17:39:52,497  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\router.js
+2026-04-07 17:39:52,497  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\supabase.js
+2026-04-07 17:39:52,498  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\supabase.js
+2026-04-07 17:39:52,498  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\schema.json
+2026-04-07 17:39:52,498  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\schema.json
+2026-04-07 17:39:52,498  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui
+2026-04-07 17:39:52,498  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\charts.js
+2026-04-07 17:39:52,499  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\charts.js
+2026-04-07 17:39:52,499  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\charts.js
+2026-04-07 17:39:52,499  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\components.js
+2026-04-07 17:39:52,499  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\components.js
+2026-04-07 17:39:52,499  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\theme.js
+2026-04-07 17:39:52,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\theme.js
+2026-04-07 17:39:52,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views
+2026-04-07 17:39:52,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\alunos.js
+2026-04-07 17:39:52,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\alunos.js
+2026-04-07 17:39:52,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\certificados.js
+2026-04-07 17:39:52,501  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\certificados.js
+2026-04-07 17:39:52,501  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\configuracoes.js
+2026-04-07 17:39:52,501  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\configuracoes.js
+2026-04-07 17:39:52,501  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\cursos.js
+2026-04-07 17:39:52,501  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\cursos.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\dashboard.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\dashboard.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\empresas.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\empresas.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\financeiro.js
+2026-04-07 17:39:52,502  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\financeiro.js
+2026-04-07 17:39:52,503  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\instrutores.js
+2026-04-07 17:39:52,503  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\instrutores.js
+2026-04-07 17:39:52,503  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\matriculas.js
+2026-04-07 17:39:52,503  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\matriculas.js
+2026-04-07 17:39:52,504  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\pipeline.js
+2026-04-07 17:39:52,504  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\pipeline.js
+2026-04-07 17:39:52,504  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\rbac.js
+2026-04-07 17:39:52,504  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\rbac.js
+2026-04-07 17:39:52,505  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\relatorios.js
+2026-04-07 17:39:52,505  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\relatorios.js
+2026-04-07 17:39:52,505  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\renovacoes.js
+2026-04-07 17:39:52,505  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\renovacoes.js
+2026-04-07 17:39:52,506  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\turmas.js
+2026-04-07 17:39:52,506  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\turmas.js
+2026-04-07 17:40:30,440  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\meta3.html
+2026-04-07 17:40:30,441  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL\EduOS_Schema.sql
+2026-04-07 17:40:30,442  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\certificado.html
+2026-04-07 17:40:30,442  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\components.css
+2026-04-07 17:40:30,442  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL
+2026-04-07 17:40:30,443  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\SQL
+2026-04-07 17:40:30,443  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\globals.css
+2026-04-07 17:40:30,443  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css\layout.css
+2026-04-07 17:40:30,444  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\eduos_2.html
+2026-04-07 17:40:30,444  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\index.html
+2026-04-07 17:40:30,444  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\auth.js
+2026-04-07 17:40:30,445  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css
+2026-04-07 17:40:30,445  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\css
+2026-04-07 17:40:30,445  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\init.js
+2026-04-07 17:40:30,445  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\router.js
+2026-04-07 17:40:30,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core\supabase.js
+2026-04-07 17:40:30,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\schema.json
+2026-04-07 17:40:30,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\charts.js
+2026-04-07 17:40:30,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core
+2026-04-07 17:40:30,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\core
+2026-04-07 17:40:30,447  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui
+2026-04-07 17:40:30,447  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\components.js
+2026-04-07 17:40:30,447  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui\theme.js
+2026-04-07 17:40:30,447  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\alunos.js
+2026-04-07 17:40:30,448  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui
+2026-04-07 17:40:30,448  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\ui
+2026-04-07 17:40:30,448  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\certificados.js
+2026-04-07 17:40:30,448  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\configuracoes.js
+2026-04-07 17:40:30,448  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\cursos.js
+2026-04-07 17:40:30,449  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\dashboard.js
+2026-04-07 17:40:30,449  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\empresas.js
+2026-04-07 17:40:30,449  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\financeiro.js
+2026-04-07 17:40:30,449  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\instrutores.js
+2026-04-07 17:40:30,450  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\matriculas.js
+2026-04-07 17:40:30,450  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\pipeline.js
+2026-04-07 17:40:30,450  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\rbac.js
+2026-04-07 17:40:30,450  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\relatorios.js
+2026-04-07 17:40:30,451  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\renovacoes.js
+2026-04-07 17:40:30,451  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views\turmas.js
+2026-04-07 17:40:30,451  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views
+2026-04-07 17:40:30,451  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js\views
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV\js
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\projeto HLV
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude
+2026-04-07 17:40:30,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude\settings.local.json
+2026-04-07 17:40:30,453  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.claude\settings.local.json
+2026-04-07 17:40:30,453  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 17:40:30,453  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 17:40:30,453  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:40:30,454  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:40:30,454  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 17:40:30,454  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:40:30,454  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:40:30,454  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\02-modulos\mod-configuracoes.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:40:30,455  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\05-fluxos\fluxo-autenticacao.md
+2026-04-07 17:40:30,456  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:40:30,456  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:40:30,456  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 17:40:30,456  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:40:30,456  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:40:30,457  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:40:30,457  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:40:30,457  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:40:30,457  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M11_Multi_Tenant_Usuarios.sql
+2026-04-07 17:40:30,458  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M12_WhiteLabel_Tenants.sql
+2026-04-07 17:40:30,458  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\SQL\M12_WhiteLabel_Tenants.sql
+2026-04-07 17:40:30,458  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\Teste.txt
+2026-04-07 17:40:30,458  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\Teste.txt
+2026-04-07 17:40:30,458  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:40:30,459  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\auto_push.py
+2026-04-07 17:43:36,477  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:43:36,478  INFO  Branch de destino: master
+2026-04-07 17:43:36,478  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:44:00,607  INFO  Monitoramento encerrado pelo usuario.
+2026-04-07 17:45:17,759  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:45:17,759  INFO  Branch de destino: master
+2026-04-07 17:45:17,759  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:45:36,861  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:45:36,873  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:45:41,164  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:45:40
+2026-04-07 17:45:50,671  INFO  Push realizado com sucesso -> origin/master
+2026-04-07 17:46:32,810  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:46:36,771  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 17:46:51,671  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:46:55,026  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:46:54
+2026-04-07 17:47:09,722  INFO  Push realizado com sucesso -> origin/master
+2026-04-07 17:50:14,446  INFO  Monitoramento encerrado pelo usuario.
+2026-04-07 17:50:46,337  INFO  Monitorando: C:\Projetos\HLV_edu-main
+2026-04-07 17:50:46,338  INFO  Branch de destino: main
+2026-04-07 17:50:46,338  INFO  Debounce: 3s | Ctrl+C para parar
+
+2026-04-07 17:51:00,953  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:51:00,954  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:51:04,765  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:51:04
+2026-04-07 17:51:13,379  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:51:13,391  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:51:13,391  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 17:51:22,151  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 17:51:23,423  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 17:51:23
+2026-04-07 17:52:23,513  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 18:38:57,446  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 18:39:00,736  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 18:39:07,769  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 18:39:07,772  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\README.md
+2026-04-07 18:39:12,041  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 18:39:11
+2026-04-07 18:39:24,704  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 19:47:48,632  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\00-index\MOC.md
+2026-04-07 19:47:48,850  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\visao-geral.md
+2026-04-07 19:47:52,452  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 19:47:52,458  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 19:47:53,021  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\01-arquitetura\arquitetura-componentes.md
+2026-04-07 19:47:54,034  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\modelo-registro.md
+2026-04-07 19:47:54,419  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\06-melhorias\backlog-features.md
+2026-04-07 19:47:57,516  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 19:47:58,549  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\03-banco-de-dados\debitos-tecnicos.md
+2026-04-07 19:47:59,044  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\HLV_EduOS_Brain\07-decisoes\decisao-stack-vanilla.md
+2026-04-07 19:48:02,575  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:06:53,469  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:06:57,312  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:07:22,212  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:07:25,378  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:08:33,891  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js.tmp.27836.1775603313869
+2026-04-07 20:08:33,891  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js.tmp.27836.1775603313869
+2026-04-07 20:08:33,893  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:08:33,894  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:08:37,732  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:08:37
+2026-04-07 20:08:47,705  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:08:53,467  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js.tmp.27836.1775603333444
+2026-04-07 20:08:53,467  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js.tmp.27836.1775603333444
+2026-04-07 20:08:53,478  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:08:53,479  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:08:57,012  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:08:56
+2026-04-07 20:09:07,373  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:09:15,752  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603355727
+2026-04-07 20:09:15,752  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603355727
+2026-04-07 20:09:15,765  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:09:15,765  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:09:19,674  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:09:19
+2026-04-07 20:09:31,388  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:09:41,141  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603381114
+2026-04-07 20:09:41,141  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603381114
+2026-04-07 20:09:41,155  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:09:41,156  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:09:44,695  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:09:44
+2026-04-07 20:09:54,791  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:09:58,923  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603398895
+2026-04-07 20:09:58,924  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603398895
+2026-04-07 20:09:58,936  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:09:58,936  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:10:03,091  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:10:02
+2026-04-07 20:10:11,862  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:10:13,478  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603413448
+2026-04-07 20:10:13,478  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603413448
+2026-04-07 20:10:13,490  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:10:13,491  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:10:17,146  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:10:16
+2026-04-07 20:10:28,108  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:10:39,979  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603439947
+2026-04-07 20:10:39,979  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603439947
+2026-04-07 20:10:39,982  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:10:39,982  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:10:43,420  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:10:43
+2026-04-07 20:10:55,444  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:11:07,582  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603467579
+2026-04-07 20:11:07,582  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603467579
+2026-04-07 20:11:07,585  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:07,585  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:11,748  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:11:11
+2026-04-07 20:11:21,620  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:22,294  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:11:25,360  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:11:29,261  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603489255
+2026-04-07 20:11:29,261  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603489255
+2026-04-07 20:11:29,264  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:29,265  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:32,667  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:11:32
+2026-04-07 20:11:33,685  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\ui\validate.js
+2026-04-07 20:11:34,714  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:11:43,633  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:11:44,701  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:17:31,014  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603851007
+2026-04-07 20:17:31,015  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603851007
+2026-04-07 20:17:31,026  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:17:31,027  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:17:35,155  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:17:34
+2026-04-07 20:17:45,375  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:17:47,370  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603867363
+2026-04-07 20:17:47,371  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603867363
+2026-04-07 20:17:47,383  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:17:47,383  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:17:51,693  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:17:51
+2026-04-07 20:18:01,371  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:19:25,956  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603965944
+2026-04-07 20:19:25,957  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js.tmp.27836.1775603965944
+2026-04-07 20:19:25,970  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:19:25,970  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:19:29,451  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\alunos.js
+2026-04-07 20:19:29,714  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:19:29
+2026-04-07 20:19:38,893  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:19:39,962  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:42:17,273  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:42:20,590  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:42:35,563  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\css\components.css
+2026-04-07 20:42:38,597  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\css\globals.css
+2026-04-07 20:42:41,655  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:43:04,974  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605384968
+2026-04-07 20:43:04,975  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605384968
+2026-04-07 20:43:04,987  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:43:04,988  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:43:09,045  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:43:08
+2026-04-07 20:43:24,873  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:46:58,736  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605618728
+2026-04-07 20:46:58,737  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605618728
+2026-04-07 20:46:58,748  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:46:58,748  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:47:02,358  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:47:02
+2026-04-07 20:47:13,337  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:47:15,114  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605635106
+2026-04-07 20:47:15,114  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605635106
+2026-04-07 20:47:15,126  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:47:15,127  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:47:18,640  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:47:18
+2026-04-07 20:47:50,641  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605670633
+2026-04-07 20:47:50,642  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js.tmp.27836.1775605670633
+2026-04-07 20:47:50,653  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:47:50,654  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:48:05,500  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\js\views\turmas.js
+2026-04-07 20:48:07,753  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:48:08,806  INFO  Mudanca detectada: C:\Projetos\HLV_edu-main\.gitignore
+2026-04-07 20:48:09,083  INFO  Commit criado: auto: atualizacao automatica em 2026-04-07 20:48:08
+2026-04-07 20:48:20,327  INFO  Push realizado com sucesso -> origin/main
+2026-04-07 20:48:21,395  INFO  Nenhuma mudanca detectada - push ignorado.
+2026-04-07 20:48:53,426  INFO  Monitoramento encerrado pelo usuario.
