@@ -342,24 +342,28 @@
   </div>
 </div>
 
-<!-- NOTIFICATION PANEL — fixed overlay, outside topbar stacking context -->
+<!-- NOTIFICATION PANEL — fixed overlay, fora do stacking context do topbar -->
 <div id="notif-panel" style="display:none">
   <div class="notif-panel-header">
-    <div style="display:flex;align-items:center;gap:8px">
-      <span style="font-weight:700;font-size:13.5px;color:var(--text-primary)">Notificações</span>
+    <div style="display:flex;align-items:center;gap:7px">
+      <span class="notif-panel-title">Notificações</span>
       <span id="notif-count" class="notif-count-badge" style="display:none"></span>
     </div>
-    <div style="display:flex;align-items:center;gap:4px">
+    <div class="notif-actions">
       <button id="notif-sound-toggle" class="notif-icon-btn" title="Alternar som"></button>
-      <button id="notif-mark-all" class="notif-icon-btn notif-mark-all-btn" title="Marcar todas como lidas">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      <button id="notif-mark-all" class="notif-icon-btn" title="Marcar todas como lidas" style="color:var(--text-tertiary)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
       </button>
     </div>
   </div>
+  <div class="notif-divider"></div>
   <div id="notif-list" class="notif-list"></div>
   <div id="notif-empty" class="notif-empty" style="display:none">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" width="32" height="32"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>
+    <div class="notif-empty-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20" height="20"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0"/></svg>
+    </div>
     <p>Tudo em dia</p>
+    <span>Nenhum alerta no momento</span>
   </div>
 </div>
 

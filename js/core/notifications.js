@@ -183,13 +183,11 @@ function _render() {
   const read   = _alerts.filter(a =>  _readIds.has(a.id));
   const sorted = [...unread, ...read];
 
-  // Atualiza contador no header
   if (count) {
-    count.textContent = unread.length > 0 ? `${unread.length}` : '';
+    count.textContent   = unread.length > 0 ? String(unread.length > 9 ? '9+' : unread.length) : '';
     count.style.display = unread.length > 0 ? '' : 'none';
   }
 
-  // Atualiza ícone do botão de som
   _updateSoundBtn();
 
   if (!sorted.length) {
@@ -202,28 +200,20 @@ function _render() {
   if (empty) empty.style.display = 'none';
   list.style.display = '';
 
-  const COLOR = {
-    error:   '#ef4444',
-    warning: '#f59e0b',
-    info:    '#3b82f6',
-    success: '#10b981',
-  };
+  const ACCENT = { error: '#ef4444', warning: '#f59e0b', info: '#5b8af0', success: '#10b981' };
 
   list.innerHTML = sorted.map(a => {
-    const isRead  = _readIds.has(a.id);
-    const accent  = COLOR[a.type] || COLOR.info;
-    const rowBg   = isRead ? '' : 'background:var(--bg-hover,rgba(255,255,255,0.03));';
-    const opacity = isRead ? 'opacity:0.55;' : '';
-    return `
-      <div class="notif-item" data-nid="${a.id}" style="display:flex;align-items:flex-start;gap:12px;padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border-subtle,rgba(255,255,255,0.05));${rowBg}${opacity}transition:background 0.15s,opacity 0.15s">
-        <div style="width:3px;min-width:3px;height:36px;border-radius:2px;background:${isRead ? 'transparent' : accent};margin-top:2px;flex-shrink:0;transition:background 0.2s"></div>
-        <div style="font-size:16px;line-height:1.3;flex-shrink:0;margin-top:1px">${a.icon}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12.5px;font-weight:600;color:var(--text-primary);line-height:1.4">${a.title}</div>
-          <div style="font-size:11.5px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.body}</div>
-        </div>
+    const isRead = _readIds.has(a.id);
+    const accent = ACCENT[a.type] || ACCENT.info;
+    return `<div class="notif-item${isRead ? ' is-read' : ''}" data-nid="${a.id}">
+      <div class="notif-item-accent" style="background:${accent}"></div>
+      <div class="notif-item-emoji">${a.icon}</div>
+      <div class="notif-item-body">
+        <div class="notif-item-title">${a.title}</div>
+        <div class="notif-item-sub">${a.body}</div>
       </div>
-    `;
+      <div class="notif-item-dot" style="background:${accent};${isRead ? 'opacity:0' : ''}"></div>
+    </div>`;
   }).join('');
 
   list.querySelectorAll('.notif-item').forEach(el => {
@@ -254,7 +244,6 @@ function _updateDot() {
   const unread = _alerts.filter(a => !_readIds.has(a.id)).length;
   if (!dot) return;
   dot.style.display = unread > 0 ? '' : 'none';
-  dot.textContent   = unread > 9 ? '9+' : unread > 0 ? String(unread) : '';
 }
 
 // ── Helper ────────────────────────────────────────────────────────────────────
