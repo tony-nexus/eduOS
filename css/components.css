@@ -1351,3 +1351,96 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   border: 1.5px solid var(--bg-base);
   pointer-events: none;
 }
+
+/* ===== RELATÓRIOS — Export Hub ===== */
+.rel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.rel-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.rel-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.rel-card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.rel-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.rel-card-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.rel-card-count {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.rel-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.rel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  line-height: 1;
+}
+.rel-btn:hover  { opacity: 0.85; }
+.rel-btn:active { transform: scale(0.97); }
+
+.rel-btn-csv {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+.rel-btn-pdf {
+  background: var(--accent);
+  color: #fff;
+}
+
+.rel-card-skeleton {
+  min-height: 180px;
+  pointer-events: none;
+}
+
+@media (max-width: 600px) {
+  .rel-grid { grid-template-columns: 1fr; }
+}
