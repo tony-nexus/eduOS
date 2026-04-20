@@ -1478,13 +1478,14 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 }
 .rel-action-csv svg { stroke: var(--text-tertiary); }
 
-.rel-action-pdf {
-  background: var(--accent);
-  color: var(--text-inverse);
-  border: 1px solid var(--accent);
+/* PDF button reuses .btn-primary — just compact the size */
+.rel-row-actions .btn-primary {
+  padding: 6px 11px;
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  box-shadow: none;
 }
-.rel-action-pdf svg { stroke: var(--text-inverse); }
-.rel-action-pdf:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 
 /* Responsive */
 @media (max-width: 640px) {
