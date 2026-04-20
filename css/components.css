@@ -1353,94 +1353,140 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
 }
 
 /* ===== RELATÓRIOS — Export Hub ===== */
-.rel-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-}
-
-.rel-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  padding: 22px;
+.rel-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  transition: box-shadow 0.15s, transform 0.15s;
-}
-.rel-card:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
+  gap: 28px;
 }
 
-.rel-card-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  margin-bottom: 8px;
+/* Section block */
+.rel-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.rel-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+}
+
+.rel-section-icon { color: var(--text-tertiary); flex-shrink: 0; }
+
+.rel-section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  color: var(--text-tertiary);
+}
+
+/* Row */
+.rel-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.12s;
+}
+.rel-row:last-child { border-bottom: none; }
+.rel-row:hover      { background: var(--bg-hover); }
+.rel-row-skeleton   { pointer-events: none; opacity: 0.6; }
+
+.rel-row-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
-.rel-card-title {
-  font-size: 14px;
+.rel-row-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rel-row-title {
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.rel-card-desc {
-  font-size: 12px;
+.rel-row-desc {
+  font-size: 11.5px;
   color: var(--text-tertiary);
-  line-height: 1.4;
-  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.rel-card-count {
-  font-size: 12px;
-  font-weight: 600;
-  margin-bottom: 10px;
-}
-
-.rel-card-actions {
+.rel-row-right {
   display: flex;
-  gap: 8px;
-  margin-top: auto;
-  padding-top: 4px;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
-.rel-btn {
+.rel-row-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rel-row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Action buttons — explicit colors so they never go blank */
+.rel-action-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 6px 12px;
-  border-radius: 7px;
-  font-size: 12px;
-  font-weight: 500;
+  padding: 6px 11px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
   border: none;
   cursor: pointer;
-  transition: opacity 0.15s, transform 0.1s;
+  transition: filter 0.15s, transform 0.1s;
   line-height: 1;
+  white-space: nowrap;
 }
-.rel-btn:hover  { opacity: 0.85; }
-.rel-btn:active { transform: scale(0.97); }
+.rel-action-btn:hover  { filter: brightness(1.1); }
+.rel-action-btn:active { transform: scale(0.96); }
 
-.rel-btn-csv {
+.rel-action-csv {
   background: var(--bg-hover);
   color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 }
-.rel-btn-pdf {
-  background: var(--accent);
-  color: #fff;
-}
+.rel-action-csv svg { stroke: var(--text-tertiary); }
 
-.rel-card-skeleton {
-  min-height: 180px;
-  pointer-events: none;
+.rel-action-pdf {
+  background: #3b82f6;
+  color: #ffffff;
 }
+.rel-action-pdf svg { stroke: #ffffff; }
 
-@media (max-width: 600px) {
-  .rel-grid { grid-template-columns: 1fr; }
+/* Responsive */
+@media (max-width: 640px) {
+  .rel-row           { flex-wrap: wrap; gap: 10px; }
+  .rel-row-right     { width: 100%; justify-content: space-between; }
+  .rel-row-badge     { font-size: 10.5px; }
 }
