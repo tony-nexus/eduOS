@@ -150,6 +150,30 @@ async function _refresh() {
       body:  `${t.nome} — ${_fmtDate(t.data_fim)}`,
     }));
 
+    // 6. Alertas de renovação: certs vencidos/críticos sem contato confirmado
+    const in30 = new Date(today); in30.setDate(in30.getDate() + 30);
+    const in30s = in30.toLocaleDateString('en-CA');
+
+    const { data: renovPendentes } = await supabase
+      .from('certificados')
+      .select('id, data_validade, aluno:aluno_id(nome), curso:curso_id(nome)')
+      .eq('tenant_id', tid)
+      .not('data_validade', 'is', null)
+      .lte('data_validade', in30s)
+      .eq('contato_confirmado', false);
+
+    (renovPendentes || []).forEach(c => {
+      const dias    = Math.round((new Date(c.data_validade) - new Date()) / (1000*60*60*24));
+      const vencido = dias < 0;
+      _alerts.push({
+        id:    `renov_${c.id}`,
+        type:  vencido ? 'error' : 'warning',
+        icon:  '🔔',
+        title: vencido ? 'Renovação urgente — contato pendente' : 'Alerta de renovação — contato pendente',
+        body:  `${c.aluno?.nome || '—'} · ${c.curso?.nome || '—'} — ${vencido ? `venceu há ${Math.abs(dias)}d` : `vence em ${dias}d`}`,
+      });
+    });
+
     // Toast apenas para alertas verdadeiramente novos nesta sessão
     const trulyNew = _alerts.filter(a => !_knownIds.has(a.id) && !_readIds.has(a.id));
     trulyNew.slice(0, 3).forEach(a => {

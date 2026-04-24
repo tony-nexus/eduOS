@@ -316,11 +316,6 @@ function modalNovaMatricula() {
         <small style="color:var(--text-tertiary);font-size:11px">Selecione múltiplos alunos para matrícula em massa.</small>
       </div>
 
-      <div class="form-group full">
-        <label>Observações</label>
-        <textarea id="f-obs" placeholder="Informações adicionais..."></textarea>
-      </div>
-
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
@@ -670,7 +665,6 @@ function bindTurmaPicker(turmasIniciais) {
 async function saveMatricula() {
   const curso_id = document.getElementById('f-curso')?.value;
   const turma_id = _selectedTurmaId || null;
-  const obs      = document.getElementById('f-obs')?.value.trim() || null;
 
   if (!_selectedAlunos.length) { toast('Selecione pelo menos um aluno.', 'warning'); return; }
   if (!curso_id)                { toast('Selecione um curso.', 'warning'); return; }
@@ -759,7 +753,7 @@ async function saveMatricula() {
         curso_id,
         turma_id,
         status,
-        observacoes: obs,
+        observacoes: null,
       });
       if (error) {
         if (error.code === '23505') throw new Error(`${aluno.nome.split(' ')[0]} já matriculado nesta turma.`);
