@@ -1,16 +1,16 @@
 /**
  * /js/ui/date-picker.js
- * EssealDatePicker v2.0.0 integrado ao tema HLV EduOS.
+ * EssealDatePicker v3.0.0 — HLV EduOS
  *
- * Classe embutida diretamente (sem import externo) para compatibilidade
- * com o servidor de produção sem build tools.
- *
- * - CSS overrides via CSS variables (suporta os 4 temas)
- * - Locale pt-BR, formato YYYY-MM-DD (compatível com Supabase)
- * - Registro global window.__hlvDatePickers para cleanup automático
+ * Digitação + calendário estilo Power BI:
+ * - Digitação livre com máscara DD/MM/AAAA
+ * - Converte para YYYY-MM-DD no input.value (compatível Supabase)
+ * - Calendário sincroniza em tempo real enquanto o usuário digita
+ * - Ao focar: converte YYYY-MM-DD → DD/MM/AAAA para exibição
+ * - Ao sair: valida e normaliza de volta para YYYY-MM-DD
  */
 
-// ─── EssealDatePicker v2.0.0 (embutido) ──────────────────────────────────────
+// ─── EssealDatePicker v3.0.0 ─────────────────────────────────────────────────
 class EssealDatePicker {
   constructor(target, options = {}) {
     this.input = typeof target === 'string' ? document.querySelector(target) : target;
@@ -18,13 +18,13 @@ class EssealDatePicker {
 
     this.options = {
       mode: 'single',
-      locale: navigator.language || 'en-US',
+      locale: 'pt-BR',
       minDate: null,
       maxDate: null,
       primaryColor: '#3b82f6',
       textColor: '#1f2937',
       zIndex: 9999,
-      format: (date) => date.toLocaleDateString('en-CA'),
+      format: (date) => date.toLocaleDateString('en-CA'), // YYYY-MM-DD
       onChange: null,
       showActions: false,
       ...options,
@@ -40,17 +40,28 @@ class EssealDatePicker {
       view: 'day',
     };
 
+    this._suppressInput = false;
+
     if (this.options.minDate) this.options.minDate = this._normalizeDate(this.options.minDate);
     if (this.options.maxDate) this.options.maxDate = this._normalizeDate(this.options.maxDate);
 
-    this._handleInputClick   = this._handleInputClick.bind(this);
+    this._handleInputFocus    = this._handleInputFocus.bind(this);
+    this._handleInputKeydown  = this._handleInputKeydown.bind(this);
+    this._handleInputTyped    = this._handleInputTyped.bind(this);
+    this._handleInputBlur     = this._handleInputBlur.bind(this);
     this._handleDocumentClick = this._handleDocumentClick.bind(this);
-    this._handleResize       = this._handleResize.bind(this);
+    this._handleResize        = this._handleResize.bind(this);
 
     this._init();
   }
 
   _init() {
+    // Remove readonly — permite digitação
+    this.input.removeAttribute('readonly');
+    this.input.setAttribute('autocomplete', 'off');
+    this.input.setAttribute('spellcheck', 'false');
+    this.input.placeholder = 'DD/MM/AAAA';
+
     this._injectStyles();
     this._createDOM();
     this._attachListeners();
@@ -105,10 +116,12 @@ class EssealDatePicker {
     const header  = document.createElement('div');
     header.className = 'dp-header';
     const prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
     prevBtn.className = 'dp-nav-btn'; prevBtn.dataset.action = 'prev'; prevBtn.innerHTML = '&lt;';
     const title   = document.createElement('span');
     title.className = 'dp-title'; title.dataset.action = 'switch-view';
     const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
     nextBtn.className = 'dp-nav-btn'; nextBtn.dataset.action = 'next'; nextBtn.innerHTML = '&gt;';
     header.append(prevBtn, title, nextBtn);
 
@@ -120,8 +133,10 @@ class EssealDatePicker {
       const footer = document.createElement('div');
       footer.className = 'dp-footer';
       const cancelBtn  = document.createElement('button');
+      cancelBtn.type = 'button';
       cancelBtn.className = 'dp-btn dp-btn-cancel'; cancelBtn.textContent = 'Cancelar'; cancelBtn.dataset.action = 'cancel';
       const confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
       confirmBtn.className = 'dp-btn dp-btn-confirm'; confirmBtn.textContent = 'Confirmar'; confirmBtn.dataset.action = 'confirm';
       confirmBtn.style.background = this.options.primaryColor;
       footer.append(cancelBtn, confirmBtn);
@@ -129,6 +144,9 @@ class EssealDatePicker {
     }
 
     document.body.appendChild(this.root);
+
+    // mousedown preventDefault evita que o input perca foco ao clicar no calendário
+    this.root.addEventListener('mousedown', (e) => { e.preventDefault(); });
 
     this.root.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -145,8 +163,10 @@ class EssealDatePicker {
   }
 
   _attachListeners() {
-    this.input.addEventListener('click',  this._handleInputClick);
-    this.input.addEventListener('focus',  this._handleInputClick);
+    this.input.addEventListener('focus',   this._handleInputFocus);
+    this.input.addEventListener('keydown', this._handleInputKeydown);
+    this.input.addEventListener('input',   this._handleInputTyped);
+    this.input.addEventListener('blur',    this._handleInputBlur);
     document.addEventListener('click',    this._handleDocumentClick);
     window.addEventListener('resize',     this._handleResize);
     window.addEventListener('scroll',     this._handleResize, true);
@@ -154,27 +174,169 @@ class EssealDatePicker {
 
   destroy() {
     this.root.remove();
-    this.input.removeEventListener('click',  this._handleInputClick);
-    this.input.removeEventListener('focus',  this._handleInputClick);
+    this.input.removeEventListener('focus',   this._handleInputFocus);
+    this.input.removeEventListener('keydown', this._handleInputKeydown);
+    this.input.removeEventListener('input',   this._handleInputTyped);
+    this.input.removeEventListener('blur',    this._handleInputBlur);
     document.removeEventListener('click',    this._handleDocumentClick);
     window.removeEventListener('resize',     this._handleResize);
     window.removeEventListener('scroll',     this._handleResize, true);
   }
 
+  // ─── Máscara DD/MM/AAAA ────────────────────────────────────────────────────
+
+  _handleInputFocus() {
+    // Ao focar: converte YYYY-MM-DD para DD/MM/AAAA (exibição amigável)
+    const val = this.input.value;
+    const isoMatch = val.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+      const [, y, m, d] = isoMatch;
+      this._setRawDisplay(`${d}/${m}/${y}`);
+    }
+    if (!this.state.isVisible) this.open();
+  }
+
+  _handleInputKeydown(e) {
+    // Permitir: teclas de controle, copiar, colar, etc.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (['Backspace', 'Delete', 'Tab', 'Enter', 'Escape',
+         'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
+      if (e.key === 'Escape') { this.close(); return; }
+      if (e.key === 'Enter')  { this._commitFromDisplay(); this.close(); return; }
+      return;
+    }
+    // Bloqueia tudo que não é dígito ou /
+    if (!/^\d$/.test(e.key)) { e.preventDefault(); return; }
+
+    // Limita a 10 caracteres (DD/MM/AAAA)
+    const selStart = this.input.selectionStart;
+    const selEnd   = this.input.selectionEnd;
+    const raw = this.input.value.replace(/\//g, '');
+    const digits = raw.length - (selEnd - selStart > 0 ? selEnd - selStart : 0);
+    if (digits >= 8) { e.preventDefault(); }
+  }
+
+  _handleInputTyped() {
+    if (this._suppressInput) return;
+
+    const cursorPos = this.input.selectionStart;
+    const raw = this.input.value.replace(/[^\d]/g, '').slice(0, 8);
+
+    // Reconstrói máscara DD/MM/AAAA
+    let masked = '';
+    if (raw.length > 0) masked += raw.slice(0, 2);
+    if (raw.length > 2) masked += '/' + raw.slice(2, 4);
+    if (raw.length > 4) masked += '/' + raw.slice(4, 8);
+
+    this._setRawDisplay(masked);
+
+    // Reposiciona cursor (auto-avanço após / inserida)
+    let newPos = cursorPos;
+    if (cursorPos === 2 || cursorPos === 5) newPos = cursorPos + 1;
+    this.input.setSelectionRange(newPos, newPos);
+
+    // Sincroniza calendário se data completa
+    if (raw.length === 8) {
+      const date = this._parseRaw8(raw);
+      if (date) {
+        this.state.selectedDate = date;
+        this.state.viewDate = new Date(date);
+        if (this.state.isVisible) this._render();
+      }
+    }
+  }
+
+  _handleInputBlur() {
+    this._commitFromDisplay();
+    // Fecha com pequeno delay para permitir clicks no calendário
+    setTimeout(() => this.close(), 180);
+  }
+
+  _commitFromDisplay() {
+    const val = this.input.value.trim();
+    if (!val) return;
+
+    const date = this._parseDisplayDate(val);
+    if (date) {
+      const iso = this.options.format(date);
+      this.state.selectedDate = date;
+      this._updateInput(iso); // grava YYYY-MM-DD no value
+      if (this.options.onChange) this.options.onChange(date);
+    } else {
+      // Data inválida — restaura valor anterior ou limpa
+      if (this.state.selectedDate) {
+        this._updateInput(this.options.format(this.state.selectedDate));
+      } else {
+        this._updateInput('');
+      }
+    }
+  }
+
+  // ─── Parsers ───────────────────────────────────────────────────────────────
+
+  _parseRaw8(raw) {
+    // raw = 8 dígitos: DDMMAAAA
+    const d = +raw.slice(0, 2);
+    const m = +raw.slice(2, 4);
+    const y = +raw.slice(4, 8);
+    return this._buildDate(d, m, y);
+  }
+
+  _parseDisplayDate(val) {
+    // DD/MM/AAAA
+    const dmy = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (dmy) return this._buildDate(+dmy[1], +dmy[2], +dmy[3]);
+
+    // YYYY-MM-DD (colado ou preenchido pelo calendário)
+    const ymd = val.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (ymd) return this._buildDate(+ymd[3], +ymd[2], +ymd[1]);
+
+    return null;
+  }
+
+  _buildDate(d, m, y) {
+    if (y < 1900 || y > 2200 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const date = new Date(y, m - 1, d);
+    date.setHours(0, 0, 0, 0);
+    if (date.getDate() !== d || date.getMonth() !== m - 1) return null; // dia inválido (ex: 31/02)
+    return date;
+  }
+
+  // ─── Helpers de input ──────────────────────────────────────────────────────
+
+  _setRawDisplay(val) {
+    // Seta o value sem disparar nosso handler de máscara
+    this._suppressInput = true;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(this.input, val);
+    this._suppressInput = false;
+  }
+
+  _updateInput(value) {
+    this._suppressInput = true;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+    setter.call(this.input, value);
+    this.input.dispatchEvent(new Event('input',  { bubbles: true }));
+    this.input.dispatchEvent(new Event('change', { bubbles: true }));
+    this._suppressInput = false;
+  }
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+
   _render() {
     const body  = this.root.querySelector('.dp-body');
     const title = this.root.querySelector('.dp-title');
     body.replaceChildren();
-    if (this.state.view === 'day')   this._renderDays(body, title);
+    if (this.state.view === 'day')        this._renderDays(body, title);
     else if (this.state.view === 'month') this._renderMonths(body, title);
-    else                             this._renderYears(body, title);
+    else                                  this._renderYears(body, title);
   }
 
   _renderDays(container, titleEl) {
     container.className = 'dp-body dp-grid';
     const year  = this.state.viewDate.getFullYear();
     const month = this.state.viewDate.getMonth();
-    titleEl.textContent = this.state.viewDate.toLocaleString(this.options.locale, { month:'long', year:'numeric' });
+    titleEl.textContent = this.state.viewDate.toLocaleString(this.options.locale, { month: 'long', year: 'numeric' });
 
     const frag = document.createDocumentFragment();
     ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].forEach(d => {
@@ -184,6 +346,7 @@ class EssealDatePicker {
 
     const firstDay    = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const today = new Date(); today.setHours(0, 0, 0, 0);
 
     for (let i = 0; i < firstDay; i++) {
       const el = document.createElement('div');
@@ -214,9 +377,7 @@ class EssealDatePicker {
         }
       }
 
-      const today = new Date(); today.setHours(0,0,0,0);
       if (ts === today.getTime()) el.classList.add('dp-today');
-
       frag.appendChild(el);
     }
     container.appendChild(frag);
@@ -234,7 +395,7 @@ class EssealDatePicker {
       el.className = 'dp-cell';
       if (i === currentMonth && currentYear === this.state.viewDate.getFullYear()) el.classList.add('dp-today');
       el.dataset.ts = date.getTime();
-      el.textContent = date.toLocaleString(this.options.locale, { month:'short' });
+      el.textContent = date.toLocaleString(this.options.locale, { month: 'short' });
       frag.appendChild(el);
     }
     container.appendChild(frag);
@@ -259,12 +420,7 @@ class EssealDatePicker {
     container.appendChild(frag);
   }
 
-  _updateInput(value) {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-    setter.call(this.input, value);
-    this.input.dispatchEvent(new Event('input',  { bubbles: true }));
-    this.input.dispatchEvent(new Event('change', { bubbles: true }));
-  }
+  // ─── Seleção / navegação ───────────────────────────────────────────────────
 
   _handleSelection(target) {
     const timestamp = parseInt(target.dataset.ts);
@@ -330,15 +486,15 @@ class EssealDatePicker {
     }
   }
 
+  // ─── Posicionamento / abertura ─────────────────────────────────────────────
+
   _position() {
     if (!this.state.isVisible) return;
     const rect = this.input.getBoundingClientRect();
     let top  = rect.bottom + window.scrollY + 4;
     let left = rect.left   + window.scrollX;
-    // Evita sair da tela pela direita
     const pw = 280 + 32;
     if (left + pw > window.innerWidth) left = Math.max(8, window.innerWidth - pw);
-    // Evita sair da tela pela base
     if (top + 340 > window.innerHeight + window.scrollY) top = rect.top + window.scrollY - 344;
     this.root.style.top  = `${top}px`;
     this.root.style.left = `${left}px`;
@@ -350,14 +506,18 @@ class EssealDatePicker {
     this._position(); this._render();
   }
 
-  close() { this.state.isVisible = false; this.root.classList.remove('dp-visible'); }
+  close() {
+    if (!this.state.isVisible) return;
+    this.state.isVisible = false;
+    this.root.classList.remove('dp-visible');
+  }
 
-  _normalizeDate(d) { const date = new Date(d); date.setHours(0,0,0,0); return date; }
-
-  _handleInputClick(e) { e.preventDefault(); this.open(); }
+  _normalizeDate(d) { const date = new Date(d); date.setHours(0, 0, 0, 0); return date; }
 
   _handleDocumentClick(e) {
-    if (this.state.isVisible && !this.root.contains(e.target) && e.target !== this.input) this.close();
+    if (this.state.isVisible && !this.root.contains(e.target) && e.target !== this.input) {
+      this.close();
+    }
   }
 
   _handleResize() { if (this.state.isVisible) this._position(); }
@@ -395,7 +555,7 @@ function _injectThemeOverride() {
       border-color: var(--border-strong) !important;
     }
     .dp-btn-cancel:hover { background: var(--border-subtle) !important; }
-    .dp-input { cursor: pointer !important; }
+    .dp-input { cursor: text !important; }
     .dp-input:focus { outline: 2px solid var(--accent) !important; outline-offset: 2px; }
   `;
   document.head.appendChild(style);
@@ -427,14 +587,14 @@ export function initDatePicker(el, opts = {}) {
 
   const picker = new EssealDatePicker(el, {
     locale: 'pt-BR',
-    format: date => date.toLocaleDateString('en-CA'), // YYYY-MM-DD
+    format: date => date.toLocaleDateString('en-CA'), // YYYY-MM-DD para Supabase
     primaryColor: _accentHex(),
     textColor: _textPrimary(),
     zIndex: 10500,
     ...opts,
   });
 
-  // Pré-posiciona calendário na data já preenchida no input
+  // Pré-carrega data já preenchida no input (YYYY-MM-DD → estado interno)
   if (el.value) {
     const d = new Date(el.value + 'T00:00:00');
     if (!isNaN(d.getTime())) {

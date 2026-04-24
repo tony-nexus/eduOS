@@ -67,17 +67,13 @@ export async function render() {
   await Promise.all([loadData(), loadAux()]);
 
   setAba(_abaAtiva);
-
-  // Pickers de filtro (nível de página — fora de modal)
-  const pDe  = document.getElementById('filtro-data-de');
-  const pAte = document.getElementById('filtro-data-ate');
-  if (pDe)  _filterPickers.push(initDatePicker(pDe));
-  if (pAte) _filterPickers.push(initDatePicker(pAte));
 }
 
 // ─── Troca de aba ─────────────────────────────────────────────────────────────
 function setAba(aba) {
   _abaAtiva = aba;
+  _filterPickers.forEach(p => { try { p.destroy(); } catch {} });
+  _filterPickers = [];
   document.querySelectorAll('.fin-tab').forEach(btn => {
     const active = btn.dataset.tab === aba;
     btn.style.color        = active ? 'var(--accent)'  : 'var(--text-secondary)';
@@ -255,6 +251,11 @@ function renderAbaCobrancas(container) {
     const el = document.getElementById(id);
     if (el) { el.addEventListener('input', applyFilter); el.addEventListener('change', applyFilter); }
   });
+
+  const pDe  = document.getElementById('filtro-data-de');
+  const pAte = document.getElementById('filtro-data-ate');
+  if (pDe)  _filterPickers.push(initDatePicker(pDe));
+  if (pAte) _filterPickers.push(initDatePicker(pAte));
 
   applyFilter();
 }
