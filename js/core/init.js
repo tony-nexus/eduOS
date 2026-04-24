@@ -12,7 +12,7 @@ import { doLogin, logout, initAuth } from './auth.js';
 import { navigate } from './router.js';
 import { initTheme, toggleTheme } from '../ui/theme.js';
 import { closeModal } from '../ui/components.js';
-import { renderPanel, markAllRead, toggleSound } from './notifications.js';
+import { renderPanel, markAllRead, clearAllNotifs, toggleSound } from './notifications.js';
 
 async function bootstrap() {
   initTheme();
@@ -141,6 +141,7 @@ function registerEventListeners() {
   });
 
   document.getElementById('notif-mark-all')?.addEventListener('click', () => markAllRead());
+  document.getElementById('notif-clear-all')?.addEventListener('click', () => clearAllNotifs());
   document.getElementById('notif-sound-toggle')?.addEventListener('click', (e) => { e.stopPropagation(); toggleSound(); });
 }
 
