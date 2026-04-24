@@ -16,9 +16,11 @@ import { validateForm, fieldError, fieldOk } from '../ui/validate.js';
 import { autoSyncTurmaStatus, autoEnrollAguardando, autoEmitirCertificados } from '../core/automations.js';
 import { initDatePicker } from '../ui/date-picker.js';
 
-let _turmas     = [];
-let _cursos     = [];
+let _turmas      = [];
+let _cursos      = [];
 let _instrutores = [];
+let _empresas    = [];
+let _filterPickers = [];
 
 export let _turmasCache = []; // acessado por matriculas.js
 
@@ -76,6 +78,11 @@ export async function render() {
           <option value="concluida">Concluída</option>
           <option value="cancelada">Cancelada</option>
         </select>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="text" class="select-input dp-input" id="filtro-turma-de"  placeholder="DD/MM/AAAA" style="width:110px">
+          <span style="color:var(--text-tertiary);font-size:13px">–</span>
+          <input type="text" class="select-input dp-input" id="filtro-turma-ate" placeholder="DD/MM/AAAA" style="width:110px">
+        </div>
       </div>
       <div style="overflow-x:auto">
         <table>
@@ -101,7 +108,15 @@ export async function render() {
   document.getElementById('filtro-curso-turma')?.addEventListener('change', applyFilter);
   document.getElementById('filtro-inst-turma')?.addEventListener('change', applyFilter);
 
-  await Promise.all([loadTurmas(), loadCursos(), loadInstrutores()]);
+  await Promise.all([loadTurmas(), loadCursos(), loadInstrutores(), loadEmpresas()]);
+
+  // Date pickers do filtro de período
+  _filterPickers.forEach(p => { try { p.destroy(); } catch {} });
+  _filterPickers = [];
+  const pDe  = document.getElementById('filtro-turma-de');
+  const pAte = document.getElementById('filtro-turma-ate');
+  if (pDe)  _filterPickers.push(initDatePicker(pDe,  { onChange: applyFilter }));
+  if (pAte) _filterPickers.push(initDatePicker(pAte, { onChange: applyFilter }));
 
   // ── Auto-sync de status por data (agendada→em_andamento→concluida) ──────
   autoSyncTurmaStatus().then(count => {
@@ -134,6 +149,14 @@ async function loadInstrutores() {
       .select('id, nome').eq('tenant_id', getTenantId()).order('nome');
     _instrutores = data || [];
   } catch(_) { _instrutores = []; }
+}
+
+async function loadEmpresas() {
+  try {
+    const { data } = await supabase.from('empresas')
+      .select('id, nome').eq('tenant_id', getTenantId()).order('nome');
+    _empresas = data || [];
+  } catch(_) { _empresas = []; }
 }
 
 async function loadTurmas() {
@@ -179,16 +202,20 @@ function renderKPIs(turmas) {
 
 // ─── Filtro / tabela ──────────────────────────────────────────────────────────
 function applyFilter() {
-  const q  = (document.getElementById('search-turmas')?.value || '').toLowerCase();
-  const st = document.getElementById('filtro-status-turma')?.value || '';
-  const cr = document.getElementById('filtro-curso-turma')?.value || '';
-  const is = document.getElementById('filtro-inst-turma')?.value || '';
+  const q   = (document.getElementById('search-turmas')?.value || '').toLowerCase();
+  const st  = document.getElementById('filtro-status-turma')?.value || '';
+  const cr  = document.getElementById('filtro-curso-turma')?.value || '';
+  const is  = document.getElementById('filtro-inst-turma')?.value || '';
+  const de  = document.getElementById('filtro-turma-de')?.value || '';
+  const ate = document.getElementById('filtro-turma-ate')?.value || '';
 
   const f  = _turmas.filter(t =>
-    (!q  || t.codigo?.toLowerCase().includes(q) || t.curso_nome.toLowerCase().includes(q)) &&
-    (!st || t.status === st) &&
-    (!cr || t.curso_id === cr) &&
-    (!is || t.instrutor_id === is)
+    (!q   || t.codigo?.toLowerCase().includes(q) || t.curso_nome.toLowerCase().includes(q)) &&
+    (!st  || t.status === st) &&
+    (!cr  || t.curso_id === cr) &&
+    (!is  || t.instrutor_id === is) &&
+    (!de  || (t.data_inicio && t.data_inicio >= de)) &&
+    (!ate || (t.data_inicio && t.data_inicio <= ate))
   );
   const tbody = document.getElementById('turmas-tbody');
   if (!tbody) return;
@@ -318,6 +345,21 @@ function modalTurma(turma = null) {
     `<option value="${i.id}" ${turma?.instrutor_id === i.id ? 'selected' : ''}>${esc(i.nome)}</option>`
   ).join('');
 
+  // Detecta tipo de local para pré-selecionar no edit
+  let localTipo = '';
+  let localEmpresa = '';
+  if (turma?.local) {
+    if (turma.local === 'Interno' || turma.local === 'Online') {
+      localTipo = turma.local;
+    } else {
+      localTipo = 'Empresa';
+      localEmpresa = turma.local;
+    }
+  }
+  const empresasOpts = _empresas.map(e =>
+    `<option value="${esc(e.nome)}" ${localEmpresa === e.nome ? 'selected' : ''}>${esc(e.nome)}</option>`
+  ).join('');
+
   const statusInicial = turma
     ? (turma.status === 'cancelada' ? 'cancelada' : calcularStatusPorData(turma.data_inicio, turma.data_fim))
     : calcularStatusPorData('', '');
@@ -371,7 +413,20 @@ function modalTurma(turma = null) {
 
       <div class="form-group">
         <label>Local / Modalidade <span style="color:var(--red)" aria-hidden="true">*</span></label>
-        <input id="f-local" type="text" placeholder="Ex: Sede SP / Online" value="${esc(turma?.local || '')}">
+        <select id="f-local-tipo">
+          <option value="">— Selecione —</option>
+          <option value="Interno" ${localTipo === 'Interno' ? 'selected' : ''}>Interno</option>
+          <option value="Online"  ${localTipo === 'Online'  ? 'selected' : ''}>Online</option>
+          <option value="Empresa" ${localTipo === 'Empresa' ? 'selected' : ''}>Empresa</option>
+        </select>
+      </div>
+
+      <div class="form-group" id="f-empresa-wrap" style="display:${localTipo === 'Empresa' ? 'block' : 'none'}">
+        <label>Empresa <span style="color:var(--red)" aria-hidden="true">*</span></label>
+        <select id="f-local-empresa">
+          <option value="">— Selecione a empresa —</option>
+          ${empresasOpts}
+        </select>
       </div>
 
       <div class="form-group full">
@@ -435,30 +490,45 @@ function modalTurma(turma = null) {
     triggerAutoCode();
   }
 
+  document.getElementById('f-local-tipo')?.addEventListener('change', function () {
+    const wrap = document.getElementById('f-empresa-wrap');
+    if (wrap) wrap.style.display = this.value === 'Empresa' ? 'block' : 'none';
+    if (this.value !== 'Empresa') {
+      const sel = document.getElementById('f-local-empresa');
+      if (sel) sel.value = '';
+    }
+  });
+
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
   document.getElementById('modal-save')?.addEventListener('click', () => saveTurma(turma?.id));
 }
 
 // ─── Save ─────────────────────────────────────────────────────────────────────
 async function saveTurma(id) {
-  const codigo      = document.getElementById('f-codigo')?.value.trim();
-  const curso_id    = document.getElementById('f-curso')?.value;
+  const codigo       = document.getElementById('f-codigo')?.value.trim();
+  const curso_id     = document.getElementById('f-curso')?.value;
   const instrutor_id = document.getElementById('f-instrutor')?.value || null;
-  const inicio      = document.getElementById('f-inicio')?.value || null;
-  const fim         = document.getElementById('f-fim')?.value || null;
-  const vagas       = parseInt(document.getElementById('f-vagas')?.value) || 0;
-  const local       = document.getElementById('f-local')?.value.trim() || null;
-  const status      = document.getElementById('f-status')?.value;
+  const inicio       = document.getElementById('f-inicio')?.value || null;
+  const fim          = document.getElementById('f-fim')?.value || null;
+  const vagas        = parseInt(document.getElementById('f-vagas')?.value) || 0;
+  const localTipo    = document.getElementById('f-local-tipo')?.value || '';
+  const localEmpresa = document.getElementById('f-local-empresa')?.value || '';
+  const local        = localTipo === 'Empresa' ? localEmpresa : localTipo;
+  const status       = document.getElementById('f-status')?.value;
 
-  const ok = validateForm([
-    { id: 'f-codigo',    value: codigo,          rules: ['required'],              label: 'Código' },
-    { id: 'f-curso',     value: curso_id,         rules: ['required'],              label: 'Curso' },
-    { id: 'f-instrutor', value: instrutor_id,     rules: ['required'],              label: 'Instrutor' },
-    { id: 'f-inicio',    value: inicio,           rules: ['required'],              label: 'Data de início' },
-    { id: 'f-fim',       value: fim,              rules: ['required'],              label: 'Data de fim' },
-    { id: 'f-vagas',     value: vagas.toString(), rules: ['required','int_positive'], label: 'Vagas' },
-    { id: 'f-local',     value: local,            rules: ['required'],              label: 'Local / Modalidade' },
-  ]);
+  const rules = [
+    { id: 'f-codigo',     value: codigo,          rules: ['required'],               label: 'Código' },
+    { id: 'f-curso',      value: curso_id,         rules: ['required'],               label: 'Curso' },
+    { id: 'f-instrutor',  value: instrutor_id,     rules: ['required'],               label: 'Instrutor' },
+    { id: 'f-inicio',     value: inicio,           rules: ['required'],               label: 'Data de início' },
+    { id: 'f-fim',        value: fim,              rules: ['required'],               label: 'Data de fim' },
+    { id: 'f-vagas',      value: vagas.toString(), rules: ['required','int_positive'], label: 'Vagas' },
+    { id: 'f-local-tipo', value: localTipo,        rules: ['required'],               label: 'Local / Modalidade' },
+  ];
+  if (localTipo === 'Empresa') {
+    rules.push({ id: 'f-local-empresa', value: localEmpresa, rules: ['required'], label: 'Empresa' });
+  }
+  const ok = validateForm(rules);
   if (!ok) return;
 
   if (fim && inicio && fim < inicio) {
@@ -594,20 +664,26 @@ async function verAlunos(turma) {
       const label = STATUS_LABEL[m.status] ?? m.status;
       const doc   = m.aluno?.cpf ? `CPF: ${esc(m.aluno.cpf)}` : m.aluno?.rnm ? `RNM: ${esc(m.aluno.rnm)}` : '—';
 
-      const btns = podeAvaliar && m.status === 'em_andamento' ? `
+      const btns = `
         <div style="display:flex;gap:4px;margin-top:8px">
-          <button class="action-btn diario-aprovar"
-            style="background:var(--green-soft);color:var(--green);border-color:var(--green)"
-            data-id="${m.id}" data-nome="${esc(m.aluno?.nome)}"
-            data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
-            ✓ Aprovar
+          ${podeAvaliar && m.status === 'em_andamento' ? `
+            <button class="action-btn diario-aprovar"
+              style="background:var(--green-soft);color:var(--green);border-color:var(--green)"
+              data-id="${m.id}" data-nome="${esc(m.aluno?.nome)}"
+              data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
+              ✓ Aprovar
+            </button>
+            <button class="action-btn danger diario-reprovar"
+              data-id="${m.id}" data-nome="${esc(m.aluno?.nome)}"
+              data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
+              ✗ Reprovar
+            </button>
+          ` : ''}
+          <button class="action-btn danger diario-excluir"
+            data-id="${m.id}" data-nome="${esc(m.aluno?.nome ?? '')}">
+            Excluir da Turma
           </button>
-          <button class="action-btn danger diario-reprovar"
-            data-id="${m.id}" data-nome="${esc(m.aluno?.nome)}"
-            data-aluno-id="${m.aluno_id}" data-curso-id="${m.curso_id}">
-            ✗ Reprovar
-          </button>
-        </div>` : '';
+        </div>`;
 
       return `
         <div style="padding:12px 16px;border-bottom:1px solid var(--border-subtle)">
@@ -660,11 +736,62 @@ async function verAlunos(turma) {
       });
     });
 
+    // ── Bind: Excluir da Turma ──────────────────────────────────────────────
+    document.querySelectorAll('.diario-excluir').forEach(btn => {
+      btn.addEventListener('click', () => removerAlunoTurma(btn.dataset.id, btn.dataset.nome, turma));
+    });
+
   } catch (e) {
     document.getElementById('modal-body').innerHTML = `
       <div style="padding:20px;color:var(--red)">Erro ao carregar alunos da turma.</div>
     `;
   }
+}
+
+// ─── Remover aluno da turma ───────────────────────────────────────────────────
+function removerAlunoTurma(matriculaId, nome, turma) {
+  openModal('Excluir Aluno da Turma', `
+    <div class="danger-banner">
+      <div class="danger-banner-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+      </div>
+      <div class="danger-banner-info">
+        <div class="danger-banner-title">Excluir aluno permanentemente da turma</div>
+        <div class="danger-banner-sub">${esc(nome)} · Turma ${esc(turma.codigo)}</div>
+      </div>
+    </div>
+    <p style="font-size:13px;color:var(--text-secondary);margin:16px 0;line-height:1.6">
+      A matrícula e os pagamentos vinculados serão excluídos. A vaga será liberada automaticamente.
+    </p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
+      <button class="btn btn-danger" id="btn-confirmar-remover-aluno">Excluir da Turma</button>
+    </div>
+  `);
+
+  document.getElementById('modal-cancel')?.addEventListener('click', () => {
+    closeModal();
+    verAlunos(turma);
+  });
+
+  document.getElementById('btn-confirmar-remover-aluno')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-confirmar-remover-aluno');
+    btn.disabled = true; btn.textContent = 'Excluindo...';
+    try {
+      const tid = getTenantId();
+      // Remove pagamentos da matrícula antes
+      await supabase.from('pagamentos').delete().eq('matricula_id', matriculaId).eq('tenant_id', tid);
+      // Remove a matrícula (trigger decrementa turma.ocupadas)
+      const { error } = await supabase.from('matriculas').delete().eq('id', matriculaId).eq('tenant_id', tid);
+      if (error) throw error;
+      toast(`${esc(nome)} removido(a) da turma.`, 'success');
+      await loadTurmas();
+      verAlunos(turma);
+    } catch (err) {
+      toast(`Erro: ${err.message}`, 'error');
+      btn.disabled = false; btn.textContent = 'Excluir da Turma';
+    }
+  });
 }
 
 // ─── Avaliação de aluno (aprovar / reprovar) ──────────────────────────────────
@@ -1020,7 +1147,7 @@ function confirmarExclusaoTurma(turma) {
       </div>
     </div>
     <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;line-height:1.6">
-      Esta ação é irreversível. O agendamento da turma e as matrículas associadas podem ser <strong style="color:var(--red)">afetadas permanentemente</strong>.
+      Esta ação é <strong style="color:var(--red)">irreversível</strong>. Todas as matrículas e pagamentos vinculados a esta turma serão excluídos permanentemente junto com ela.
     </p>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="modal-cancel">Cancelar</button>
@@ -1037,10 +1164,27 @@ async function excluirTurma(id) {
   btn.disabled = true;
   btn.textContent = 'Excluindo...';
   try {
-    const { error } = await supabase.from('turmas').delete().eq('id', id).eq('tenant_id', getTenantId());
+    const tid = getTenantId();
+
+    // 1. Busca IDs das matrículas vinculadas
+    const { data: mats } = await supabase
+      .from('matriculas').select('id').eq('turma_id', id).eq('tenant_id', tid);
+
+    // 2. Apaga pagamentos dessas matrículas
+    if (mats?.length) {
+      const matIds = mats.map(m => m.id);
+      await supabase.from('pagamentos').delete().in('matricula_id', matIds).eq('tenant_id', tid);
+    }
+
+    // 3. Apaga as matrículas
+    await supabase.from('matriculas').delete().eq('turma_id', id).eq('tenant_id', tid);
+
+    // 4. Apaga a turma
+    const { error } = await supabase.from('turmas').delete().eq('id', id).eq('tenant_id', tid);
     if (error) throw error;
+
     closeModal();
-    toast('Turma excluída com sucesso!', 'success');
+    toast('Turma e matrículas excluídas com sucesso!', 'success');
     await loadTurmas();
   } catch (err) {
     console.error(err);
