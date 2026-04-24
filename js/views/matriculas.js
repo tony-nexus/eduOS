@@ -20,6 +20,7 @@ let _cursos          = [];
 let _turmas          = [];
 let _selectedAlunos  = [];
 let _selectedTurmaId = null;
+let _selectedIds     = new Set();
 
 const BADGE_MAP = { matriculado:'badge-blue', aguardando_turma:'badge-amber', em_andamento:'badge-accent', concluido:'badge-green', certificado_emitido:'badge-purple', cancelado:'badge-red', reprovado:'badge-red' };
 const LABEL_MAP = { matriculado:'Matriculado', aguardando_turma:'Ag. Turma', em_andamento:'Em Andamento', concluido:'Concluído', certificado_emitido:'Cert. Emitido', cancelado:'Cancelado', reprovado:'Reprovado' };
@@ -29,6 +30,11 @@ export async function render() {
     <div class="page-header">
       <div><h1>Matrículas</h1><p>Registro e gestão de matrículas</p></div>
       <div class="page-header-actions">
+        <button class="btn" id="btn-excluir-selecionados" hidden
+          style="background:var(--red);color:#fff;display:none" aria-live="polite">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          <span id="btn-excluir-label">Excluir selecionados</span>
+        </button>
         <button class="btn btn-primary" id="btn-nova-mat">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Nova Matrícula
@@ -58,11 +64,15 @@ export async function render() {
       <div style="overflow-x:auto">
         <table>
           <thead><tr>
+            <th style="width:36px;padding:10px 8px">
+              <input type="checkbox" id="check-all-mats" aria-label="Selecionar todos"
+                style="width:15px;height:15px;cursor:pointer;accent-color:var(--red)">
+            </th>
             <th>Aluno</th><th>Curso</th><th>Turma</th>
             <th>Data Matrícula</th><th>Status</th><th>Ações</th>
           </tr></thead>
           <tbody id="mats-tbody">
-            <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-tertiary)">
+            <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-tertiary)">
               Carregando...
             </td></tr>
           </tbody>
@@ -75,6 +85,7 @@ export async function render() {
   `);
 
   document.getElementById('btn-nova-mat')?.addEventListener('click', () => modalNovaMatricula());
+  document.getElementById('btn-excluir-selecionados')?.addEventListener('click', () => excluirSelecionadosMats());
   document.getElementById('search-mats')?.addEventListener('input', applyFilter);
   document.getElementById('filtro-status-mat')?.addEventListener('change', applyFilter);
 
@@ -84,7 +95,7 @@ export async function render() {
 // ─── Fetches ──────────────────────────────────────────────────────────────────
 async function loadAux() {
   try {
-    const [r1, r2, r3] = await Promise.all([
+    const [r1, r2, r3, r4] = await Promise.all([
       supabase.from('alunos').select('id, nome, cpf, rnm, cnh_num').eq('tenant_id', getTenantId()).eq('status', 'ativo').order('nome'),
       supabase.from('cursos').select('id, nome, valor_padrao').eq('tenant_id', getTenantId()).eq('ativo', true).order('nome'),
       // Apenas turmas agendadas aceitam novas matrículas — inclui datas para verificação de conflito
@@ -92,8 +103,15 @@ async function loadAux() {
         .eq('tenant_id', getTenantId())
         .eq('status', 'agendada')
         .order('data_inicio', { ascending: true }),
+      // Alunos com matrícula ativa (em curso ou na fila) não podem ser rematriculados
+      supabase.from('matriculas').select('aluno_id')
+        .eq('tenant_id', getTenantId())
+        .in('status', ['matriculado', 'em_andamento', 'aguardando_turma']),
     ]);
-    _alunos = r1.data || [];
+
+    const alunosAtivosIds = new Set((r4.data || []).map(m => m.aluno_id));
+
+    _alunos = (r1.data || []).filter(a => !alunosAtivosIds.has(a.id));
     _cursos = r2.data || [];
     _turmas = r3.data || [];
   } catch (err) {
@@ -153,13 +171,19 @@ function applyFilter() {
   if (!tbody) return;
 
   if (!f.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-tertiary)">Nenhuma matrícula encontrada.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-tertiary)">Nenhuma matrícula encontrada.</td></tr>`;
     if (count) count.textContent = '0 registros';
+    _updateSelecaoUI();
     return;
   }
 
   tbody.innerHTML = f.map(m => `
     <tr>
+      <td style="padding:10px 8px">
+        <input type="checkbox" class="mat-row-check" data-id="${m.id}"
+          style="width:15px;height:15px;cursor:pointer;accent-color:var(--red)"
+          ${_selectedIds.has(m.id) ? 'checked' : ''}>
+      </td>
       <td style="font-weight:500">${esc(m.aluno_nome)}</td>
       <td style="font-size:12.5px;color:var(--text-secondary)">${esc(m.curso_nome)}</td>
       <td><span style="font-family:var(--font-mono);font-size:12px;color:var(--text-tertiary)">${esc(m.turma_codigo)}</span></td>
@@ -173,12 +197,57 @@ function applyFilter() {
 
   if (count) count.textContent = `${f.length} registro${f.length !== 1 ? 's' : ''}`;
 
+  // Checkboxes individuais
+  document.querySelectorAll('.mat-row-check').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) _selectedIds.add(cb.dataset.id);
+      else _selectedIds.delete(cb.dataset.id);
+      _updateSelecaoUI();
+    });
+  });
+
+  // Selecionar todos
+  const checkAll = document.getElementById('check-all-mats');
+  if (checkAll) {
+    checkAll.addEventListener('change', () => {
+      document.querySelectorAll('.mat-row-check').forEach(cb => {
+        cb.checked = checkAll.checked;
+        if (checkAll.checked) _selectedIds.add(cb.dataset.id);
+        else _selectedIds.delete(cb.dataset.id);
+      });
+      _updateSelecaoUI();
+    });
+  }
+
+  _updateSelecaoUI();
+
   document.querySelectorAll('.action-excluir').forEach(btn => {
     btn.addEventListener('click', () => {
       const m = _matriculas.find(x => x.id === btn.dataset.id);
       if (m) modalExcluirMatricula(m);
     });
   });
+}
+
+function _updateSelecaoUI() {
+  const btn   = document.getElementById('btn-excluir-selecionados');
+  const label = document.getElementById('btn-excluir-label');
+  if (!btn) return;
+  const n = _selectedIds.size;
+  if (n > 0) {
+    btn.hidden = false;
+    btn.style.display = '';
+    if (label) label.textContent = `Excluir ${n} selecionada${n !== 1 ? 's' : ''}`;
+  } else {
+    btn.hidden = true;
+    btn.style.display = 'none';
+  }
+  const checkAll = document.getElementById('check-all-mats');
+  if (checkAll) {
+    const allCbs = [...document.querySelectorAll('.mat-row-check')];
+    checkAll.checked = allCbs.length > 0 && allCbs.every(c => _selectedIds.has(c.dataset.id));
+    checkAll.indeterminate = !checkAll.checked && allCbs.some(c => _selectedIds.has(c.dataset.id));
+  }
 }
 
 // ─── Modal Nova Matrícula ─────────────────────────────────────────────────────
@@ -670,6 +739,70 @@ async function saveMatricula() {
 // usa a trigger fn_sync_turma_ocupadas() para garantir ACID em incrementos.
 
 // ─── Modal Excluir Matrícula ──────────────────────────────────────────────────
+// ─── Exclusão em massa de matrículas ─────────────────────────────────────────
+function excluirSelecionadosMats() {
+  const ids = [..._selectedIds];
+  if (!ids.length) return;
+  const n = ids.length;
+
+  const mats = ids.map(id => _matriculas.find(m => m.id === id)).filter(Boolean);
+  const MAX = 5;
+  const nomesHtml = mats.slice(0, MAX).map(m => `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border-subtle);font-size:13px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="12" height="12" style="flex-shrink:0;color:var(--text-tertiary)"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span style="font-weight:500">${esc(m.aluno_nome)}</span>
+      <span style="color:var(--text-tertiary);font-size:11.5px">· ${esc(m.curso_nome)} · ${esc(m.turma_codigo)}</span>
+    </div>`).join('');
+  const rodape = mats.length > MAX
+    ? `<div style="font-size:11px;color:var(--text-tertiary);margin-top:6px;font-family:var(--font-mono)">...e mais ${mats.length - MAX} matrícula${mats.length - MAX !== 1 ? 's' : ''}.</div>`
+    : '';
+
+  openModal(`Excluir ${n} matrícula${n !== 1 ? 's' : ''}`, `
+    <div class="danger-banner">
+      <div class="danger-banner-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="22" height="22">
+          <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <div class="danger-banner-info">
+        <div class="danger-banner-title">Exclusão permanente de ${n} matrícula${n !== 1 ? 's' : ''}</div>
+        <div class="danger-banner-sub">As vagas serão liberadas automaticamente</div>
+      </div>
+    </div>
+    <div style="margin:16px 0;max-height:180px;overflow-y:auto">
+      ${nomesHtml}${rodape}
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="mass-cancel">Cancelar</button>
+      <button class="btn btn-danger" id="mass-confirm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
+        Excluir ${n} matrícula${n !== 1 ? 's' : ''}
+      </button>
+    </div>
+  `);
+
+  document.getElementById('mass-cancel')?.addEventListener('click', () => closeModal());
+
+  document.getElementById('mass-confirm')?.addEventListener('click', async () => {
+    const btn = document.getElementById('mass-confirm');
+    btn.disabled = true; btn.textContent = 'Excluindo...';
+    let erros = 0;
+    for (const id of ids) {
+      try {
+        const { error } = await supabase.from('matriculas').delete().eq('id', id).eq('tenant_id', getTenantId());
+        if (error) throw error;
+      } catch { erros++; }
+    }
+    closeModal();
+    _selectedIds.clear();
+    const ok = ids.length - erros;
+    if (ok > 0) toast(`${ok} matrícula${ok !== 1 ? 's excluídas' : ' excluída'} com sucesso.`, 'success');
+    if (erros > 0) toast(`${erros} exclusão(ões) falharam.`, 'error');
+    await loadMatriculas();
+  });
+}
+
 function modalExcluirMatricula(m) {
   openModal(`Excluir Matrícula`, `
     <div style="margin-bottom:16px;padding:14px;background:var(--bg-elevated);border-radius:8px;font-size:13px;color:var(--text-secondary);border-left:3px solid var(--red)">
