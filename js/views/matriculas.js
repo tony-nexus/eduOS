@@ -262,24 +262,6 @@ function modalNovaMatricula() {
     <div class="form-grid">
 
       <div class="form-group full">
-        <label>Aluno(s) <span aria-hidden="true" style="color:var(--red)">*</span></label>
-        <div id="aluno-picker"
-          style="border:1px solid var(--border-default);border-radius:8px;background:var(--bg-input-solid);padding:6px 10px;min-height:42px;cursor:text"
-          onclick="document.getElementById('aluno-search-input').focus()">
-          <div id="aluno-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:2px"></div>
-          <input id="aluno-search-input" type="text" autocomplete="off" spellcheck="false"
-            placeholder="Buscar por nome, CPF, CNH ou RNM..."
-            style="border:none;background:transparent;outline:none;width:100%;min-width:140px;font-size:13px;color:var(--text-primary);padding:4px 0">
-        </div>
-        <div style="position:relative">
-          <div id="aluno-results" hidden
-            style="position:absolute;top:2px;left:0;right:0;background:var(--bg-input-solid);border:1px solid var(--border-default);border-radius:8px;box-shadow:var(--shadow-lg);z-index:300;max-height:220px;overflow-y:auto">
-          </div>
-        </div>
-        <small style="color:var(--text-tertiary);font-size:11px">Selecione múltiplos alunos para matrícula em massa.</small>
-      </div>
-
-      <div class="form-group full">
         <label>Curso <span aria-hidden="true" style="color:var(--red)">*</span></label>
         <select id="f-curso">
           <option value="">— Selecionar curso —</option>
@@ -309,6 +291,31 @@ function modalNovaMatricula() {
         </small>
       </div>
 
+      <!-- Barra de capacidade da turma — visível após selecionar turma -->
+      <div class="form-group full" id="vagas-bar-wrap" hidden>
+        <div id="vagas-bar-inner"
+          style="background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:10px;padding:12px 14px">
+        </div>
+      </div>
+
+      <div class="form-group full">
+        <label>Aluno(s) <span aria-hidden="true" style="color:var(--red)">*</span></label>
+        <div id="aluno-picker"
+          style="border:1px solid var(--border-default);border-radius:8px;background:var(--bg-input-solid);padding:6px 10px;min-height:42px;cursor:text"
+          onclick="document.getElementById('aluno-search-input').focus()">
+          <div id="aluno-tags" style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:2px"></div>
+          <input id="aluno-search-input" type="text" autocomplete="off" spellcheck="false"
+            placeholder="Buscar por nome, CPF, CNH ou RNM..."
+            style="border:none;background:transparent;outline:none;width:100%;min-width:140px;font-size:13px;color:var(--text-primary);padding:4px 0">
+        </div>
+        <div style="position:relative">
+          <div id="aluno-results" hidden
+            style="position:absolute;top:2px;left:0;right:0;background:var(--bg-input-solid);border:1px solid var(--border-default);border-radius:8px;box-shadow:var(--shadow-lg);z-index:300;max-height:220px;overflow-y:auto">
+          </div>
+        </div>
+        <small style="color:var(--text-tertiary);font-size:11px">Selecione múltiplos alunos para matrícula em massa.</small>
+      </div>
+
       <div class="form-group full">
         <label>Observações</label>
         <textarea id="f-obs" placeholder="Informações adicionais..."></textarea>
@@ -333,6 +340,7 @@ function modalNovaMatricula() {
     _selectedTurmaId = null;
     _setTurmaLabel(null);
     renderTurmaOpcoes(filtradas);
+    _updateVagasBar();
   });
 
   document.getElementById('modal-cancel')?.addEventListener('click', () => closeModal());
@@ -363,6 +371,7 @@ function bindSearchAluno() {
         renderTags();
       });
     });
+    _updateVagasBar();
   }
 
   function setHighlight(rows, idx) {
@@ -560,6 +569,40 @@ function renderTurmaOpcoes(turmas) {
   }).join('');
 }
 
+// ─── Barra de capacidade da turma ────────────────────────────────────────────
+function _updateVagasBar() {
+  const wrap = document.getElementById('vagas-bar-wrap');
+  const inner = document.getElementById('vagas-bar-inner');
+  if (!wrap || !inner) return;
+
+  const turma = _selectedTurmaId ? _turmas.find(t => t.id === _selectedTurmaId) : null;
+  if (!turma) { wrap.hidden = true; return; }
+
+  const vagas    = turma.vagas    || 0;
+  const ocupadas = turma.ocupadas || 0;
+  const adding   = _selectedAlunos.length;
+  const total    = ocupadas + adding;
+  const pct      = vagas > 0 ? Math.min(Math.round(total / vagas * 100), 100) : 0;
+  const disp     = vagas - total;
+
+  const cor = disp <= 0 ? 'var(--red)' : disp <= 2 ? 'var(--amber)' : 'var(--green)';
+
+  inner.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:12px;font-weight:600;color:var(--text-primary)">Capacidade da turma</span>
+      <span style="font-size:11px;font-family:var(--font-mono);color:${cor};font-weight:700">${pct}%</span>
+    </div>
+    <div style="height:8px;border-radius:4px;background:var(--border-subtle);overflow:hidden">
+      <div style="height:100%;border-radius:4px;width:${pct}%;background:${cor};transition:width .3s ease"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;font-size:11px;color:var(--text-tertiary);font-family:var(--font-mono)">
+      <span>${ocupadas} ocupada${ocupadas !== 1 ? 's' : ''}${adding > 0 ? ` + <span style="color:var(--accent);font-weight:600">${adding} a adicionar</span>` : ''}</span>
+      <span style="color:${cor};font-weight:600">${disp > 0 ? `${disp} disponível${disp !== 1 ? 'is' : ''}` : 'Sem vagas'}</span>
+    </div>`;
+
+  wrap.hidden = false;
+}
+
 function bindTurmaPicker(turmasIniciais) {
   renderTurmaOpcoes(turmasIniciais);
 
@@ -583,6 +626,7 @@ function bindTurmaPicker(turmasIniciais) {
     _setTurmaLabel(id ? _turmas.find(t => t.id === id) : null);
     close();
     picker.style.borderColor = _selectedTurmaId ? 'var(--accent)' : '';
+    _updateVagasBar();
   }
 
   picker.addEventListener('click', () => drop.hidden ? open() : close());
@@ -773,9 +817,16 @@ function excluirSelecionadosMats() {
     <div style="margin:16px 0;max-height:180px;overflow-y:auto">
       ${nomesHtml}${rodape}
     </div>
+    <div class="danger-confirm-wrap">
+      <label>Para confirmar, digite <strong>CONFIRMAR EXCLUSÃO</strong> no campo abaixo:</label>
+      <code class="danger-confirm-code">CONFIRMAR EXCLUSÃO</code>
+      <input id="mass-confirm-input" class="danger-confirm-input" type="text"
+        autocomplete="off" autocorrect="off" spellcheck="false"
+        placeholder="Digite a frase de confirmação...">
+    </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="mass-cancel">Cancelar</button>
-      <button class="btn btn-danger" id="mass-confirm">
+      <button class="btn btn-danger" id="mass-confirm" disabled>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>
         Excluir ${n} matrícula${n !== 1 ? 's' : ''}
       </button>
@@ -783,6 +834,14 @@ function excluirSelecionadosMats() {
   `);
 
   document.getElementById('mass-cancel')?.addEventListener('click', () => closeModal());
+
+  const inputConf = document.getElementById('mass-confirm-input');
+  const btnConf   = document.getElementById('mass-confirm');
+  inputConf?.addEventListener('input', () => {
+    const match = inputConf.value.trim().toUpperCase() === 'CONFIRMAR EXCLUSÃO';
+    inputConf.classList.toggle('valid', match);
+    btnConf.disabled = !match;
+  });
 
   document.getElementById('mass-confirm')?.addEventListener('click', async () => {
     const btn = document.getElementById('mass-confirm');
