@@ -103,6 +103,14 @@ async function loadData() {
 
   renderKPIs(_alerts);
   renderTabela(_alerts);
+
+  // Ação pendente vinda de notificação (ex: abrir modal de detalhe)
+  if (window.__pendingAction?.type === 'renovacao_detail') {
+    const certId = window.__pendingAction.certId;
+    window.__pendingAction = null;
+    const alerta = _alerts.find(a => a.cert_id === certId);
+    if (alerta) modalDetalhes(alerta);
+  }
 }
 
 // ─── KPIs ─────────────────────────────────────────────────────────────────────

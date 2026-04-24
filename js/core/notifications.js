@@ -6,6 +6,7 @@
 
 import { supabase, getTenantId } from './supabase.js';
 import { toast, getSoundEnabled, setSoundEnabled } from '../ui/toast.js';
+import { navigate } from './router.js';
 
 const REFRESH_MS = 5 * 60 * 1000;
 
@@ -54,8 +55,10 @@ async function _refresh() {
     const today    = new Date();
     const todayStr = today.toLocaleDateString('en-CA');
 
+    const in1  = new Date(today); in1.setDate(in1.getDate() + 1);
     const in3  = new Date(today); in3.setDate(in3.getDate() + 3);
     const in7  = new Date(today); in7.setDate(in7.getDate() + 7);
+    const in1s = in1.toLocaleDateString('en-CA');
     const in3s = in3.toLocaleDateString('en-CA');
     const in7s = in7.toLocaleDateString('en-CA');
 
@@ -114,12 +117,29 @@ async function _refresh() {
       body:  `${c.aluno?.nome || '—'} · ${c.curso?.nome || '—'} — ${_fmtDate(c.validade)}`,
     }));
 
-    // 4. Turmas iniciando em 3 dias
+    // 4. Turma começando amanhã — alerta urgente (1 dia)
+    const { data: turmasAmanha } = await supabase
+      .from('turmas')
+      .select('id, codigo, data_inicio')
+      .eq('tenant_id', tid)
+      .in('status', ['agendada', 'planejada'])
+      .eq('data_inicio', in1s)
+      .order('data_inicio');
+
+    (turmasAmanha || []).forEach(t => _alerts.push({
+      id:    `turma_amanha_${t.id}`,
+      type:  'warning',
+      icon:  '⚠️',
+      title: 'Turma começa amanhã!',
+      body:  `Turma ${t.codigo || '—'} — ${_fmtDate(t.data_inicio)}`,
+    }));
+
+    // 5. Turmas iniciando em 3 dias
     const { data: turmasStart } = await supabase
       .from('turmas')
-      .select('id, nome, data_inicio')
+      .select('id, codigo, data_inicio')
       .eq('tenant_id', tid)
-      .eq('status', 'planejada')
+      .in('status', ['agendada', 'planejada'])
       .gte('data_inicio', todayStr)
       .lte('data_inicio', in3s)
       .order('data_inicio');
@@ -129,13 +149,13 @@ async function _refresh() {
       type:  'info',
       icon:  '🎓',
       title: 'Turma iniciando em breve',
-      body:  `${t.nome} — ${_fmtDate(t.data_inicio)}`,
+      body:  `Turma ${t.codigo || '—'} — ${_fmtDate(t.data_inicio)}`,
     }));
 
-    // 5. Turmas encerrando em 3 dias
+    // 6. Turmas encerrando em 3 dias
     const { data: turmasEnd } = await supabase
       .from('turmas')
-      .select('id, nome, data_fim')
+      .select('id, codigo, data_fim')
       .eq('tenant_id', tid)
       .eq('status', 'em_andamento')
       .gte('data_fim', todayStr)
@@ -147,7 +167,7 @@ async function _refresh() {
       type:  'warning',
       icon:  '🏁',
       title: 'Turma encerrando em breve',
-      body:  `${t.nome} — ${_fmtDate(t.data_fim)}`,
+      body:  `Turma ${t.codigo || '—'} — ${_fmtDate(t.data_fim)}`,
     }));
 
     // 6. Alertas de renovação: certs vencidos/críticos sem contato confirmado
@@ -242,10 +262,27 @@ function _render() {
 
   list.querySelectorAll('.notif-item').forEach(el => {
     el.addEventListener('click', () => {
-      _readIds.add(el.dataset.nid);
+      const nid = el.dataset.nid;
+      _readIds.add(nid);
       localStorage.setItem('notif_read', JSON.stringify([..._readIds]));
       _updateDot();
       _render();
+
+      // Fechar painel
+      const panel = document.getElementById('notif-panel');
+      if (panel) panel.style.display = 'none';
+
+      // Navegar para a aba referenciada
+      if (nid.startsWith('renov_')) {
+        window.__pendingAction = { type: 'renovacao_detail', certId: nid.replace('renov_', '') };
+        navigate('renovacoes');
+      } else if (nid.startsWith('pay_')) {
+        navigate('financeiro');
+      } else if (nid.startsWith('cert_')) {
+        navigate('certificados');
+      } else if (nid.startsWith('turma_')) {
+        navigate('turmas');
+      }
     });
   });
 }
