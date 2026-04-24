@@ -1,16 +1,16 @@
 /**
  * /js/ui/date-picker.js
- * EssealDatePicker v3.0.0 — HLV EduOS
+ * EssealDatePicker v3.1.0 — HLV EduOS
  *
  * Digitação + calendário estilo Power BI:
- * - Digitação livre com máscara DD/MM/AAAA
- * - Converte para YYYY-MM-DD no input.value (compatível Supabase)
- * - Calendário sincroniza em tempo real enquanto o usuário digita
- * - Ao focar: converte YYYY-MM-DD → DD/MM/AAAA para exibição
- * - Ao sair: valida e normaliza de volta para YYYY-MM-DD
+ * - Máscara DD/MM/AAAA controlada 100% via keydown (sem embaralhamento)
+ * - Backspace/Delete pulam automaticamente as barras
+ * - Calendário sincroniza ao completar 8 dígitos
+ * - Ao focar: YYYY-MM-DD → DD/MM/AAAA para edição
+ * - Ao sair: valida e grava YYYY-MM-DD (compatível Supabase)
  */
 
-// ─── EssealDatePicker v3.0.0 ─────────────────────────────────────────────────
+// ─── EssealDatePicker v3.1.0 ─────────────────────────────────────────────────
 class EssealDatePicker {
   constructor(target, options = {}) {
     this.input = typeof target === 'string' ? document.querySelector(target) : target;
@@ -47,7 +47,7 @@ class EssealDatePicker {
 
     this._handleInputFocus    = this._handleInputFocus.bind(this);
     this._handleInputKeydown  = this._handleInputKeydown.bind(this);
-    this._handleInputTyped    = this._handleInputTyped.bind(this);
+    this._handleInputPaste    = this._handleInputPaste.bind(this);
     this._handleInputBlur     = this._handleInputBlur.bind(this);
     this._handleDocumentClick = this._handleDocumentClick.bind(this);
     this._handleResize        = this._handleResize.bind(this);
@@ -56,10 +56,10 @@ class EssealDatePicker {
   }
 
   _init() {
-    // Remove readonly — permite digitação
     this.input.removeAttribute('readonly');
     this.input.setAttribute('autocomplete', 'off');
     this.input.setAttribute('spellcheck', 'false');
+    this.input.setAttribute('inputmode', 'numeric');
     this.input.placeholder = 'DD/MM/AAAA';
 
     this._injectStyles();
@@ -145,7 +145,7 @@ class EssealDatePicker {
 
     document.body.appendChild(this.root);
 
-    // mousedown preventDefault evita que o input perca foco ao clicar no calendário
+    // Previne blur do input ao clicar no calendário
     this.root.addEventListener('mousedown', (e) => { e.preventDefault(); });
 
     this.root.addEventListener('click', (e) => {
@@ -165,7 +165,7 @@ class EssealDatePicker {
   _attachListeners() {
     this.input.addEventListener('focus',   this._handleInputFocus);
     this.input.addEventListener('keydown', this._handleInputKeydown);
-    this.input.addEventListener('input',   this._handleInputTyped);
+    this.input.addEventListener('paste',   this._handleInputPaste);
     this.input.addEventListener('blur',    this._handleInputBlur);
     document.addEventListener('click',    this._handleDocumentClick);
     window.addEventListener('resize',     this._handleResize);
@@ -176,66 +176,52 @@ class EssealDatePicker {
     this.root.remove();
     this.input.removeEventListener('focus',   this._handleInputFocus);
     this.input.removeEventListener('keydown', this._handleInputKeydown);
-    this.input.removeEventListener('input',   this._handleInputTyped);
+    this.input.removeEventListener('paste',   this._handleInputPaste);
     this.input.removeEventListener('blur',    this._handleInputBlur);
     document.removeEventListener('click',    this._handleDocumentClick);
     window.removeEventListener('resize',     this._handleResize);
     window.removeEventListener('scroll',     this._handleResize, true);
   }
 
-  // ─── Máscara DD/MM/AAAA ────────────────────────────────────────────────────
+  // ─── Helpers de máscara DD/MM/AAAA ────────────────────────────────────────
 
-  _handleInputFocus() {
-    // Ao focar: converte YYYY-MM-DD para DD/MM/AAAA (exibição amigável)
-    const val = this.input.value;
-    const isoMatch = val.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (isoMatch) {
-      const [, y, m, d] = isoMatch;
-      this._setRawDisplay(`${d}/${m}/${y}`);
-    }
-    if (!this.state.isVisible) this.open();
+  _buildMask(raw8) {
+    // raw8 = até 8 dígitos, retorna string mascarada DD/MM/AAAA
+    let m = '';
+    if (raw8.length > 0) m += raw8.slice(0, 2);
+    if (raw8.length > 2) m += '/' + raw8.slice(2, 4);
+    if (raw8.length > 4) m += '/' + raw8.slice(4, 8);
+    return m;
   }
 
-  _handleInputKeydown(e) {
-    // Permitir: teclas de controle, copiar, colar, etc.
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
-    if (['Backspace', 'Delete', 'Tab', 'Enter', 'Escape',
-         'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
-      if (e.key === 'Escape') { this.close(); return; }
-      if (e.key === 'Enter')  { this._commitFromDisplay(); this.close(); return; }
-      return;
+  // Posição no string mascarado onde o N-ésimo dígito começa (0-based)
+  _digitToMaskPos(masked, digitIndex) {
+    let count = 0;
+    for (let i = 0; i < masked.length; i++) {
+      if (count === digitIndex) return i;
+      if (/\d/.test(masked[i])) count++;
     }
-    // Bloqueia tudo que não é dígito ou /
-    if (!/^\d$/.test(e.key)) { e.preventDefault(); return; }
-
-    // Limita a 10 caracteres (DD/MM/AAAA)
-    const selStart = this.input.selectionStart;
-    const selEnd   = this.input.selectionEnd;
-    const raw = this.input.value.replace(/\//g, '');
-    const digits = raw.length - (selEnd - selStart > 0 ? selEnd - selStart : 0);
-    if (digits >= 8) { e.preventDefault(); }
+    return masked.length;
   }
 
-  _handleInputTyped() {
-    if (this._suppressInput) return;
+  // Aplica uma edição: remove [from, to) e insere `insertDigits`, retorna nova máscara e cursor
+  _applyEdit(currentVal, from, to, insertDigits) {
+    const beforeDigits = currentVal.slice(0, from).replace(/[^\d]/g, '');
+    const afterDigits  = currentVal.slice(to).replace(/[^\d]/g, '');
+    const raw = (beforeDigits + insertDigits + afterDigits).slice(0, 8);
+    const masked = this._buildMask(raw);
+    const newDigitPos = beforeDigits.length + insertDigits.length;
+    const newCursor = this._digitToMaskPos(masked, newDigitPos);
+    return { masked, newCursor, raw };
+  }
 
-    const cursorPos = this.input.selectionStart;
-    const raw = this.input.value.replace(/[^\d]/g, '').slice(0, 8);
-
-    // Reconstrói máscara DD/MM/AAAA
-    let masked = '';
-    if (raw.length > 0) masked += raw.slice(0, 2);
-    if (raw.length > 2) masked += '/' + raw.slice(2, 4);
-    if (raw.length > 4) masked += '/' + raw.slice(4, 8);
-
+  _applyToInput(masked, newCursor, raw) {
     this._setRawDisplay(masked);
+    this.input.setSelectionRange(newCursor, newCursor);
+    this._syncCalendar(raw);
+  }
 
-    // Reposiciona cursor (auto-avanço após / inserida)
-    let newPos = cursorPos;
-    if (cursorPos === 2 || cursorPos === 5) newPos = cursorPos + 1;
-    this.input.setSelectionRange(newPos, newPos);
-
-    // Sincroniza calendário se data completa
+  _syncCalendar(raw) {
     if (raw.length === 8) {
       const date = this._parseRaw8(raw);
       if (date) {
@@ -246,9 +232,94 @@ class EssealDatePicker {
     }
   }
 
+  // ─── Foco: converte YYYY-MM-DD → DD/MM/AAAA ───────────────────────────────
+
+  _handleInputFocus() {
+    const val = this.input.value;
+    const isoMatch = val.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+      const [, y, m, d] = isoMatch;
+      this._setRawDisplay(`${d}/${m}/${y}`);
+    }
+    if (!this.state.isVisible) this.open();
+  }
+
+  // ─── Teclado: controle total da máscara ───────────────────────────────────
+
+  _handleInputKeydown(e) {
+    // Passar: modificadores, seleção, tab
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (['Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) return;
+
+    if (e.key === 'Escape') { e.preventDefault(); this.close(); return; }
+    if (e.key === 'Enter')  { e.preventDefault(); this._commitFromDisplay(); this.close(); return; }
+
+    // A partir daqui: tomamos o controle completo
+    e.preventDefault();
+
+    const val = this.input.value;
+    const pos = this.input.selectionStart;
+    const end = this.input.selectionEnd;
+    const hasSel = end > pos;
+
+    if (e.key === 'Backspace') {
+      if (hasSel) {
+        const { masked, newCursor, raw } = this._applyEdit(val, pos, end, '');
+        this._applyToInput(masked, newCursor, raw);
+      } else if (pos > 0) {
+        // Se o char à esquerda é '/', pula e apaga o dígito antes dele
+        const delFrom = (val[pos - 1] === '/') ? Math.max(0, pos - 2) : pos - 1;
+        if (delFrom < pos) {
+          const { masked, newCursor, raw } = this._applyEdit(val, delFrom, pos, '');
+          this._applyToInput(masked, newCursor, raw);
+        }
+      }
+      return;
+    }
+
+    if (e.key === 'Delete') {
+      if (hasSel) {
+        const { masked, newCursor, raw } = this._applyEdit(val, pos, end, '');
+        this._applyToInput(masked, newCursor, raw);
+      } else if (pos < val.length) {
+        // Se o char à direita é '/', pula e apaga o dígito após ele
+        const delTo = (val[pos] === '/') ? Math.min(val.length, pos + 2) : pos + 1;
+        const { masked, newCursor, raw } = this._applyEdit(val, pos, delTo, '');
+        this._applyToInput(masked, newCursor, raw);
+      }
+      return;
+    }
+
+    // Somente dígitos a partir daqui
+    if (!/^\d$/.test(e.key)) return;
+
+    const { masked, newCursor, raw } = this._applyEdit(val, pos, end, e.key);
+    this._applyToInput(masked, newCursor, raw);
+  }
+
+  // ─── Paste ────────────────────────────────────────────────────────────────
+
+  _handleInputPaste(e) {
+    e.preventDefault();
+    const pasted = (e.clipboardData || window.clipboardData).getData('text');
+    // Aceita YYYY-MM-DD ou DD/MM/AAAA ou dígitos crus
+    let digits = pasted.replace(/[^\d]/g, '');
+    // Se for YYYY-MM-DD colado: reordena para DDMMAAAA
+    if (/^\d{4}-\d{2}-\d{2}$/.test(pasted.trim())) {
+      const [y, m, d] = pasted.trim().split('-');
+      digits = d + m + y;
+    }
+    const val = this.input.value;
+    const pos = this.input.selectionStart;
+    const end = this.input.selectionEnd;
+    const { masked, newCursor, raw } = this._applyEdit(val, pos, end, digits);
+    this._applyToInput(masked, newCursor, raw);
+  }
+
+  // ─── Blur: valida e normaliza para YYYY-MM-DD ─────────────────────────────
+
   _handleInputBlur() {
     this._commitFromDisplay();
-    // Fecha com pequeno delay para permitir clicks no calendário
     setTimeout(() => this.close(), 180);
   }
 
@@ -260,10 +331,10 @@ class EssealDatePicker {
     if (date) {
       const iso = this.options.format(date);
       this.state.selectedDate = date;
-      this._updateInput(iso); // grava YYYY-MM-DD no value
+      this._updateInput(iso);
       if (this.options.onChange) this.options.onChange(date);
     } else {
-      // Data inválida — restaura valor anterior ou limpa
+      // Data inválida — restaura valor anterior
       if (this.state.selectedDate) {
         this._updateInput(this.options.format(this.state.selectedDate));
       } else {
@@ -272,10 +343,9 @@ class EssealDatePicker {
     }
   }
 
-  // ─── Parsers ───────────────────────────────────────────────────────────────
+  // ─── Parsers ──────────────────────────────────────────────────────────────
 
   _parseRaw8(raw) {
-    // raw = 8 dígitos: DDMMAAAA
     const d = +raw.slice(0, 2);
     const m = +raw.slice(2, 4);
     const y = +raw.slice(4, 8);
@@ -283,11 +353,9 @@ class EssealDatePicker {
   }
 
   _parseDisplayDate(val) {
-    // DD/MM/AAAA
     const dmy = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (dmy) return this._buildDate(+dmy[1], +dmy[2], +dmy[3]);
 
-    // YYYY-MM-DD (colado ou preenchido pelo calendário)
     const ymd = val.match(/^(\d{4})-(\d{2})-(\d{2})$/);
     if (ymd) return this._buildDate(+ymd[3], +ymd[2], +ymd[1]);
 
@@ -298,14 +366,13 @@ class EssealDatePicker {
     if (y < 1900 || y > 2200 || m < 1 || m > 12 || d < 1 || d > 31) return null;
     const date = new Date(y, m - 1, d);
     date.setHours(0, 0, 0, 0);
-    if (date.getDate() !== d || date.getMonth() !== m - 1) return null; // dia inválido (ex: 31/02)
+    if (date.getDate() !== d || date.getMonth() !== m - 1) return null;
     return date;
   }
 
-  // ─── Helpers de input ──────────────────────────────────────────────────────
+  // ─── Helpers de input ─────────────────────────────────────────────────────
 
   _setRawDisplay(val) {
-    // Seta o value sem disparar nosso handler de máscara
     this._suppressInput = true;
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
     setter.call(this.input, val);
@@ -321,7 +388,7 @@ class EssealDatePicker {
     this._suppressInput = false;
   }
 
-  // ─── Render ────────────────────────────────────────────────────────────────
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   _render() {
     const body  = this.root.querySelector('.dp-body');
@@ -420,7 +487,7 @@ class EssealDatePicker {
     container.appendChild(frag);
   }
 
-  // ─── Seleção / navegação ───────────────────────────────────────────────────
+  // ─── Seleção / navegação do calendário ────────────────────────────────────
 
   _handleSelection(target) {
     const timestamp = parseInt(target.dataset.ts);
@@ -486,7 +553,7 @@ class EssealDatePicker {
     }
   }
 
-  // ─── Posicionamento / abertura ─────────────────────────────────────────────
+  // ─── Posicionamento / abertura ────────────────────────────────────────────
 
   _position() {
     if (!this.state.isVisible) return;
@@ -515,9 +582,7 @@ class EssealDatePicker {
   _normalizeDate(d) { const date = new Date(d); date.setHours(0, 0, 0, 0); return date; }
 
   _handleDocumentClick(e) {
-    if (this.state.isVisible && !this.root.contains(e.target) && e.target !== this.input) {
-      this.close();
-    }
+    if (this.state.isVisible && !this.root.contains(e.target) && e.target !== this.input) this.close();
   }
 
   _handleResize() { if (this.state.isVisible) this._position(); }
@@ -561,7 +626,7 @@ function _injectThemeOverride() {
   document.head.appendChild(style);
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 function _accentHex() {
   return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#63ffab';
 }
@@ -594,7 +659,7 @@ export function initDatePicker(el, opts = {}) {
     ...opts,
   });
 
-  // Pré-carrega data já preenchida no input (YYYY-MM-DD → estado interno)
+  // Pré-carrega data já no input (YYYY-MM-DD → estado interno)
   if (el.value) {
     const d = new Date(el.value + 'T00:00:00');
     if (!isNaN(d.getTime())) {
