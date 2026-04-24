@@ -58,7 +58,7 @@ const ALUNO_LABEL = {
 async function loadTurmasDoInstrutor(instrutorId) {
   const { data, error } = await supabase
     .from('turmas')
-    .select('id, codigo, status, ocupadas, vagas, data_inicio, data_fim, curso:curso_id(nome)')
+    .select('id, codigo, status, ocupadas, vagas, data_inicio, data_fim, local, curso:curso_id(nome)')
     .eq('tenant_id', getTenantId())
     .eq('instrutor_id', instrutorId)
     .order('data_inicio', { ascending: false });
@@ -455,6 +455,7 @@ function renderDetailPanel(instrutor, turmas) {
             </span>
           </td>
           <td style="font-weight:500;font-size:13px">${esc(t.curso_nome)}</td>
+          <td style="font-size:12.5px;color:var(--text-secondary)">${esc(t.local || '—')}</td>
           <td>
             <div style="display:flex;align-items:center;gap:8px">
               <div class="progress-bar" style="width:52px">
@@ -504,6 +505,7 @@ function renderDetailPanel(instrutor, turmas) {
               <tr>
                 <th>Status</th>
                 <th>Curso</th>
+                <th>Local</th>
                 <th>Alunos</th>
                 <th>Início</th>
                 <th>Fim</th>
